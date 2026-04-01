@@ -76,6 +76,8 @@ The binary boots into a TUI (title screen -> main menu -> game setup). LLM mode 
 - Branch names: `feature/...`, `fix/...`, `docs/...`, `refactor/...`.
 - Commit messages: use conventional prefixes (`feat:`, `fix:`, `docs:`, `refactor:`).
 
-## Catan Resource Costs
+## Catan Rules
 
-Road: 1 Wood + 1 Brick | Settlement: 1 Wood + 1 Brick + 1 Sheep + 1 Wheat | City: 2 Wheat + 3 Ore | Dev Card: 1 Wheat + 1 Sheep + 1 Ore
+See [`CATAN_RULES.md`](CATAN_RULES.md) for the complete game rules reference (setup, turn structure, building, trading, robber, development cards, special cards, victory conditions).
+
+**Quick cost reference**: Road: 1 Wood + 1 Brick | Settlement: 1 Wood + 1 Brick + 1 Sheep + 1 Wheat | City: 2 Wheat + 3 Ore | Dev Card: 1 Wheat + 1 Sheep + 1 Ore
