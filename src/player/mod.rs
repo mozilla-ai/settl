@@ -3,6 +3,7 @@ pub mod llm;
 pub mod personality;
 pub mod prompt;
 pub mod random;
+pub mod tui_human;
 
 use async_trait::async_trait;
 

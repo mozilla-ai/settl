@@ -98,18 +98,14 @@ impl GameOrchestrator {
     /// Wrap an async player decision in a timeout. Returns the fallback on timeout.
     async fn with_timeout<T>(
         &self,
-        player_id: PlayerId,
-        what: &str,
+        _player_id: PlayerId,
+        _what: &str,
         future: impl std::future::Future<Output = T>,
         fallback: T,
     ) -> T {
         match tokio::time::timeout(PLAYER_DECISION_TIMEOUT, future).await {
             Ok(result) => result,
             Err(_) => {
-                eprintln!(
-                    "  Player {} ({}) timed out on {} — using fallback",
-                    player_id, self.player_names[player_id], what
-                );
                 fallback
             }
         }
@@ -124,12 +120,10 @@ impl GameOrchestrator {
 
     /// Run the full game and return the winner's PlayerId.
     pub async fn run(&mut self) -> Result<PlayerId, OrchestratorError> {
-        println!("=== CATAN — Terminal Edition ===\n");
 
         // Skip setup if the game is already past the setup phase (e.g. resumed).
         if matches!(self.state.phase, GamePhase::Setup { .. }) {
             self.run_setup().await?;
-            println!("\n=== Setup complete! Starting main game. ===\n");
 
             // Transition to Playing phase.
             self.state.phase = GamePhase::Playing {
@@ -137,7 +131,6 @@ impl GameOrchestrator {
                 has_rolled: false,
             };
         } else {
-            println!("Resuming game at turn {}...\n", self.state.turn_number + 1);
         }
 
         // Phase 2: Main game loop.
@@ -160,7 +153,6 @@ impl GameOrchestrator {
                     "Player {} ({}) wins with {} VP!",
                     winner, self.player_names[winner], vp
                 );
-                println!("\n{}", msg);
                 self.replay.winner = Some(winner);
                 self.record_event(GameEvent::GameWon {
                     player: winner,
@@ -184,10 +176,6 @@ impl GameOrchestrator {
 
         for (idx, &player_id) in setup_order.iter().enumerate() {
             let round = if idx < total_placements / 2 { 1 } else { 2 };
-            println!(
-                "Setup Round {} — Player {} ({}) places settlement + road",
-                round, player_id, self.player_names[player_id]
-            );
 
             // Step 1: Choose settlement location.
             let legal_vertices = if round == 1 {
@@ -249,7 +237,6 @@ impl GameOrchestrator {
                 player_id, self.player_names[player_id],
                 vertex.hex.q, vertex.hex.r, vertex.dir, edge,
             );
-            println!("  {}", msg);
             self.send_ui(msg, None);
         }
 
@@ -260,12 +247,6 @@ impl GameOrchestrator {
     async fn run_turn(&mut self) -> Result<Option<PlayerId>, OrchestratorError> {
         let player_id = self.state.current_player();
 
-        println!(
-            "\n--- Turn {} — Player {} ({}) ---",
-            self.state.turn_number + 1,
-            player_id,
-            self.player_names[player_id],
-        );
 
         // Inject recent game history for LLM context (last 20 events).
         let recent_events = self.log.events();
@@ -283,7 +264,6 @@ impl GameOrchestrator {
         // Step 1: Roll dice.
         let (d1, d2) = dice::roll_dice(&mut rand::thread_rng());
         let roll = d1 + d2;
-        println!("  Rolled: {} + {} = {}", d1, d2, roll);
 
         let dice_event = GameEvent::DiceRolled {
             player: player_id,
@@ -328,7 +308,6 @@ impl GameOrchestrator {
             ).await;
 
             let choice = &choices[choice_idx.min(choices.len() - 1)];
-            println!("  Action: {} — {}", choice, reasoning);
             self.send_reasoning(player_id, &reasoning);
 
             let action_result = match choice {
@@ -362,9 +341,8 @@ impl GameOrchestrator {
                         return Ok(Some(winner));
                     }
                 }
-                Err(OrchestratorError::RuleViolation(msg)) => {
+                Err(OrchestratorError::RuleViolation(_msg)) => {
                     // Action was invalid — skip it and let the player try again.
-                    println!("  (Invalid action: {} — skipping)", msg);
                 }
                 Err(e) => return Err(e),
             }
@@ -437,10 +415,6 @@ impl GameOrchestrator {
         for &p in &players_needing_discard {
             let total = self.state.players[p].total_resources();
             let discard_count = (total / 2) as usize;
-            println!(
-                "  Player {} ({}) must discard {} cards",
-                p, self.player_names[p], discard_count
-            );
 
             // Set the discard phase so apply_discard works.
             self.state.phase = GamePhase::Discarding {
@@ -448,7 +422,7 @@ impl GameOrchestrator {
                 players_needing_discard: players_needing_discard.clone(),
             };
 
-            let (cards, reasoning) = self.with_timeout(
+            let (cards, _reasoning) = self.with_timeout(
                 p, "choose_discard",
                 self.players[p].choose_discard(&self.state, p, discard_count),
                 (Vec::new(), "timeout fallback".into()),
@@ -462,7 +436,6 @@ impl GameOrchestrator {
                 player: p,
                 cards: cards.clone(),
             });
-            println!("  Player {} discarded {} cards — {}", p, discard_count, reasoning);
         }
 
         // Step 2: Move robber.
@@ -475,7 +448,7 @@ impl GameOrchestrator {
             .filter(|&h| h != self.state.robber_hex)
             .collect();
 
-        let (h_idx, h_reasoning) = self.with_timeout(
+        let (h_idx, _h_reasoning) = self.with_timeout(
             roller, "choose_robber_hex",
             self.players[roller].choose_robber_hex(&self.state, roller, &legal_hexes),
             (0, "timeout fallback".into()),
@@ -485,16 +458,12 @@ impl GameOrchestrator {
         rules::apply_move_robber(&mut self.state, hex).map_err(|e| {
             OrchestratorError::RuleViolation(format!("Move robber: {}", e))
         })?;
-        println!(
-            "  Robber moved to ({},{}) — {}",
-            hex.q, hex.r, h_reasoning
-        );
 
         // Step 3: Steal (if in Stealing phase after move_robber).
         if let GamePhase::Stealing { target_hex, .. } = &self.state.phase {
             let targets = rules::steal_targets(&self.state, *target_hex, roller);
             if !targets.is_empty() {
-                let (t_idx, t_reasoning) = self.with_timeout(
+                let (t_idx, _t_reasoning) = self.with_timeout(
                     roller, "choose_steal_target",
                     self.players[roller].choose_steal_target(&self.state, roller, &targets),
                     (0, "timeout fallback".into()),
@@ -504,10 +473,6 @@ impl GameOrchestrator {
                 rules::apply_steal(&mut self.state, target).map_err(|e| {
                     OrchestratorError::RuleViolation(format!("Steal: {}", e))
                 })?;
-                println!(
-                    "  Stole from Player {} — {}",
-                    target, t_reasoning
-                );
 
                 self.record_event(GameEvent::RobberMoved {
                     player: roller,
@@ -531,7 +496,6 @@ impl GameOrchestrator {
         let distributions = dice::distribute_resources(&self.state, roll);
 
         if distributions.is_empty() {
-            println!("  No resources produced.");
             return;
         }
 
@@ -540,15 +504,6 @@ impl GameOrchestrator {
             for &(resource, count) in resources {
                 self.state.players[player].add_resource(resource, count);
             }
-            let summary: String = resources
-                .iter()
-                .map(|(r, c)| format!("{} {}", c, r))
-                .collect::<Vec<_>>()
-                .join(", ");
-            println!(
-                "  Player {} ({}) receives: {}",
-                player, self.player_names[player], summary
-            );
         }
 
         // Log the distributions.
@@ -601,10 +556,6 @@ impl GameOrchestrator {
         );
 
         self.apply_and_log(action, player_id, &h_reasoning)?;
-        println!(
-            "  Knight played: robber to ({},{}) — {}",
-            hex.q, hex.r, h_reasoning
-        );
         Ok(())
     }
 
@@ -622,7 +573,6 @@ impl GameOrchestrator {
 
         let action = Action::PlayDevCard(DevCard::Monopoly, DevCardAction::Monopoly(resource));
         self.apply_and_log(action, player_id, &reasoning)?;
-        println!("  Monopoly on {} — {}", resource, reasoning);
         Ok(())
     }
 
@@ -653,7 +603,6 @@ impl GameOrchestrator {
         let action =
             Action::PlayDevCard(DevCard::YearOfPlenty, DevCardAction::YearOfPlenty(r1, r2));
         self.apply_and_log(action, player_id, &reasoning)?;
-        println!("  Year of Plenty: {} + {} — {}", r1, r2, reasoning);
         Ok(())
     }
 
@@ -665,7 +614,6 @@ impl GameOrchestrator {
         // First road.
         let legal_edges_1 = rules::legal_road_edges(&self.state, player_id);
         if legal_edges_1.is_empty() {
-            println!("  No legal road placements for Road Building.");
             return Ok(());
         }
 
@@ -695,7 +643,6 @@ impl GameOrchestrator {
             DevCardAction::RoadBuilding(edge1, edge2),
         );
         self.apply_and_log(action, player_id, "Road Building")?;
-        println!("  Road Building: {} + {}", edge1, edge2);
         Ok(())
     }
 
@@ -711,14 +658,12 @@ impl GameOrchestrator {
         let (offer, reasoning) = match offer_result {
             Some((offer, reasoning)) => (offer, reasoning),
             None => {
-                println!("  Player {} decided not to trade.", player_id);
                 return Ok(());
             }
         };
 
         // Validate the offer using the trading module.
-        if let Err(e) = trading::negotiation::validate_trade(&self.state, &offer) {
-            println!("  Invalid trade offer: {}", e);
+        if let Err(_e) = trading::negotiation::validate_trade(&self.state, &offer) {
             return Ok(());
         }
 
@@ -735,14 +680,7 @@ impl GameOrchestrator {
             .collect::<Vec<_>>()
             .join(", ");
 
-        println!(
-            "  Trade proposed: giving [{}] for [{}] — {}",
-            offering, requesting, reasoning
-        );
         self.send_reasoning(player_id, &format!("Trade: {} for {} — {}", offering, requesting, reasoning));
-        if !offer.message.is_empty() {
-            println!("  Message: \"{}\"", offer.message);
-        }
 
         self.record_event(GameEvent::TradeProposed {
             from: player_id,
@@ -760,10 +698,6 @@ impl GameOrchestrator {
             }
 
             if !eligible.contains(&other_id) {
-                println!(
-                    "  Player {} ({}) cannot fulfill the trade.",
-                    other_id, self.player_names[other_id]
-                );
                 self.record_event(GameEvent::TradeRejected {
                     by: other_id,
                     reasoning: "Insufficient resources".into(),
@@ -779,10 +713,6 @@ impl GameOrchestrator {
 
             match response {
                 TradeResponse::Accept => {
-                    println!(
-                        "  Player {} ({}) accepts! — {}",
-                        other_id, self.player_names[other_id], resp_reasoning
-                    );
                     self.record_event(GameEvent::TradeAccepted {
                         by: other_id,
                         reasoning: resp_reasoning,
@@ -790,11 +720,7 @@ impl GameOrchestrator {
                     accepted_by = Some(other_id);
                     break; // First acceptance wins.
                 }
-                TradeResponse::Reject { reason } => {
-                    println!(
-                        "  Player {} ({}) rejects: {} — {}",
-                        other_id, self.player_names[other_id], reason, resp_reasoning
-                    );
+                TradeResponse::Reject { reason: _ } => {
                     self.record_event(GameEvent::TradeRejected {
                         by: other_id,
                         reasoning: resp_reasoning,
@@ -803,10 +729,6 @@ impl GameOrchestrator {
                 TradeResponse::Counter(counter_offer) => {
                     // Validate the counter-offer.
                     if let Err(e) = trading::negotiation::validate_trade(&self.state, &counter_offer) {
-                        println!(
-                            "  Player {} ({}) counter-offered but invalid: {} — {}",
-                            other_id, self.player_names[other_id], e, resp_reasoning
-                        );
                         self.record_event(GameEvent::TradeRejected {
                             by: other_id,
                             reasoning: format!("invalid counter: {}", e),
@@ -820,11 +742,6 @@ impl GameOrchestrator {
                     let counter_requesting: String = counter_offer.requesting.iter()
                         .map(|(r, n)| format!("{} {}", n, r))
                         .collect::<Vec<_>>().join(", ");
-                    println!(
-                        "  Player {} ({}) counter-offers: [{}] for [{}] — {}",
-                        other_id, self.player_names[other_id],
-                        counter_offering, counter_requesting, resp_reasoning
-                    );
                     self.send_reasoning(other_id, &format!(
                         "Counter: {} for {} — {}",
                         counter_offering, counter_requesting, resp_reasoning
@@ -845,10 +762,6 @@ impl GameOrchestrator {
 
                     match counter_response {
                         TradeResponse::Accept => {
-                            println!(
-                                "  Player {} ({}) accepts counter-offer! — {}",
-                                player_id, self.player_names[player_id], counter_reasoning
-                            );
                             self.record_event(GameEvent::TradeAccepted {
                                 by: player_id,
                                 reasoning: counter_reasoning,
@@ -857,24 +770,14 @@ impl GameOrchestrator {
                             match trading::negotiation::execute_in_state(
                                 &mut self.state, &counter_offer, player_id
                             ) {
-                                Ok(()) => {
-                                    println!(
-                                        "  Counter-trade executed between Player {} and Player {}!",
-                                        other_id, player_id
-                                    );
-                                }
-                                Err(e) => {
-                                    println!("  Counter-trade cancelled — {}", e);
+                                Ok(()) => {}
+                                Err(_) => {
                                     self.record_event(GameEvent::TradeWithdrawn { by: other_id });
                                 }
                             }
                             return Ok(());
                         }
                         _ => {
-                            println!(
-                                "  Player {} ({}) rejects counter-offer — {}",
-                                player_id, self.player_names[player_id], counter_reasoning
-                            );
                             self.record_event(GameEvent::TradeRejected {
                                 by: player_id,
                                 reasoning: counter_reasoning,
@@ -888,19 +791,11 @@ impl GameOrchestrator {
         // Step 3: Execute the trade using the trading module.
         if let Some(acceptor) = accepted_by {
             match trading::negotiation::execute_in_state(&mut self.state, &offer, acceptor) {
-                Ok(()) => {
-                    println!(
-                        "  Trade executed between Player {} and Player {}!",
-                        player_id, acceptor
-                    );
-                }
-                Err(e) => {
-                    println!("  Trade cancelled — {}", e);
+                Ok(()) => {}
+                Err(_) => {
                     self.record_event(GameEvent::TradeWithdrawn { by: player_id });
                 }
             }
-        } else {
-            println!("  No one accepted the trade.");
         }
 
         Ok(())
@@ -941,7 +836,6 @@ impl GameOrchestrator {
             has_rolled: false,
         };
         self.state.players[next].has_played_dev_card_this_turn = false;
-        println!("  Turn ended.");
     }
 }
 

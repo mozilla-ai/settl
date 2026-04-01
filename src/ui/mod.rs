@@ -10,7 +10,7 @@ use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::ExecutableCommand;
 use ratatui::prelude::*;
@@ -69,6 +69,13 @@ pub enum Screen {
     PostGame(PostGameState),
 }
 
+/// A pending human input prompt displayed as an overlay.
+pub struct PendingHumanPrompt {
+    pub title: String,
+    pub options: Vec<String>,
+    pub selected: usize,
+}
+
 /// State for the active game screen (formerly the flat App fields).
 pub struct PlayingState {
     pub rx: mpsc::UnboundedReceiver<UiEvent>,
@@ -82,15 +89,26 @@ pub struct PlayingState {
     pub chat_scroll: u16,
     pub speed_ms: u64,
     pub paused: bool,
+    /// Pending human decision prompt (shown as an overlay).
+    pub pending_prompt: Option<PendingHumanPrompt>,
+    /// Channel to receive human prompts from the engine.
+    pub human_prompt_rx: Option<mpsc::UnboundedReceiver<player::tui_human::HumanPrompt>>,
+    /// Channel to send human responses back to the engine.
+    pub human_response_tx: Option<mpsc::UnboundedSender<usize>>,
 }
 
 impl PlayingState {
-    fn new(rx: mpsc::UnboundedReceiver<UiEvent>, player_names: Vec<String>) -> Self {
+    fn new(rx: mpsc::UnboundedReceiver<UiEvent>, player_names: Vec<String>, has_human: bool) -> Self {
+        let start_msg = if has_human {
+            "Game started — your turn will show a prompt".into()
+        } else {
+            "Game started — spectator mode".into()
+        };
         Self {
             rx,
             state: None,
             messages: vec![
-                "Game started — spectator mode".into(),
+                start_msg,
                 "q:quit  Space:pause  +/-:speed  j/k:scroll".into(),
             ],
             chat_messages: Vec::new(),
@@ -101,6 +119,9 @@ impl PlayingState {
             chat_scroll: 0,
             speed_ms: 100,
             paused: false,
+            pending_prompt: None,
+            human_prompt_rx: None,
+            human_response_tx: None,
         }
     }
 
@@ -204,6 +225,12 @@ async fn run_event_loop(
         if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
+                    // Ctrl+C exits from any screen.
+                    if key.modifiers.contains(KeyModifiers::CONTROL)
+                        && key.code == KeyCode::Char('c')
+                    {
+                        return Ok(());
+                    }
                     let action = handle_input(app, key.code);
                     match action {
                         Action::None => {}
@@ -248,6 +275,19 @@ async fn run_event_loop(
             if !ps.paused {
                 while let Ok(ui_event) = ps.rx.try_recv() {
                     ps.handle_game_event(ui_event);
+                }
+            }
+
+            // Check for incoming human prompts.
+            if ps.pending_prompt.is_none() {
+                if let Some(ref mut prompt_rx) = ps.human_prompt_rx {
+                    if let Ok(prompt) = prompt_rx.try_recv() {
+                        ps.pending_prompt = Some(PendingHumanPrompt {
+                            title: prompt.title,
+                            options: prompt.options,
+                            selected: 0,
+                        });
+                    }
                 }
             }
         }
@@ -403,6 +443,29 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
         }
 
         Screen::Playing(ps) => {
+            // If a human prompt is pending, intercept input for selection.
+            if let Some(ref mut prompt) = ps.pending_prompt {
+                match key {
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        prompt.selected = prompt.selected.saturating_sub(1);
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        if prompt.selected + 1 < prompt.options.len() {
+                            prompt.selected += 1;
+                        }
+                    }
+                    KeyCode::Enter => {
+                        let selected = prompt.selected;
+                        if let Some(ref tx) = ps.human_response_tx {
+                            let _ = tx.send(selected);
+                        }
+                        ps.pending_prompt = None;
+                    }
+                    _ => {}
+                }
+                return Action::None;
+            }
+
             match key {
                 KeyCode::Char('q') | KeyCode::Esc => {
                     if ps.game_over {
@@ -609,6 +672,10 @@ fn cycle_new_game_value(state: &mut NewGameState, forward: bool) {
 // ── Game Launch ────────────────────────────────────────────────────────
 
 fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> Screen {
+    use std::sync::Arc;
+    use player::tui_human::{HumanInputChannel, TuiHumanPlayer};
+    use tokio::sync::Mutex;
+
     // Build board.
     let board = if let Some(seed) = ng.seed() {
         use rand::SeedableRng;
@@ -629,6 +696,20 @@ fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> S
         Personality::builder(),
         Personality::chaos_agent(),
     ];
+
+    // Create human input channels if any human players exist.
+    let has_human = ng.players.iter().any(|p| p.kind == PlayerKind::Human);
+    let human_channels = if has_human {
+        let (prompt_tx, prompt_rx) = mpsc::unbounded_channel();
+        let (response_tx, response_rx) = mpsc::unbounded_channel();
+        let channel = Arc::new(HumanInputChannel {
+            prompt_tx,
+            response_rx: Mutex::new(response_rx),
+        });
+        Some((channel, prompt_rx, response_tx))
+    } else {
+        None
+    };
 
     let players: Vec<Box<dyn player::Player>> = ng.players.iter().map(|pc| {
         match pc.kind {
@@ -653,10 +734,9 @@ fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> S
                     as Box<dyn player::Player>
             }
             PlayerKind::Human => {
-                Box::new(player::random::RandomPlayer::new(pc.name.clone()))
+                let channel = human_channels.as_ref().unwrap().0.clone();
+                Box::new(TuiHumanPlayer::new(pc.name.clone(), channel))
                     as Box<dyn player::Player>
-                // TODO: Wire HumanPlayer through TUI input overlay.
-                // For now, Human falls back to Random in TUI mode.
             }
         }
     }).collect();
@@ -698,7 +778,12 @@ fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> S
         result
     });
 
-    Screen::Playing(PlayingState::new(rx, player_names))
+    let mut ps = PlayingState::new(rx, player_names, has_human);
+    if let Some((_, prompt_rx, response_tx)) = human_channels {
+        ps.human_prompt_rx = Some(prompt_rx);
+        ps.human_response_tx = Some(response_tx);
+    }
+    Screen::Playing(ps)
 }
 
 fn launch_resume(path: &std::path::Path) -> Option<Screen> {
@@ -743,7 +828,7 @@ fn launch_resume(path: &std::path::Path) -> Option<Screen> {
         result
     });
 
-    Some(Screen::Playing(PlayingState::new(rx, player_names)))
+    Some(Screen::Playing(PlayingState::new(rx, player_names, false)))
 }
 
 fn launch_replay(path: &std::path::Path) -> Option<Screen> {
@@ -787,7 +872,7 @@ fn launch_replay(path: &std::path::Path) -> Option<Screen> {
             }
         });
 
-        return Some(Screen::Playing(PlayingState::new(rx, player_names)));
+        return Some(Screen::Playing(PlayingState::new(rx, player_names, false)));
     }
 
     // Fall back to JSONL event log — simpler playback.
@@ -809,7 +894,7 @@ fn launch_replay(path: &std::path::Path) -> Option<Screen> {
             }
         });
 
-        return Some(Screen::Playing(PlayingState::new(rx, player_names)));
+        return Some(Screen::Playing(PlayingState::new(rx, player_names, false)));
     }
 
     None
