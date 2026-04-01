@@ -110,10 +110,7 @@ impl Default for PlayerState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GamePhase {
     /// Initial setup: players place settlements and roads in snake-draft order.
-    Setup {
-        round: u8,
-        player_index: usize,
-    },
+    Setup { round: u8, player_index: usize },
     /// Normal play: the current player may roll, build, trade, etc.
     Playing {
         current_player: PlayerId,
@@ -125,18 +122,14 @@ pub enum GamePhase {
         players_needing_discard: Vec<PlayerId>,
     },
     /// The current player must move the robber to a new hex.
-    PlacingRobber {
-        current_player: PlayerId,
-    },
+    PlacingRobber { current_player: PlayerId },
     /// The current player may steal from a player adjacent to the robber hex.
     Stealing {
         current_player: PlayerId,
         target_hex: HexCoord,
     },
     /// The game is over.
-    GameOver {
-        winner: PlayerId,
-    },
+    GameOver { winner: PlayerId },
 }
 
 /// The complete state of a Catan game in progress.
@@ -212,9 +205,7 @@ impl GameState {
         }
 
         // Find the desert hex for the robber's starting position.
-        let robber_hex = board
-            .desert_hex()
-            .expect("Board must contain a desert hex");
+        let robber_hex = board.desert_hex().expect("Board must contain a desert hex");
 
         // Snake-draft setup order: [0,1,...,n-1, n-1,...,1,0]
         let mut setup_order: Vec<PlayerId> = (0..num_players).collect();
@@ -247,13 +238,9 @@ impl GameState {
         match &self.phase {
             GamePhase::Setup { player_index, .. } => self.setup_order[*player_index],
             GamePhase::Playing { current_player, .. }
-            | GamePhase::Discarding {
-                current_player, ..
-            }
+            | GamePhase::Discarding { current_player, .. }
             | GamePhase::PlacingRobber { current_player }
-            | GamePhase::Stealing {
-                current_player, ..
-            } => *current_player,
+            | GamePhase::Stealing { current_player, .. } => *current_player,
             GamePhase::GameOver { winner } => *winner,
         }
     }

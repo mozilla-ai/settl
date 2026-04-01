@@ -96,10 +96,11 @@ impl Personality {
     pub fn chaos_agent() -> Self {
         Personality {
             name: "The Wild Card".into(),
-            style: "You are unpredictable and chaotic. You make surprising trades, place the robber \
+            style:
+                "You are unpredictable and chaotic. You make surprising trades, place the robber \
                     where nobody expects, and occasionally make sub-optimal moves just to keep \
                     everyone guessing. You enjoy the social dynamics more than winning."
-                .into(),
+                    .into(),
             aggression: 0.5,
             cooperation: 0.5,
             catchphrases: vec![
@@ -123,7 +124,9 @@ impl Personality {
         );
 
         if !self.catchphrases.is_empty() {
-            prompt.push_str("\n\nOccasionally use one of these catchphrases naturally in your reasoning:\n");
+            prompt.push_str(
+                "\n\nOccasionally use one of these catchphrases naturally in your reasoning:\n",
+            );
             for phrase in &self.catchphrases {
                 prompt.push_str(&format!("- \"{}\"\n", phrase));
             }
@@ -138,8 +141,7 @@ impl Personality {
     pub fn from_toml_file(path: &std::path::Path) -> Result<Self, String> {
         let contents = std::fs::read_to_string(path)
             .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
-        toml::from_str(&contents)
-            .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))
+        toml::from_str(&contents).map_err(|e| format!("Failed to parse {}: {}", path.display(), e))
     }
 }
 

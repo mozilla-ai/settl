@@ -76,6 +76,12 @@ The binary boots into a TUI (title screen -> main menu -> game setup). LLM mode 
 - Branch names: `feature/...`, `fix/...`, `docs/...`, `refactor/...`.
 - Commit messages: use conventional prefixes (`feat:`, `fix:`, `docs:`, `refactor:`).
 
+## Design System
+Always read DESIGN.md before making any visual or UI decisions.
+All color choices, character vocabulary, layout constraints, keyboard shortcuts, and interaction patterns are defined there.
+Do not deviate without explicit user approval.
+In QA mode, flag any code that doesn't match DESIGN.md.
+
 ## Catan Resource Costs
 
 Road: 1 Wood + 1 Brick | Settlement: 1 Wood + 1 Brick + 1 Sheep + 1 Wheat | City: 2 Wheat + 3 Ore | Dev Card: 1 Wheat + 1 Sheep + 1 Ore

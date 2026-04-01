@@ -365,9 +365,7 @@ pub fn legal_actions(state: &GameState) -> Vec<Action> {
     if !has_rolled {
         // Before rolling, the only action available is to play a dev card
         // (Knight only, pre-roll).
-        if !ps.has_played_dev_card_this_turn
-            && ps.dev_cards.iter().any(|c| *c == DevCard::Knight)
-        {
+        if !ps.has_played_dev_card_this_turn && ps.dev_cards.iter().any(|c| *c == DevCard::Knight) {
             // We don't enumerate specific knight targets here; the player
             // chooses those when playing the card via the Player trait methods.
         }
@@ -622,9 +620,7 @@ fn apply_play_dev_card(
     action: DevCardAction,
 ) -> Result<(), RuleError> {
     let player = match &state.phase {
-        GamePhase::Playing {
-            current_player, ..
-        } => *current_player,
+        GamePhase::Playing { current_player, .. } => *current_player,
         _ => return Err(RuleError::InvalidPhase("Not in Playing phase".into())),
     };
 
@@ -707,11 +703,7 @@ fn apply_play_dev_card(
     Ok(())
 }
 
-fn apply_bank_trade(
-    state: &mut GameState,
-    give: Resource,
-    get: Resource,
-) -> Result<(), RuleError> {
+fn apply_bank_trade(state: &mut GameState, give: Resource, get: Resource) -> Result<(), RuleError> {
     let player = current_player_playing(state)?;
     let rate = trade_rate(state, player, give);
 
@@ -741,10 +733,7 @@ fn apply_end_turn(state: &mut GameState) -> Result<(), RuleError> {
 // -- Setup phase --
 
 /// Place an initial settlement during setup.
-pub fn apply_setup_settlement(
-    state: &mut GameState,
-    vertex: VertexCoord,
-) -> Result<(), RuleError> {
+pub fn apply_setup_settlement(state: &mut GameState, vertex: VertexCoord) -> Result<(), RuleError> {
     let player = match &state.phase {
         GamePhase::Setup { player_index, .. } => state.setup_order[*player_index],
         _ => return Err(RuleError::InvalidPhase("Not in Setup phase".into())),
@@ -823,7 +812,11 @@ pub fn apply_setup_road(
         };
     } else {
         state.phase = GamePhase::Setup {
-            round: if next_index >= state.num_players { 2 } else { 1 },
+            round: if next_index >= state.num_players {
+                2
+            } else {
+                1
+            },
             player_index: next_index,
         };
     }
@@ -837,11 +830,7 @@ pub fn apply_setup_road(
 pub fn apply_move_robber(state: &mut GameState, hex: HexCoord) -> Result<(), RuleError> {
     let player = match &state.phase {
         GamePhase::PlacingRobber { current_player } => *current_player,
-        _ => {
-            return Err(RuleError::InvalidPhase(
-                "Not in PlacingRobber phase".into(),
-            ))
-        }
+        _ => return Err(RuleError::InvalidPhase("Not in PlacingRobber phase".into())),
     };
 
     if hex == state.robber_hex {
@@ -1000,9 +989,7 @@ pub fn apply_discard(
         players_needing_discard.retain(|p| *p != player);
         if players_needing_discard.is_empty() {
             let cp = *current_player;
-            state.phase = GamePhase::PlacingRobber {
-                current_player: cp,
-            };
+            state.phase = GamePhase::PlacingRobber { current_player: cp };
         }
     }
 
@@ -1429,9 +1416,7 @@ mod tests {
         apply_end_turn(&mut state).unwrap();
 
         match &state.phase {
-            GamePhase::Playing {
-                current_player, ..
-            } => {
+            GamePhase::Playing { current_player, .. } => {
                 assert_eq!(*current_player, 0);
             }
             _ => panic!("Expected Playing phase"),
@@ -1708,9 +1693,13 @@ mod tests {
         give_resources(&mut state, 0, &[(Resource::Brick, 4)]);
 
         let actions = legal_actions(&state);
-        assert!(actions
-            .iter()
-            .any(|a| matches!(a, Action::BankTrade { give: Resource::Brick, .. })));
+        assert!(actions.iter().any(|a| matches!(
+            a,
+            Action::BankTrade {
+                give: Resource::Brick,
+                ..
+            }
+        )));
     }
 
     #[test]

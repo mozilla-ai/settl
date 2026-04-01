@@ -220,13 +220,9 @@ mod tests {
         }
 
         let vertices = hex.coord.vertices();
-        state
-            .buildings
-            .insert(vertices[0], Building::Settlement(0));
+        state.buildings.insert(vertices[0], Building::Settlement(0));
         state.buildings.insert(vertices[1], Building::City(1));
-        state
-            .buildings
-            .insert(vertices[2], Building::Settlement(2));
+        state.buildings.insert(vertices[2], Building::Settlement(2));
 
         let dist = distribute_resources(&state, token);
 

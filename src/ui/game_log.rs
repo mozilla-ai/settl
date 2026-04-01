@@ -3,7 +3,29 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
+/// Get the display color for a game log message.
+pub fn message_color(msg: &str) -> Color {
+    if msg.starts_with("GAME OVER") {
+        Color::Yellow
+    } else if msg.contains("wins") {
+        Color::Yellow
+    } else if msg.contains("Trade") || msg.contains("trade") {
+        Color::Cyan
+    } else if msg.contains("Rolled") {
+        Color::White
+    } else if msg.contains("Settlement") || msg.contains("City") || msg.contains("Road") {
+        Color::Green
+    } else if msg.contains("Robber") || msg.contains("Stole") {
+        Color::Red
+    } else if msg.contains("Setup") {
+        Color::DarkGray
+    } else {
+        Color::Gray
+    }
+}
+
 /// Render the game log as a scrollable panel.
+#[allow(dead_code)]
 pub fn render_log(messages: &[String], scroll: u16, area: Rect, buf: &mut Buffer) {
     let lines: Vec<Line> = messages
         .iter()

@@ -61,7 +61,10 @@ pub fn execute_in_state(
 ///
 /// Returns a simple heuristic score: positive = good for responder,
 /// negative = bad. Used by AI players as one input to their decision.
-pub fn trade_value_heuristic(offer: &TradeOffer, responder: &crate::game::state::PlayerState) -> f32 {
+pub fn trade_value_heuristic(
+    offer: &TradeOffer,
+    responder: &crate::game::state::PlayerState,
+) -> f32 {
     // Simple heuristic: value of resources gained minus resources lost.
     // Resources you have less of are worth more to you.
     let mut score: f32 = 0.0;
@@ -121,7 +124,13 @@ mod tests {
         state
     }
 
-    fn make_offer(from: usize, give: Resource, give_n: u32, want: Resource, want_n: u32) -> TradeOffer {
+    fn make_offer(
+        from: usize,
+        give: Resource,
+        give_n: u32,
+        want: Resource,
+        want_n: u32,
+    ) -> TradeOffer {
         TradeOffer {
             from,
             offering: vec![(give, give_n)],
@@ -196,7 +205,11 @@ mod tests {
         // Offer asks for wood (abundant), gives ore (scarce) — great deal!
         let offer = make_offer(0, Resource::Ore, 1, Resource::Wood, 1);
         let value = trade_value_heuristic(&offer, &ps);
-        assert!(value > 0.0, "Should be positive when gaining scarce resource, got {}", value);
+        assert!(
+            value > 0.0,
+            "Should be positive when gaining scarce resource, got {}",
+            value
+        );
     }
 
     #[test]
@@ -208,7 +221,11 @@ mod tests {
         // Offer asks for ore (scarce), gives wood (abundant) — bad deal!
         let offer = make_offer(0, Resource::Wood, 1, Resource::Ore, 1);
         let value = trade_value_heuristic(&offer, &ps);
-        assert!(value < 0.0, "Should be negative when losing scarce resource, got {}", value);
+        assert!(
+            value < 0.0,
+            "Should be negative when losing scarce resource, got {}",
+            value
+        );
     }
 
     #[test]
@@ -216,7 +233,10 @@ mod tests {
         let mut ps = crate::game::state::PlayerState::new();
         ps.add_resource(Resource::Wood, 5);
         let offer = make_offer(0, Resource::Ore, 1, Resource::Wood, 1);
-        assert!(matches!(heuristic_response(&offer, &ps), TradeResponse::Accept));
+        assert!(matches!(
+            heuristic_response(&offer, &ps),
+            TradeResponse::Accept
+        ));
     }
 
     #[test]
@@ -224,8 +244,11 @@ mod tests {
         let mut ps = crate::game::state::PlayerState::new();
         ps.add_resource(Resource::Wood, 5); // already has plenty of wood
         ps.add_resource(Resource::Ore, 1); // scarce ore
-        // Offer wants their scarce Ore, gives Wood they already have plenty of — bad deal!
+                                           // Offer wants their scarce Ore, gives Wood they already have plenty of — bad deal!
         let offer = make_offer(0, Resource::Wood, 1, Resource::Ore, 1);
-        assert!(matches!(heuristic_response(&offer, &ps), TradeResponse::Reject { .. }));
+        assert!(matches!(
+            heuristic_response(&offer, &ps),
+            TradeResponse::Reject { .. }
+        ));
     }
 }

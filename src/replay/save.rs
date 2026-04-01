@@ -44,18 +44,16 @@ impl SaveGame {
 
     /// Write the save to a JSON file.
     pub fn save_to_file(&self, path: &Path) -> std::io::Result<()> {
-        let json = serde_json::to_string_pretty(self).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::Other, e)
-        })?;
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
         std::fs::write(path, json)
     }
 
     /// Load a save game from a JSON file.
     pub fn load_from_file(path: &Path) -> std::io::Result<Self> {
         let contents = std::fs::read_to_string(path)?;
-        serde_json::from_str(&contents).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-        })
+        serde_json::from_str(&contents)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
 
     /// Get the last N events as a GameLog for injecting into a resumed orchestrator.

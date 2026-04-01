@@ -1,8 +1,8 @@
 //! TUI-based human player that communicates with the ratatui UI via channels.
 //!
-//! The game engine sends decision prompts through a channel, and the TUI
-//! renders them as a selection overlay. The human picks with arrow keys + Enter,
-//! and the response flows back through a second channel.
+//! The game engine sends typed decision prompts through a channel, and the TUI
+//! renders them as mode-specific UI (board cursor, action bar, trade builder, etc.).
+//! The human interacts, and the response flows back through a second channel.
 
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -13,17 +13,58 @@ use crate::game::board::{EdgeCoord, HexCoord, Resource, VertexCoord};
 use crate::game::state::GameState;
 use crate::player::{Player, PlayerChoice};
 
+// ── Prompt types (engine → TUI) ──────────────────────────────────────
+
+/// The kind of decision the TUI must present.
+#[derive(Debug)]
+pub enum PromptKind {
+    /// Pick from a list of game actions (action bar with shortcuts).
+    ChooseAction { choices: Vec<String> },
+    /// Place a settlement on one of these legal vertices (board cursor).
+    PlaceSettlement { legal: Vec<VertexCoord> },
+    /// Place a road on one of these legal edges (board cursor).
+    PlaceRoad { legal: Vec<EdgeCoord> },
+    /// Move the robber to one of these hexes (board cursor).
+    PlaceRobber { legal: Vec<HexCoord> },
+    /// Steal from one of these players.
+    ChooseStealTarget { targets: Vec<(PlayerId, String)> },
+    /// Discard exactly `count` cards from the given resource pool.
+    Discard { count: usize, available: [u32; 5] },
+    /// Pick a single resource (for Monopoly, Year of Plenty, etc.).
+    ChooseResource { context: String },
+    /// Build a trade offer using the trade builder.
+    ProposeTrade { available: [u32; 5] },
+    /// Accept or reject an incoming trade offer.
+    RespondToTrade { offer: TradeOffer },
+}
+
 /// A prompt sent from the game engine to the TUI for human input.
 pub struct HumanPrompt {
     pub player_id: PlayerId,
-    pub title: String,
-    pub options: Vec<String>,
+    pub kind: PromptKind,
 }
+
+// ── Response types (TUI → engine) ────────────────────────────────────
+
+/// The response sent from the TUI back to the game engine.
+#[derive(Debug)]
+pub enum HumanResponse {
+    /// An index into the presented list (actions, vertices, edges, hexes, targets, resources).
+    Index(usize),
+    /// A list of resources (for discard).
+    Resources(Vec<Resource>),
+    /// A trade offer, or None if cancelled.
+    Trade(Option<TradeOffer>),
+    /// Accept (true) or reject (false) a trade.
+    TradeAnswer(bool),
+}
+
+// ── Channel ──────────────────────────────────────────────────────────
 
 /// Shared channel endpoints for TUI↔engine human input.
 pub struct HumanInputChannel {
     pub prompt_tx: mpsc::UnboundedSender<HumanPrompt>,
-    pub response_rx: Mutex<mpsc::UnboundedReceiver<usize>>,
+    pub response_rx: Mutex<mpsc::UnboundedReceiver<HumanResponse>>,
 }
 
 /// A human player that integrates with the TUI via channels.
@@ -37,20 +78,22 @@ impl TuiHumanPlayer {
         Self { name, channel }
     }
 
-    /// Send a prompt to the TUI and wait for the user's selection.
-    async fn pick_index(&self, player_id: PlayerId, title: String, options: Vec<String>) -> usize {
-        let max = options.len().saturating_sub(1);
-        let _ = self.channel.prompt_tx.send(HumanPrompt {
-            player_id,
-            title,
-            options,
-        });
+    /// Send a typed prompt to the TUI and wait for the response.
+    async fn send_prompt(&self, player_id: PlayerId, kind: PromptKind) -> HumanResponse {
+        let _ = self.channel.prompt_tx.send(HumanPrompt { player_id, kind });
         let mut rx = self.channel.response_rx.lock().await;
-        rx.recv().await.unwrap_or(0).min(max)
+        rx.recv().await.unwrap_or(HumanResponse::Index(0))
+    }
+
+    /// Send a prompt and extract the index, clamped to max.
+    async fn pick_index(&self, player_id: PlayerId, kind: PromptKind, max: usize) -> usize {
+        match self.send_prompt(player_id, kind).await {
+            HumanResponse::Index(i) => i.min(max),
+            _ => 0,
+        }
     }
 }
 
-const RESOURCE_NAMES: &[&str] = &["Wood", "Brick", "Sheep", "Wheat", "Ore"];
 const RESOURCES: &[Resource] = &[
     Resource::Wood,
     Resource::Brick,
@@ -71,8 +114,11 @@ impl Player for TuiHumanPlayer {
         player_id: PlayerId,
         choices: &[PlayerChoice],
     ) -> (usize, String) {
-        let options: Vec<String> = choices.iter().map(|c| format!("{}", c)).collect();
-        let idx = self.pick_index(player_id, "Choose action".into(), options).await;
+        let labels: Vec<String> = choices.iter().map(|c| format!("{}", c)).collect();
+        let max = choices.len().saturating_sub(1);
+        let idx = self
+            .pick_index(player_id, PromptKind::ChooseAction { choices: labels }, max)
+            .await;
         (idx, String::new())
     }
 
@@ -82,12 +128,15 @@ impl Player for TuiHumanPlayer {
         player_id: PlayerId,
         legal_vertices: &[VertexCoord],
     ) -> (usize, String) {
-        let options: Vec<String> = legal_vertices
-            .iter()
-            .map(|v| format!("({},{},{:?})", v.hex.q, v.hex.r, v.dir))
-            .collect();
+        let max = legal_vertices.len().saturating_sub(1);
         let idx = self
-            .pick_index(player_id, "Place settlement".into(), options)
+            .pick_index(
+                player_id,
+                PromptKind::PlaceSettlement {
+                    legal: legal_vertices.to_vec(),
+                },
+                max,
+            )
             .await;
         (idx, String::new())
     }
@@ -98,9 +147,15 @@ impl Player for TuiHumanPlayer {
         player_id: PlayerId,
         legal_edges: &[EdgeCoord],
     ) -> (usize, String) {
-        let options: Vec<String> = legal_edges.iter().map(|e| format!("{}", e)).collect();
+        let max = legal_edges.len().saturating_sub(1);
         let idx = self
-            .pick_index(player_id, "Place road".into(), options)
+            .pick_index(
+                player_id,
+                PromptKind::PlaceRoad {
+                    legal: legal_edges.to_vec(),
+                },
+                max,
+            )
             .await;
         (idx, String::new())
     }
@@ -111,12 +166,15 @@ impl Player for TuiHumanPlayer {
         player_id: PlayerId,
         legal_hexes: &[HexCoord],
     ) -> (usize, String) {
-        let options: Vec<String> = legal_hexes
-            .iter()
-            .map(|h| format!("({},{})", h.q, h.r))
-            .collect();
+        let max = legal_hexes.len().saturating_sub(1);
         let idx = self
-            .pick_index(player_id, "Move robber".into(), options)
+            .pick_index(
+                player_id,
+                PromptKind::PlaceRobber {
+                    legal: legal_hexes.to_vec(),
+                },
+                max,
+            )
             .await;
         (idx, String::new())
     }
@@ -127,18 +185,28 @@ impl Player for TuiHumanPlayer {
         player_id: PlayerId,
         targets: &[PlayerId],
     ) -> (usize, String) {
-        let options: Vec<String> = targets
+        let target_info: Vec<(PlayerId, String)> = targets
             .iter()
             .map(|&p| {
-                format!(
-                    "Player {} ({} cards)",
+                (
                     p,
-                    state.players[p].total_resources()
+                    format!(
+                        "Player {} ({} cards)",
+                        p,
+                        state.players[p].total_resources()
+                    ),
                 )
             })
             .collect();
+        let max = targets.len().saturating_sub(1);
         let idx = self
-            .pick_index(player_id, "Steal from".into(), options)
+            .pick_index(
+                player_id,
+                PromptKind::ChooseStealTarget {
+                    targets: target_info,
+                },
+                max,
+            )
             .await;
         (idx, String::new())
     }
@@ -150,33 +218,34 @@ impl Player for TuiHumanPlayer {
         count: usize,
     ) -> (Vec<Resource>, String) {
         let ps = &state.players[player_id];
-        let mut discards = Vec::with_capacity(count);
-        // Track remaining resources as we pick
-        let mut remaining = [
+        let available = [
             ps.resource_count(Resource::Wood),
             ps.resource_count(Resource::Brick),
             ps.resource_count(Resource::Sheep),
             ps.resource_count(Resource::Wheat),
             ps.resource_count(Resource::Ore),
         ];
-
-        for i in 0..count {
-            let mut options = Vec::new();
-            let mut resource_indices = Vec::new();
-            for (j, &name) in RESOURCE_NAMES.iter().enumerate() {
-                if remaining[j] > 0 {
-                    options.push(format!("{} (have {})", name, remaining[j]));
-                    resource_indices.push(j);
+        let response = self
+            .send_prompt(player_id, PromptKind::Discard { count, available })
+            .await;
+        match response {
+            HumanResponse::Resources(resources) => (resources, String::new()),
+            _ => {
+                // Fallback: discard first N resources
+                let mut result = Vec::new();
+                let mut rem = available;
+                for _ in 0..count {
+                    for (i, r) in rem.iter_mut().enumerate() {
+                        if *r > 0 {
+                            *r -= 1;
+                            result.push(RESOURCES[i]);
+                            break;
+                        }
+                    }
                 }
+                (result, String::new())
             }
-            let title = format!("Discard card {}/{}", i + 1, count);
-            let idx = self.pick_index(player_id, title, options).await;
-            let res_idx = resource_indices[idx.min(resource_indices.len() - 1)];
-            remaining[res_idx] -= 1;
-            discards.push(RESOURCES[res_idx]);
         }
-
-        (discards, String::new())
     }
 
     async fn choose_resource(
@@ -185,9 +254,17 @@ impl Player for TuiHumanPlayer {
         player_id: PlayerId,
         context: &str,
     ) -> (Resource, String) {
-        let options: Vec<String> = RESOURCE_NAMES.iter().map(|s| s.to_string()).collect();
-        let idx = self.pick_index(player_id, context.to_string(), options).await;
-        (RESOURCES[idx.min(RESOURCES.len() - 1)], String::new())
+        let max = RESOURCES.len() - 1;
+        let idx = self
+            .pick_index(
+                player_id,
+                PromptKind::ChooseResource {
+                    context: context.to_string(),
+                },
+                max,
+            )
+            .await;
+        (RESOURCES[idx.min(max)], String::new())
     }
 
     async fn propose_trade(
@@ -196,47 +273,20 @@ impl Player for TuiHumanPlayer {
         player_id: PlayerId,
     ) -> Option<(TradeOffer, String)> {
         let ps = &state.players[player_id];
-
-        // Pick resource to give (only show resources the player has)
-        let mut give_options = Vec::new();
-        let mut give_indices = Vec::new();
-        for (i, &name) in RESOURCE_NAMES.iter().enumerate() {
-            let count = ps.resource_count(RESOURCES[i]);
-            if count > 0 {
-                give_options.push(format!("{} (have {})", name, count));
-                give_indices.push(i);
-            }
-        }
-        give_options.push("Cancel".into());
-
-        let give_idx = self
-            .pick_index(player_id, "Trade: give what?".into(), give_options.clone())
+        let available = [
+            ps.resource_count(Resource::Wood),
+            ps.resource_count(Resource::Brick),
+            ps.resource_count(Resource::Sheep),
+            ps.resource_count(Resource::Wheat),
+            ps.resource_count(Resource::Ore),
+        ];
+        let response = self
+            .send_prompt(player_id, PromptKind::ProposeTrade { available })
             .await;
-        if give_idx >= give_indices.len() {
-            return None; // cancelled
+        match response {
+            HumanResponse::Trade(Some(offer)) => Some((offer, String::new())),
+            _ => None,
         }
-        let give_resource = RESOURCES[give_indices[give_idx]];
-
-        // Pick resource to request
-        let mut get_options: Vec<String> = RESOURCE_NAMES.iter().map(|s| s.to_string()).collect();
-        get_options.push("Cancel".into());
-        let get_idx = self
-            .pick_index(player_id, "Trade: want what?".into(), get_options)
-            .await;
-        if get_idx >= RESOURCES.len() {
-            return None;
-        }
-        let get_resource = RESOURCES[get_idx];
-
-        Some((
-            TradeOffer {
-                from: player_id,
-                offering: vec![(give_resource, 1)],
-                requesting: vec![(get_resource, 1)],
-                message: String::new(),
-            },
-            String::new(),
-        ))
     }
 
     async fn respond_to_trade(
@@ -245,31 +295,22 @@ impl Player for TuiHumanPlayer {
         player_id: PlayerId,
         offer: &TradeOffer,
     ) -> (TradeResponse, String) {
-        let offering: String = offer
-            .offering
-            .iter()
-            .map(|(r, n)| format!("{} {}", n, r))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let requesting: String = offer
-            .requesting
-            .iter()
-            .map(|(r, n)| format!("{} {}", n, r))
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        let title = format!("P{} offers [{}] for [{}]", offer.from, offering, requesting);
-        let options = vec!["Accept".into(), "Reject".into()];
-        let idx = self.pick_index(player_id, title, options).await;
-        if idx == 0 {
-            (TradeResponse::Accept, String::new())
-        } else {
-            (
+        let response = self
+            .send_prompt(
+                player_id,
+                PromptKind::RespondToTrade {
+                    offer: offer.clone(),
+                },
+            )
+            .await;
+        match response {
+            HumanResponse::TradeAnswer(true) => (TradeResponse::Accept, String::new()),
+            _ => (
                 TradeResponse::Reject {
                     reason: "Declined".into(),
                 },
                 String::new(),
-            )
+            ),
         }
     }
 }
