@@ -1,4 +1,33 @@
-/target
+# Rust build artifacts
+/target/
+
+# Game output files
 game_log.jsonl
 game_replay.json
 game_save.json
+
+# Claude artifacts (allow skills)
+.claude/*
+!.claude/skills/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config / secrets
+.env
+.env.local
+
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib

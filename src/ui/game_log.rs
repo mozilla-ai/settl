@@ -5,9 +5,7 @@ use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
 /// Get the display color for a game log message.
 pub fn message_color(msg: &str) -> Color {
-    if msg.starts_with("GAME OVER") {
-        Color::Yellow
-    } else if msg.contains("wins") {
+    if msg.starts_with("GAME OVER") || msg.contains("wins") {
         Color::Yellow
     } else if msg.contains("Trade") || msg.contains("trade") {
         Color::Cyan

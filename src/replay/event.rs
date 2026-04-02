@@ -170,7 +170,7 @@ impl GameLog {
                 }
                 Err(e) => {
                     eprintln!("Warning: failed to serialize event: {}", e);
-                    return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+                    return Err(std::io::Error::other(e));
                 }
             }
         }

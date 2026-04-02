@@ -33,8 +33,8 @@ pub struct MainMenuState {
     pub has_replay_files: bool,
 }
 
-impl MainMenuState {
-    pub fn new() -> Self {
+impl Default for MainMenuState {
+    fn default() -> Self {
         let has_save_files = find_files_with_extension("game_save", "json").is_some();
         let has_replay_files = find_files_with_extension("game_replay", "json").is_some()
             || find_files_with_extension("game_log", "jsonl").is_some();
@@ -43,6 +43,12 @@ impl MainMenuState {
             has_save_files,
             has_replay_files,
         }
+    }
+}
+
+impl MainMenuState {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn menu_items(&self) -> Vec<&'static str> {
@@ -708,7 +714,7 @@ fn truncate_str(s: &str, max: usize) -> &str {
 
 /// Find a file matching `{prefix}*.{ext}` in the current directory.
 fn find_files_with_extension(prefix: &str, ext: &str) -> Option<PathBuf> {
-    let pattern = format!("{}", prefix);
+    let pattern = prefix.to_string();
     std::fs::read_dir(".")
         .ok()?
         .filter_map(|e| e.ok())

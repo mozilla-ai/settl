@@ -365,7 +365,7 @@ pub fn legal_actions(state: &GameState) -> Vec<Action> {
     if !has_rolled {
         // Before rolling, the only action available is to play a dev card
         // (Knight only, pre-roll).
-        if !ps.has_played_dev_card_this_turn && ps.dev_cards.iter().any(|c| *c == DevCard::Knight) {
+        if !ps.has_played_dev_card_this_turn && ps.dev_cards.contains(&DevCard::Knight) {
             // We don't enumerate specific knight targets here; the player
             // chooses those when playing the card via the Player trait methods.
         }
@@ -1000,12 +1000,7 @@ pub fn apply_discard(
 
 /// Check if any player has won (10+ VP).
 pub fn check_victory(state: &GameState) -> Option<PlayerId> {
-    for p in 0..state.num_players {
-        if state.victory_points(p) >= VP_TO_WIN {
-            return Some(p);
-        }
-    }
-    None
+    (0..state.num_players).find(|&p| state.victory_points(p) >= VP_TO_WIN)
 }
 
 /// Check victory and update the phase if someone won.

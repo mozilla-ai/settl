@@ -129,7 +129,6 @@ impl GameOrchestrator {
                 current_player: 0,
                 has_rolled: false,
             };
-        } else {
         }
 
         // Phase 2: Main game loop.
@@ -174,14 +173,10 @@ impl GameOrchestrator {
         let total_placements = setup_order.len();
 
         for (idx, &player_id) in setup_order.iter().enumerate() {
-            let round = if idx < total_placements / 2 { 1 } else { 2 };
+            let _round = if idx < total_placements / 2 { 1 } else { 2 };
 
             // Step 1: Choose settlement location.
-            let legal_vertices = if round == 1 {
-                rules::legal_setup_vertices(&self.state)
-            } else {
-                rules::legal_setup_vertices(&self.state)
-            };
+            let legal_vertices = rules::legal_setup_vertices(&self.state);
 
             if legal_vertices.is_empty() {
                 return Err(OrchestratorError::GameStuck(

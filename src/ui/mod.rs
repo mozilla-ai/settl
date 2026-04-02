@@ -63,6 +63,7 @@ pub enum UiEvent {
 // ── Screen State Machine ───────────────────────────────────────────────
 
 /// The active screen.
+#[allow(clippy::large_enum_variant)]
 pub enum Screen {
     Title { frame: u64 },
     MainMenu(MainMenuState),
@@ -555,6 +556,7 @@ fn draw_screen(f: &mut Frame, screen: &Screen) {
 
 // ── Input Dispatch ─────────────────────────────────────────────────────
 
+#[allow(clippy::large_enum_variant)]
 enum Action {
     None,
     Quit,
@@ -1281,43 +1283,40 @@ fn move_new_game_focus_prev_col(state: &mut NewGameState) {
 }
 
 fn cycle_new_game_value(state: &mut NewGameState, forward: bool) {
-    match state.focus {
-        NewGameFocus::Player { row, col } => {
-            let player = &mut state.players[row];
-            match col {
-                NewGameCol::Kind => {
-                    player.kind = if forward {
-                        player.kind.next()
+    if let NewGameFocus::Player { row, col } = state.focus {
+        let player = &mut state.players[row];
+        match col {
+            NewGameCol::Kind => {
+                player.kind = if forward {
+                    player.kind.next()
+                } else {
+                    player.kind.prev()
+                };
+            }
+            NewGameCol::Model => {
+                if player.kind == PlayerKind::Llm {
+                    let n = AVAILABLE_MODELS.len();
+                    player.model_index = if forward {
+                        (player.model_index + 1) % n
                     } else {
-                        player.kind.prev()
+                        player.model_index.checked_sub(1).unwrap_or(n - 1)
                     };
                 }
-                NewGameCol::Model => {
-                    if player.kind == PlayerKind::Llm {
-                        let n = AVAILABLE_MODELS.len();
-                        player.model_index = if forward {
-                            (player.model_index + 1) % n
-                        } else {
-                            player.model_index.checked_sub(1).unwrap_or(n - 1)
-                        };
-                    }
-                }
-                NewGameCol::Personality => {
-                    if player.kind == PlayerKind::Llm {
-                        let n = state.personality_names.len();
-                        player.personality_index = if forward {
-                            (player.personality_index + 1) % n
-                        } else {
-                            player.personality_index.checked_sub(1).unwrap_or(n - 1)
-                        };
-                    }
-                }
-                NewGameCol::Name => {
-                    // Name doesn't cycle. Enter to edit instead.
+            }
+            NewGameCol::Personality => {
+                if player.kind == PlayerKind::Llm {
+                    let n = state.personality_names.len();
+                    player.personality_index = if forward {
+                        (player.personality_index + 1) % n
+                    } else {
+                        player.personality_index.checked_sub(1).unwrap_or(n - 1)
+                    };
                 }
             }
+            NewGameCol::Name => {
+                // Name doesn't cycle. Enter to edit instead.
+            }
         }
-        _ => {}
     }
 }
 
@@ -1573,7 +1572,7 @@ fn build_post_game(ps: &PlayingState) -> PostGameState {
         ps.player_names
             .iter()
             .enumerate()
-            .map(|(i, name)| (name.clone(), state.victory_points(i) as u8))
+            .map(|(i, name)| (name.clone(), state.victory_points(i)))
             .collect()
     } else {
         ps.player_names

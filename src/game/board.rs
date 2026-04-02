@@ -669,7 +669,7 @@ impl Board {
         let mut number_iter = numbers.into_iter();
         let hexes: Vec<Hex> = coords
             .into_iter()
-            .zip(terrains.into_iter())
+            .zip(terrains)
             .map(|(coord, terrain)| {
                 let number_token = if terrain == Desert {
                     None

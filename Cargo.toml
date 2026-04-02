@@ -2,7 +2,13 @@
 name = "settl"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/Brake-Labs/settl"
+authors = ["Brake Labs"]
 description = "Terminal Settlers of Catan with LLM players"
+keywords = ["catan", "tui", "ai", "llm", "terminal"]
+categories = ["command-line-utilities", "games"]
 
 [dependencies]
 ratatui = "0.29"
@@ -21,3 +27,14 @@ reqwest = "0.13.2"
 proptest = "1"
 tempfile = "3"
 insta = "1"
+cargo-husky = { version = "1", default-features = false, features = ["precommit-hook", "run-cargo-fmt", "run-cargo-clippy"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev-release]
+inherits = "release"
+lto = false
+codegen-units = 16
