@@ -76,6 +76,12 @@ The binary boots into a TUI (title screen -> main menu -> game setup). LLM mode 
 - Branch names: `feature/...`, `fix/...`, `docs/...`, `refactor/...`.
 - Commit messages: use conventional prefixes (`feat:`, `fix:`, `docs:`, `refactor:`).
 
+## Design System
+Always read DESIGN.md before making any visual or UI decisions.
+All color choices, character vocabulary, layout constraints, keyboard shortcuts, and interaction patterns are defined there.
+Do not deviate without explicit user approval.
+In QA mode, flag any code that doesn't match DESIGN.md.
+
 ## Catan Rules
 
 See [`CATAN_RULES.md`](CATAN_RULES.md) for the complete game rules reference (setup, turn structure, building, trading, robber, development cards, special cards, victory conditions).

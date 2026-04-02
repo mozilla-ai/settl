@@ -73,7 +73,11 @@ impl fmt::Display for Action {
                     crate::game::board::VertexDirection::North => "N",
                     crate::game::board::VertexDirection::South => "S",
                 };
-                write!(f, "Build Settlement at ({}, {}, {})", v.hex.q, v.hex.r, dir_name)
+                write!(
+                    f,
+                    "Build Settlement at ({}, {}, {})",
+                    v.hex.q, v.hex.r, dir_name
+                )
             }
             Action::BuildCity(v) => {
                 let dir_name = match v.dir {

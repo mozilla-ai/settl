@@ -9,7 +9,10 @@ use crate::replay;
 
 /// CLI arguments for headless mode.
 #[derive(Parser)]
-#[command(name = "settl", about = "Play Settlers of Catan in your terminal with AI opponents")]
+#[command(
+    name = "settl",
+    about = "Play Settlers of Catan in your terminal with AI opponents"
+)]
 pub struct HeadlessCli {
     /// Number of players (2-4)
     #[arg(short, long, default_value = "4")]
@@ -94,7 +97,10 @@ pub async fn run(cli: HeadlessCli) {
             .collect()
     } else {
         let per_models: Vec<String> = if let Some(ref models_str) = cli.models {
-            models_str.split(',').map(|s| s.trim().to_string()).collect()
+            models_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect()
         } else {
             vec![cli.model.clone(); cli.players]
         };
@@ -117,8 +123,12 @@ pub async fn run(cli: HeadlessCli) {
         let name_list = ["Claude", "GPT", "Gemini", "Llama"];
         (0..cli.players)
             .map(|i| {
-                let model = per_models.get(i).cloned().unwrap_or_else(|| cli.model.clone());
-                let personality = custom_personality.clone()
+                let model = per_models
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| cli.model.clone());
+                let personality = custom_personality
+                    .clone()
                     .unwrap_or_else(|| default_personalities[i].clone());
                 Box::new(player::llm::LlmPlayer::new(
                     name_list[i].into(),
@@ -178,7 +188,10 @@ pub async fn run(cli: HeadlessCli) {
         Err(e) => {
             eprintln!("Game ended: {}", e);
             let model_ids: Vec<String> = if let Some(ref models_str) = cli.models {
-                models_str.split(',').map(|s| s.trim().to_string()).collect()
+                models_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .collect()
             } else if cli.demo {
                 vec!["".into(); cli.players]
             } else {
@@ -204,24 +217,30 @@ fn run_replay(replay_path: &str) {
 
     if replay_path.ends_with(".json") {
         match std::fs::read_to_string(path) {
-            Ok(contents) => {
-                match serde_json::from_str::<replay::recorder::GameReplay>(&contents) {
-                    Ok(replay) => {
-                        println!("Replaying game: {} players", replay.num_players);
-                        println!("Players: {}\n", replay.player_names.join(", "));
-                        for (i, frame) in replay.frames.iter().enumerate() {
-                            let vp: String = frame.victory_points.iter()
-                                .enumerate()
-                                .map(|(p, v)| format!("P{}:{}", p, v))
-                                .collect::<Vec<_>>()
-                                .join(" ");
-                            println!("{:>4}. [T{:>3}] {} [{}]", i + 1, frame.turn, frame.description, vp);
-                        }
-                        println!("\n{}", replay.stats());
+            Ok(contents) => match serde_json::from_str::<replay::recorder::GameReplay>(&contents) {
+                Ok(replay) => {
+                    println!("Replaying game: {} players", replay.num_players);
+                    println!("Players: {}\n", replay.player_names.join(", "));
+                    for (i, frame) in replay.frames.iter().enumerate() {
+                        let vp: String = frame
+                            .victory_points
+                            .iter()
+                            .enumerate()
+                            .map(|(p, v)| format!("P{}:{}", p, v))
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        println!(
+                            "{:>4}. [T{:>3}] {} [{}]",
+                            i + 1,
+                            frame.turn,
+                            frame.description,
+                            vp
+                        );
                     }
-                    Err(e) => eprintln!("Failed to parse replay: {}", e),
+                    println!("\n{}", replay.stats());
                 }
-            }
+                Err(e) => eprintln!("Failed to parse replay: {}", e),
+            },
             Err(e) => eprintln!("Failed to read replay file: {}", e),
         }
     } else {
@@ -244,14 +263,18 @@ async fn run_resume(save_path: &str, cli: &HeadlessCli) {
         Ok(save) => {
             println!("Resuming game from: {}", save_path);
             println!("Players: {}", save.player_names.join(", "));
-            println!("Turn: {}, Events: {}\n", save.state.turn_number, save.events.len());
+            println!(
+                "Turn: {}, Events: {}\n",
+                save.state.turn_number,
+                save.events.len()
+            );
 
-            let players: Vec<Box<dyn player::Player>> = save.player_names.iter()
+            let players: Vec<Box<dyn player::Player>> = save
+                .player_names
+                .iter()
                 .enumerate()
                 .map(|(i, name)| {
-                    let model = save.player_models.get(i)
-                        .filter(|m| !m.is_empty())
-                        .cloned();
+                    let model = save.player_models.get(i).filter(|m| !m.is_empty()).cloned();
                     if let Some(model_id) = model {
                         Box::new(player::llm::LlmPlayer::new(
                             name.clone(),
@@ -266,9 +289,7 @@ async fn run_resume(save_path: &str, cli: &HeadlessCli) {
                 .collect();
 
             let log = save.recent_log();
-            let mut orchestrator = game::orchestrator::GameOrchestrator::new(
-                save.state, players,
-            );
+            let mut orchestrator = game::orchestrator::GameOrchestrator::new(save.state, players);
             orchestrator.log = log;
             orchestrator.max_turns = cli.max_turns;
 
@@ -278,7 +299,9 @@ async fn run_resume(save_path: &str, cli: &HeadlessCli) {
                         "\nPlayer {} ({}) wins!",
                         winner, orchestrator.player_names[winner]
                     );
-                    let _ = orchestrator.log.write_jsonl(std::path::Path::new("game_log.jsonl"));
+                    let _ = orchestrator
+                        .log
+                        .write_jsonl(std::path::Path::new("game_log.jsonl"));
                     if let Ok(json) = serde_json::to_string_pretty(&orchestrator.replay) {
                         let _ = std::fs::write("game_replay.json", json);
                     }

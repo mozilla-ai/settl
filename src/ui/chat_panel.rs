@@ -4,9 +4,9 @@
 //! containing reasoning text. Visually distinct from the game log which shows
 //! mechanical game events.
 
+use super::PLAYER_COLORS;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
-use super::PLAYER_COLORS;
 
 /// A single chat message from an AI player.
 #[derive(Debug, Clone)]
@@ -20,12 +20,7 @@ pub struct ChatMessage {
 }
 
 /// Render the AI chat / reasoning panel.
-pub fn render_chat(
-    messages: &[ChatMessage],
-    scroll: u16,
-    area: Rect,
-    buf: &mut Buffer,
-) {
+pub fn render_chat(messages: &[ChatMessage], scroll: u16, area: Rect, buf: &mut Buffer) {
     let mut lines: Vec<Line> = Vec::new();
 
     for msg in messages {
@@ -35,12 +30,10 @@ pub fn render_chat(
             .unwrap_or(Color::White);
 
         // Player name header.
-        let mut spans: Vec<Span> = vec![
-            Span::styled(
-                format!("{}: ", msg.player),
-                Style::default().fg(color).bold(),
-            ),
-        ];
+        let mut spans: Vec<Span> = vec![Span::styled(
+            format!("{}: ", msg.player),
+            Style::default().fg(color).bold(),
+        )];
 
         // Truncate long reasoning to keep the panel readable (char-safe).
         let text = if msg.text.chars().count() > 200 {

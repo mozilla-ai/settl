@@ -1,7 +1,6 @@
 //! Game orchestrator — drives the game loop, calling Player trait methods
 //! for each decision point and applying actions through the rules engine.
 
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -105,9 +104,7 @@ impl GameOrchestrator {
     ) -> T {
         match tokio::time::timeout(PLAYER_DECISION_TIMEOUT, future).await {
             Ok(result) => result,
-            Err(_) => {
-                fallback
-            }
+            Err(_) => fallback,
         }
     }
 
@@ -120,7 +117,6 @@ impl GameOrchestrator {
 
     /// Run the full game and return the winner's PlayerId.
     pub async fn run(&mut self) -> Result<PlayerId, OrchestratorError> {
-
         // Skip setup if the game is already past the setup phase (e.g. resumed).
         if matches!(self.state.phase, GamePhase::Setup { .. }) {
             self.run_setup().await?;
@@ -190,11 +186,18 @@ impl GameOrchestrator {
                 ));
             }
 
-            let (v_idx, _v_reasoning) = self.with_timeout(
-                player_id, "choose_settlement",
-                self.players[player_id].choose_settlement(&self.state, player_id, &legal_vertices),
-                (0, "timeout fallback".into()),
-            ).await;
+            let (v_idx, _v_reasoning) = self
+                .with_timeout(
+                    player_id,
+                    "choose_settlement",
+                    self.players[player_id].choose_settlement(
+                        &self.state,
+                        player_id,
+                        &legal_vertices,
+                    ),
+                    (0, "timeout fallback".into()),
+                )
+                .await;
             let vertex = legal_vertices[v_idx.min(legal_vertices.len() - 1)];
 
             // Apply setup settlement.
@@ -205,22 +208,22 @@ impl GameOrchestrator {
             // Step 2: Choose road location.
             let legal_edges = rules::legal_setup_roads(&self.state, vertex);
             if legal_edges.is_empty() {
-                return Err(OrchestratorError::GameStuck(
-                    "No legal setup roads".into(),
-                ));
+                return Err(OrchestratorError::GameStuck("No legal setup roads".into()));
             }
 
-            let (e_idx, _e_reasoning) = self.with_timeout(
-                player_id, "choose_road",
-                self.players[player_id].choose_road(&self.state, player_id, &legal_edges),
-                (0, "timeout fallback".into()),
-            ).await;
+            let (e_idx, _e_reasoning) = self
+                .with_timeout(
+                    player_id,
+                    "choose_road",
+                    self.players[player_id].choose_road(&self.state, player_id, &legal_edges),
+                    (0, "timeout fallback".into()),
+                )
+                .await;
             let edge = legal_edges[e_idx.min(legal_edges.len() - 1)];
 
             // Apply setup road.
-            rules::apply_setup_road(&mut self.state, vertex, edge).map_err(|e| {
-                OrchestratorError::RuleViolation(format!("Setup road: {}", e))
-            })?;
+            rules::apply_setup_road(&mut self.state, vertex, edge)
+                .map_err(|e| OrchestratorError::RuleViolation(format!("Setup road: {}", e)))?;
 
             // Record the events.
             self.record_event(GameEvent::InitialSettlementPlaced {
@@ -234,8 +237,12 @@ impl GameOrchestrator {
 
             let msg = format!(
                 "Setup: P{} ({}) placed settlement at ({},{},{:?}), road at {}",
-                player_id, self.player_names[player_id],
-                vertex.hex.q, vertex.hex.r, vertex.dir, edge,
+                player_id,
+                self.player_names[player_id],
+                vertex.hex.q,
+                vertex.hex.r,
+                vertex.dir,
+                edge,
             );
             self.send_ui(msg, None);
         }
@@ -247,19 +254,18 @@ impl GameOrchestrator {
     async fn run_turn(&mut self) -> Result<Option<PlayerId>, OrchestratorError> {
         let player_id = self.state.current_player();
 
-
         // Inject recent game history for LLM context (last 20 events).
         let recent_events = self.log.events();
-        let history = crate::player::prompt::format_recent_history(
-            recent_events,
-            &self.player_names,
-            20,
-        );
-        let _ = self.with_timeout(
-            player_id, "set_game_context",
-            self.players[player_id].set_game_context(&history),
-            (),
-        ).await;
+        let history =
+            crate::player::prompt::format_recent_history(recent_events, &self.player_names, 20);
+        let _ = self
+            .with_timeout(
+                player_id,
+                "set_game_context",
+                self.players[player_id].set_game_context(&history),
+                (),
+            )
+            .await;
 
         // Step 1: Roll dice.
         let (d1, d2) = dice::roll_dice(&mut rand::thread_rng());
@@ -272,9 +278,15 @@ impl GameOrchestrator {
         };
         self.record_event(dice_event.clone());
         self.send_ui(
-            format!("Turn {} — P{} ({}) rolled {} ({} + {})",
-                self.state.turn_number + 1, player_id, self.player_names[player_id],
-                roll, d1, d2),
+            format!(
+                "Turn {} — P{} ({}) rolled {} ({} + {})",
+                self.state.turn_number + 1,
+                player_id,
+                self.player_names[player_id],
+                roll,
+                d1,
+                d2
+            ),
             Some(dice_event),
         );
 
@@ -301,11 +313,14 @@ impl GameOrchestrator {
                 break;
             }
 
-            let (choice_idx, reasoning) = self.with_timeout(
-                player_id, "choose_action",
-                self.players[player_id].choose_action(&self.state, player_id, &choices),
-                (0, "timeout fallback".into()),
-            ).await;
+            let (choice_idx, reasoning) = self
+                .with_timeout(
+                    player_id,
+                    "choose_action",
+                    self.players[player_id].choose_action(&self.state, player_id, &choices),
+                    (0, "timeout fallback".into()),
+                )
+                .await;
 
             let choice = &choices[choice_idx.min(choices.len() - 1)];
             self.send_reasoning(player_id, &reasoning);
@@ -320,23 +335,14 @@ impl GameOrchestrator {
                 }
                 PlayerChoice::PlayKnight => self.handle_knight(player_id).await,
                 PlayerChoice::PlayMonopoly => self.handle_monopoly(player_id).await,
-                PlayerChoice::PlayYearOfPlenty => {
-                    self.handle_year_of_plenty(player_id).await
-                }
-                PlayerChoice::PlayRoadBuilding => {
-                    self.handle_road_building(player_id).await
-                }
-                PlayerChoice::ProposeTrade => {
-                    self.handle_trade(player_id).await
-                }
+                PlayerChoice::PlayYearOfPlenty => self.handle_year_of_plenty(player_id).await,
+                PlayerChoice::PlayRoadBuilding => self.handle_road_building(player_id).await,
+                PlayerChoice::ProposeTrade => self.handle_trade(player_id).await,
             };
 
             match action_result {
                 Ok(()) => {
-                    self.send_ui(
-                        format!("P{}: {} — {}", player_id, choice, reasoning),
-                        None,
-                    );
+                    self.send_ui(format!("P{}: {} — {}", player_id, choice, reasoning), None);
                     if let Some(winner) = rules::check_victory(&self.state) {
                         return Ok(Some(winner));
                     }
@@ -422,15 +428,17 @@ impl GameOrchestrator {
                 players_needing_discard: players_needing_discard.clone(),
             };
 
-            let (cards, _reasoning) = self.with_timeout(
-                p, "choose_discard",
-                self.players[p].choose_discard(&self.state, p, discard_count),
-                (Vec::new(), "timeout fallback".into()),
-            ).await;
+            let (cards, _reasoning) = self
+                .with_timeout(
+                    p,
+                    "choose_discard",
+                    self.players[p].choose_discard(&self.state, p, discard_count),
+                    (Vec::new(), "timeout fallback".into()),
+                )
+                .await;
 
-            rules::apply_discard(&mut self.state, p, &cards).map_err(|e| {
-                OrchestratorError::RuleViolation(format!("Discard: {}", e))
-            })?;
+            rules::apply_discard(&mut self.state, p, &cards)
+                .map_err(|e| OrchestratorError::RuleViolation(format!("Discard: {}", e)))?;
 
             self.record_event(GameEvent::CardsDiscarded {
                 player: p,
@@ -448,31 +456,35 @@ impl GameOrchestrator {
             .filter(|&h| h != self.state.robber_hex)
             .collect();
 
-        let (h_idx, _h_reasoning) = self.with_timeout(
-            roller, "choose_robber_hex",
-            self.players[roller].choose_robber_hex(&self.state, roller, &legal_hexes),
-            (0, "timeout fallback".into()),
-        ).await;
+        let (h_idx, _h_reasoning) = self
+            .with_timeout(
+                roller,
+                "choose_robber_hex",
+                self.players[roller].choose_robber_hex(&self.state, roller, &legal_hexes),
+                (0, "timeout fallback".into()),
+            )
+            .await;
         let hex = legal_hexes[h_idx.min(legal_hexes.len() - 1)];
 
-        rules::apply_move_robber(&mut self.state, hex).map_err(|e| {
-            OrchestratorError::RuleViolation(format!("Move robber: {}", e))
-        })?;
+        rules::apply_move_robber(&mut self.state, hex)
+            .map_err(|e| OrchestratorError::RuleViolation(format!("Move robber: {}", e)))?;
 
         // Step 3: Steal (if in Stealing phase after move_robber).
         if let GamePhase::Stealing { target_hex, .. } = &self.state.phase {
             let targets = rules::steal_targets(&self.state, *target_hex, roller);
             if !targets.is_empty() {
-                let (t_idx, _t_reasoning) = self.with_timeout(
-                    roller, "choose_steal_target",
-                    self.players[roller].choose_steal_target(&self.state, roller, &targets),
-                    (0, "timeout fallback".into()),
-                ).await;
+                let (t_idx, _t_reasoning) = self
+                    .with_timeout(
+                        roller,
+                        "choose_steal_target",
+                        self.players[roller].choose_steal_target(&self.state, roller, &targets),
+                        (0, "timeout fallback".into()),
+                    )
+                    .await;
                 let target = targets[t_idx.min(targets.len() - 1)];
 
-                rules::apply_steal(&mut self.state, target).map_err(|e| {
-                    OrchestratorError::RuleViolation(format!("Steal: {}", e))
-                })?;
+                rules::apply_steal(&mut self.state, target)
+                    .map_err(|e| OrchestratorError::RuleViolation(format!("Steal: {}", e)))?;
 
                 self.record_event(GameEvent::RobberMoved {
                     player: roller,
@@ -526,11 +538,14 @@ impl GameOrchestrator {
             .filter(|&h| h != self.state.robber_hex)
             .collect();
 
-        let (h_idx, h_reasoning) = self.with_timeout(
-            player_id, "knight: choose_robber_hex",
-            self.players[player_id].choose_robber_hex(&self.state, player_id, &legal_hexes),
-            (0, "timeout fallback".into()),
-        ).await;
+        let (h_idx, h_reasoning) = self
+            .with_timeout(
+                player_id,
+                "knight: choose_robber_hex",
+                self.players[player_id].choose_robber_hex(&self.state, player_id, &legal_hexes),
+                (0, "timeout fallback".into()),
+            )
+            .await;
         let hex = legal_hexes[h_idx.min(legal_hexes.len() - 1)];
 
         // Determine steal target.
@@ -538,11 +553,14 @@ impl GameOrchestrator {
         let steal_from = if targets.is_empty() {
             None
         } else {
-            let (t_idx, _) = self.with_timeout(
-                player_id, "knight: choose_steal_target",
-                self.players[player_id].choose_steal_target(&self.state, player_id, &targets),
-                (0, "timeout fallback".into()),
-            ).await;
+            let (t_idx, _) = self
+                .with_timeout(
+                    player_id,
+                    "knight: choose_steal_target",
+                    self.players[player_id].choose_steal_target(&self.state, player_id, &targets),
+                    (0, "timeout fallback".into()),
+                )
+                .await;
             Some(targets[t_idx.min(targets.len() - 1)])
         };
 
@@ -581,24 +599,30 @@ impl GameOrchestrator {
         &mut self,
         player_id: PlayerId,
     ) -> Result<(), OrchestratorError> {
-        let (r1, _) = self.with_timeout(
-            player_id, "year_of_plenty: choose_resource_1",
-            self.players[player_id].choose_resource(
-                &self.state,
+        let (r1, _) = self
+            .with_timeout(
                 player_id,
-                "YEAR OF PLENTY: Choose your first free resource.",
-            ),
-            (Resource::Wood, "timeout fallback".into()),
-        ).await;
-        let (r2, reasoning) = self.with_timeout(
-            player_id, "year_of_plenty: choose_resource_2",
-            self.players[player_id].choose_resource(
-                &self.state,
+                "year_of_plenty: choose_resource_1",
+                self.players[player_id].choose_resource(
+                    &self.state,
+                    player_id,
+                    "YEAR OF PLENTY: Choose your first free resource.",
+                ),
+                (Resource::Wood, "timeout fallback".into()),
+            )
+            .await;
+        let (r2, reasoning) = self
+            .with_timeout(
                 player_id,
-                "YEAR OF PLENTY: Choose your second free resource.",
-            ),
-            (Resource::Wood, "timeout fallback".into()),
-        ).await;
+                "year_of_plenty: choose_resource_2",
+                self.players[player_id].choose_resource(
+                    &self.state,
+                    player_id,
+                    "YEAR OF PLENTY: Choose your second free resource.",
+                ),
+                (Resource::Wood, "timeout fallback".into()),
+            )
+            .await;
 
         let action =
             Action::PlayDevCard(DevCard::YearOfPlenty, DevCardAction::YearOfPlenty(r1, r2));
@@ -607,21 +631,21 @@ impl GameOrchestrator {
     }
 
     /// Handle playing Road Building (place 2 free roads).
-    async fn handle_road_building(
-        &mut self,
-        player_id: PlayerId,
-    ) -> Result<(), OrchestratorError> {
+    async fn handle_road_building(&mut self, player_id: PlayerId) -> Result<(), OrchestratorError> {
         // First road.
         let legal_edges_1 = rules::legal_road_edges(&self.state, player_id);
         if legal_edges_1.is_empty() {
             return Ok(());
         }
 
-        let (e1_idx, _) = self.with_timeout(
-            player_id, "road_building: choose_road_1",
-            self.players[player_id].choose_road(&self.state, player_id, &legal_edges_1),
-            (0, "timeout fallback".into()),
-        ).await;
+        let (e1_idx, _) = self
+            .with_timeout(
+                player_id,
+                "road_building: choose_road_1",
+                self.players[player_id].choose_road(&self.state, player_id, &legal_edges_1),
+                (0, "timeout fallback".into()),
+            )
+            .await;
         let edge1 = legal_edges_1[e1_idx.min(legal_edges_1.len() - 1)];
 
         // Second road — need to temporarily place the first to get updated legal edges.
@@ -630,11 +654,14 @@ impl GameOrchestrator {
         let edge2 = if legal_edges_2.is_empty() {
             edge1 // fallback — will fail validation but handled gracefully
         } else {
-            let (e2_idx, _) = self.with_timeout(
-                player_id, "road_building: choose_road_2",
-                self.players[player_id].choose_road(&self.state, player_id, &legal_edges_2),
-                (0, "timeout fallback".into()),
-            ).await;
+            let (e2_idx, _) = self
+                .with_timeout(
+                    player_id,
+                    "road_building: choose_road_2",
+                    self.players[player_id].choose_road(&self.state, player_id, &legal_edges_2),
+                    (0, "timeout fallback".into()),
+                )
+                .await;
             legal_edges_2[e2_idx.min(legal_edges_2.len() - 1)]
         };
 
@@ -649,11 +676,14 @@ impl GameOrchestrator {
     /// Handle a player proposing a trade: collect offer, broadcast to others, execute if accepted.
     async fn handle_trade(&mut self, player_id: PlayerId) -> Result<(), OrchestratorError> {
         // Step 1: Get the trade offer from the proposing player.
-        let offer_result = self.with_timeout(
-            player_id, "propose_trade",
-            self.players[player_id].propose_trade(&self.state, player_id),
-            None,
-        ).await;
+        let offer_result = self
+            .with_timeout(
+                player_id,
+                "propose_trade",
+                self.players[player_id].propose_trade(&self.state, player_id),
+                None,
+            )
+            .await;
 
         let (offer, reasoning) = match offer_result {
             Some((offer, reasoning)) => (offer, reasoning),
@@ -680,7 +710,10 @@ impl GameOrchestrator {
             .collect::<Vec<_>>()
             .join(", ");
 
-        self.send_reasoning(player_id, &format!("Trade: {} for {} — {}", offering, requesting, reasoning));
+        self.send_reasoning(
+            player_id,
+            &format!("Trade: {} for {} — {}", offering, requesting, reasoning),
+        );
 
         self.record_event(GameEvent::TradeProposed {
             from: player_id,
@@ -705,11 +738,19 @@ impl GameOrchestrator {
                 continue;
             }
 
-            let (response, resp_reasoning) = self.with_timeout(
-                other_id, "respond_to_trade",
-                self.players[other_id].respond_to_trade(&self.state, other_id, &offer),
-                (TradeResponse::Reject { reason: "timeout".into() }, "timeout fallback".into()),
-            ).await;
+            let (response, resp_reasoning) = self
+                .with_timeout(
+                    other_id,
+                    "respond_to_trade",
+                    self.players[other_id].respond_to_trade(&self.state, other_id, &offer),
+                    (
+                        TradeResponse::Reject {
+                            reason: "timeout".into(),
+                        },
+                        "timeout fallback".into(),
+                    ),
+                )
+                .await;
 
             match response {
                 TradeResponse::Accept => {
@@ -728,7 +769,9 @@ impl GameOrchestrator {
                 }
                 TradeResponse::Counter(counter_offer) => {
                     // Validate the counter-offer.
-                    if let Err(e) = trading::negotiation::validate_trade(&self.state, &counter_offer) {
+                    if let Err(e) =
+                        trading::negotiation::validate_trade(&self.state, &counter_offer)
+                    {
                         self.record_event(GameEvent::TradeRejected {
                             by: other_id,
                             reasoning: format!("invalid counter: {}", e),
@@ -736,16 +779,25 @@ impl GameOrchestrator {
                         continue;
                     }
 
-                    let counter_offering: String = counter_offer.offering.iter()
+                    let counter_offering: String = counter_offer
+                        .offering
+                        .iter()
                         .map(|(r, n)| format!("{} {}", n, r))
-                        .collect::<Vec<_>>().join(", ");
-                    let counter_requesting: String = counter_offer.requesting.iter()
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let counter_requesting: String = counter_offer
+                        .requesting
+                        .iter()
                         .map(|(r, n)| format!("{} {}", n, r))
-                        .collect::<Vec<_>>().join(", ");
-                    self.send_reasoning(other_id, &format!(
-                        "Counter: {} for {} — {}",
-                        counter_offering, counter_requesting, resp_reasoning
-                    ));
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    self.send_reasoning(
+                        other_id,
+                        &format!(
+                            "Counter: {} for {} — {}",
+                            counter_offering, counter_requesting, resp_reasoning
+                        ),
+                    );
 
                     self.record_event(GameEvent::TradeCountered {
                         by: other_id,
@@ -754,11 +806,23 @@ impl GameOrchestrator {
                     });
 
                     // Ask the original proposer if they accept the counter.
-                    let (counter_response, counter_reasoning) = self.with_timeout(
-                        player_id, "respond_to_counter",
-                        self.players[player_id].respond_to_trade(&self.state, player_id, &counter_offer),
-                        (TradeResponse::Reject { reason: "timeout".into() }, "timeout fallback".into()),
-                    ).await;
+                    let (counter_response, counter_reasoning) = self
+                        .with_timeout(
+                            player_id,
+                            "respond_to_counter",
+                            self.players[player_id].respond_to_trade(
+                                &self.state,
+                                player_id,
+                                &counter_offer,
+                            ),
+                            (
+                                TradeResponse::Reject {
+                                    reason: "timeout".into(),
+                                },
+                                "timeout fallback".into(),
+                            ),
+                        )
+                        .await;
 
                     match counter_response {
                         TradeResponse::Accept => {
@@ -768,7 +832,9 @@ impl GameOrchestrator {
                             });
                             // Execute the counter-offer (from other_id's perspective).
                             match trading::negotiation::execute_in_state(
-                                &mut self.state, &counter_offer, player_id
+                                &mut self.state,
+                                &counter_offer,
+                                player_id,
                             ) {
                                 Ok(()) => {}
                                 Err(_) => {
@@ -930,7 +996,9 @@ mod tests {
         };
         let choices = orch.build_choices();
         assert!(
-            choices.iter().any(|c| matches!(c, PlayerChoice::GameAction(Action::EndTurn))),
+            choices
+                .iter()
+                .any(|c| matches!(c, PlayerChoice::GameAction(Action::EndTurn))),
             "Should always include EndTurn"
         );
     }
@@ -945,7 +1013,9 @@ mod tests {
         orch.state.players[0].add_resource(Resource::Wood, 1);
         let choices = orch.build_choices();
         assert!(
-            choices.iter().any(|c| matches!(c, PlayerChoice::ProposeTrade)),
+            choices
+                .iter()
+                .any(|c| matches!(c, PlayerChoice::ProposeTrade)),
             "Should include ProposeTrade when player has resources"
         );
     }
@@ -959,7 +1029,9 @@ mod tests {
         };
         let choices = orch.build_choices();
         assert!(
-            !choices.iter().any(|c| matches!(c, PlayerChoice::ProposeTrade)),
+            !choices
+                .iter()
+                .any(|c| matches!(c, PlayerChoice::ProposeTrade)),
             "Should not include ProposeTrade when player has no resources"
         );
     }
@@ -971,14 +1043,26 @@ mod tests {
             current_player: 0,
             has_rolled: true,
         };
-        orch.state.players[0].dev_cards.push(crate::game::actions::DevCard::Knight);
-        orch.state.players[0].dev_cards.push(crate::game::actions::DevCard::Monopoly);
-        orch.state.players[0].dev_cards.push(crate::game::actions::DevCard::YearOfPlenty);
+        orch.state.players[0]
+            .dev_cards
+            .push(crate::game::actions::DevCard::Knight);
+        orch.state.players[0]
+            .dev_cards
+            .push(crate::game::actions::DevCard::Monopoly);
+        orch.state.players[0]
+            .dev_cards
+            .push(crate::game::actions::DevCard::YearOfPlenty);
 
         let choices = orch.build_choices();
-        assert!(choices.iter().any(|c| matches!(c, PlayerChoice::PlayKnight)));
-        assert!(choices.iter().any(|c| matches!(c, PlayerChoice::PlayMonopoly)));
-        assert!(choices.iter().any(|c| matches!(c, PlayerChoice::PlayYearOfPlenty)));
+        assert!(choices
+            .iter()
+            .any(|c| matches!(c, PlayerChoice::PlayKnight)));
+        assert!(choices
+            .iter()
+            .any(|c| matches!(c, PlayerChoice::PlayMonopoly)));
+        assert!(choices
+            .iter()
+            .any(|c| matches!(c, PlayerChoice::PlayYearOfPlenty)));
     }
 
     #[test]
@@ -988,12 +1072,16 @@ mod tests {
             current_player: 0,
             has_rolled: true,
         };
-        orch.state.players[0].dev_cards.push(crate::game::actions::DevCard::RoadBuilding);
+        orch.state.players[0]
+            .dev_cards
+            .push(crate::game::actions::DevCard::RoadBuilding);
         orch.state.players[0].roads_remaining = 1; // Need 2
 
         let choices = orch.build_choices();
         assert!(
-            !choices.iter().any(|c| matches!(c, PlayerChoice::PlayRoadBuilding)),
+            !choices
+                .iter()
+                .any(|c| matches!(c, PlayerChoice::PlayRoadBuilding)),
             "Should not include RoadBuilding with < 2 roads remaining"
         );
     }
@@ -1005,12 +1093,16 @@ mod tests {
             current_player: 0,
             has_rolled: true,
         };
-        orch.state.players[0].dev_cards.push(crate::game::actions::DevCard::Knight);
+        orch.state.players[0]
+            .dev_cards
+            .push(crate::game::actions::DevCard::Knight);
         orch.state.players[0].has_played_dev_card_this_turn = true;
 
         let choices = orch.build_choices();
         assert!(
-            !choices.iter().any(|c| matches!(c, PlayerChoice::PlayKnight)),
+            !choices
+                .iter()
+                .any(|c| matches!(c, PlayerChoice::PlayKnight)),
             "Should not include dev card intents after already playing one"
         );
     }
@@ -1026,7 +1118,10 @@ mod tests {
 
         assert_eq!(orch.state.turn_number, 1);
         match orch.state.phase {
-            GamePhase::Playing { current_player, has_rolled } => {
+            GamePhase::Playing {
+                current_player,
+                has_rolled,
+            } => {
                 assert_eq!(current_player, 1);
                 assert!(!has_rolled);
             }
@@ -1053,7 +1148,10 @@ mod tests {
             crate::game::board::VertexDirection::North,
         );
         let event = action_to_event(&Action::BuildSettlement(v), 0, "test");
-        assert!(matches!(event, Some(GameEvent::SettlementBuilt { player: 0, .. })));
+        assert!(matches!(
+            event,
+            Some(GameEvent::SettlementBuilt { player: 0, .. })
+        ));
     }
 
     #[test]
@@ -1065,7 +1163,10 @@ mod tests {
     #[test]
     fn action_to_event_maps_bank_trade() {
         let event = action_to_event(
-            &Action::BankTrade { give: Resource::Wood, get: Resource::Ore },
+            &Action::BankTrade {
+                give: Resource::Wood,
+                get: Resource::Ore,
+            },
             0,
             "trade",
         );
@@ -1116,7 +1217,11 @@ mod tests {
         orch.run_setup().await.unwrap();
 
         // Each player should have 2 settlements and 2 roads after setup.
-        assert_eq!(orch.state.buildings.len(), 6, "3 players * 2 settlements = 6");
+        assert_eq!(
+            orch.state.buildings.len(),
+            6,
+            "3 players * 2 settlements = 6"
+        );
         assert_eq!(orch.state.roads.len(), 6, "3 players * 2 roads = 6");
     }
 
@@ -1141,7 +1246,9 @@ mod tests {
         // Should have received state updates.
         assert!(!events.is_empty(), "Should receive UI events");
         assert!(
-            events.iter().any(|e| matches!(e, UiEvent::StateUpdate { .. })),
+            events
+                .iter()
+                .any(|e| matches!(e, UiEvent::StateUpdate { .. })),
             "Should have state update events"
         );
     }

@@ -101,7 +101,10 @@ impl Player for HumanPlayer {
         player_id: PlayerId,
         legal_vertices: &[VertexCoord],
     ) -> (usize, String) {
-        println!("\n--- Place Settlement (Player {}: {}) ---", player_id, self.name);
+        println!(
+            "\n--- Place Settlement (Player {}: {}) ---",
+            player_id, self.name
+        );
         println!("Legal locations:");
         for (i, v) in legal_vertices.iter().enumerate() {
             let dir = match v.dir {
@@ -137,7 +140,10 @@ impl Player for HumanPlayer {
         player_id: PlayerId,
         legal_hexes: &[HexCoord],
     ) -> (usize, String) {
-        println!("\n--- Move Robber (Player {}: {}) ---", player_id, self.name);
+        println!(
+            "\n--- Move Robber (Player {}: {}) ---",
+            player_id, self.name
+        );
         println!("{}", prompt::format_hex_options(legal_hexes));
 
         let idx = Self::read_index(legal_hexes.len());
@@ -171,7 +177,10 @@ impl Player for HumanPlayer {
         count: usize,
     ) -> (Vec<Resource>, String) {
         let ps = &state.players[player_id];
-        println!("\n--- Discard {} Cards (Player {}: {}) ---", count, player_id, self.name);
+        println!(
+            "\n--- Discard {} Cards (Player {}: {}) ---",
+            count, player_id, self.name
+        );
         println!(
             "Your hand: Wood:{} Brick:{} Sheep:{} Wheat:{} Ore:{}",
             ps.resource_count(Resource::Wood),
@@ -206,7 +215,10 @@ impl Player for HumanPlayer {
         player_id: PlayerId,
     ) -> Option<(TradeOffer, String)> {
         let ps = &state.players[player_id];
-        println!("\n--- Propose Trade (Player {}: {}) ---", player_id, self.name);
+        println!(
+            "\n--- Propose Trade (Player {}: {}) ---",
+            player_id, self.name
+        );
         println!(
             "Your hand: Wood:{} Brick:{} Sheep:{} Wheat:{} Ore:{}",
             ps.resource_count(Resource::Wood),
@@ -264,7 +276,10 @@ impl Player for HumanPlayer {
             .collect::<Vec<_>>()
             .join(", ");
 
-        println!("\n--- Trade Offer (Player {}: {}) ---", player_id, self.name);
+        println!(
+            "\n--- Trade Offer (Player {}: {}) ---",
+            player_id, self.name
+        );
         println!("Player {} offers: {}", offer.from, offering);
         println!("Player {} wants: {}", offer.from, requesting);
         if !offer.message.is_empty() {

@@ -11,7 +11,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
 use crossterm::ExecutableCommand;
 use ratatui::prelude::*;
 use tokio::sync::mpsc;
@@ -19,20 +21,15 @@ use tokio::sync::mpsc;
 use crate::game::board::Board;
 use crate::game::orchestrator::GameOrchestrator;
 use crate::game::state::GameState;
-use crate::player::personality::Personality;
 use crate::player;
+use crate::player::personality::Personality;
 use crate::replay::event::GameEvent;
 use crate::replay::save::SaveGame;
 
 use screens::*;
 
 /// Player colors shared across all UI panels.
-pub const PLAYER_COLORS: [Color; 4] = [
-    Color::Red,
-    Color::Blue,
-    Color::Green,
-    Color::Magenta,
-];
+pub const PLAYER_COLORS: [Color; 4] = [Color::Red, Color::Blue, Color::Green, Color::Magenta];
 
 /// Events sent from the game orchestrator to the TUI.
 #[derive(Debug, Clone)]
@@ -51,10 +48,7 @@ pub enum UiEvent {
         reasoning: String,
     },
     /// The game has ended.
-    GameOver {
-        winner: usize,
-        message: String,
-    },
+    GameOver { winner: usize, message: String },
 }
 
 // ── Screen State Machine ───────────────────────────────────────────────
@@ -69,14 +63,79 @@ pub enum Screen {
     PostGame(PostGameState),
 }
 
-/// A pending human input prompt displayed as an overlay.
-pub struct PendingHumanPrompt {
-    pub title: String,
-    pub options: Vec<String>,
-    pub selected: usize,
+use crate::game::actions::TradeOffer;
+use crate::game::board::{EdgeCoord, HexCoord, Resource, VertexCoord};
+use crate::player::tui_human::{HumanResponse, PromptKind};
+
+// ── Input Mode State Machine ──────────────────────────────────────────
+
+/// What kind of board cursor is active.
+#[derive(Debug, Clone)]
+pub enum CursorKind {
+    Settlement,
+    Road,
+    Robber,
 }
 
-/// State for the active game screen (formerly the flat App fields).
+/// A cursor target with its screen position for navigation.
+#[derive(Debug, Clone)]
+pub struct CursorTarget {
+    pub screen_col: u16,
+    pub screen_row: u16,
+}
+
+/// Which side of the trade builder is active.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TradeSide {
+    Give,
+    Get,
+}
+
+/// The input mode determines what the TUI renders in the context bar
+/// and how keyboard input is handled.
+pub enum InputMode {
+    /// No human prompt active; spectating AI play or idle.
+    Spectating,
+    /// Choosing a game action from a horizontal bar.
+    ActionBar {
+        choices: Vec<String>,
+        selected: usize,
+    },
+    /// Navigating legal positions on the board with arrow keys.
+    BoardCursor {
+        kind: CursorKind,
+        legal_vertices: Vec<VertexCoord>,
+        legal_edges: Vec<EdgeCoord>,
+        legal_hexes: Vec<HexCoord>,
+        positions: Vec<CursorTarget>,
+        selected: usize,
+    },
+    /// Building a trade offer with resource keys.
+    TradeBuilder {
+        give: [u32; 5],
+        get: [u32; 5],
+        side: TradeSide,
+        available: [u32; 5],
+        player_id: usize,
+    },
+    /// Discarding cards with resource keys.
+    Discard {
+        selected: Vec<Resource>,
+        count: usize,
+        remaining: [u32; 5],
+    },
+    /// Picking a single resource with w/b/s/h/o keys.
+    ResourcePicker { context: String },
+    /// Choosing a steal target with number keys.
+    StealTarget {
+        targets: Vec<(usize, String)>,
+        selected: usize,
+    },
+    /// Accepting or rejecting a trade with y/n.
+    TradeResponse { offer: TradeOffer },
+}
+
+/// State for the active game screen.
 pub struct PlayingState {
     pub rx: mpsc::UnboundedReceiver<UiEvent>,
     pub state: Option<Arc<GameState>>,
@@ -89,27 +148,35 @@ pub struct PlayingState {
     pub chat_scroll: u16,
     pub speed_ms: u64,
     pub paused: bool,
-    /// Pending human decision prompt (shown as an overlay).
-    pub pending_prompt: Option<PendingHumanPrompt>,
+    /// Whether to show AI reasoning panel (Tab toggle).
+    pub show_ai_panel: bool,
+    /// Current input mode (replaces pending_prompt).
+    pub input_mode: InputMode,
     /// Channel to receive human prompts from the engine.
     pub human_prompt_rx: Option<mpsc::UnboundedReceiver<player::tui_human::HumanPrompt>>,
     /// Channel to send human responses back to the engine.
-    pub human_response_tx: Option<mpsc::UnboundedSender<usize>>,
+    pub human_response_tx: Option<mpsc::UnboundedSender<HumanResponse>>,
+    /// Cached hex grid for board rendering (computed once on first state).
+    pub hex_grid: Option<board_view::HexGrid>,
 }
 
 impl PlayingState {
-    fn new(rx: mpsc::UnboundedReceiver<UiEvent>, player_names: Vec<String>, has_human: bool) -> Self {
+    fn new(
+        rx: mpsc::UnboundedReceiver<UiEvent>,
+        player_names: Vec<String>,
+        has_human: bool,
+    ) -> Self {
         let start_msg = if has_human {
-            "Game started — your turn will show a prompt".into()
+            "Game started -- your turn will show a prompt".into()
         } else {
-            "Game started — spectator mode".into()
+            "Game started -- spectator mode".into()
         };
         Self {
             rx,
             state: None,
             messages: vec![
                 start_msg,
-                "q:quit  Space:pause  +/-:speed  j/k:scroll".into(),
+                "q:quit  Space:pause  +/-:speed  j/k:scroll  Tab:AI panel".into(),
             ],
             chat_messages: Vec::new(),
             player_names,
@@ -119,45 +186,216 @@ impl PlayingState {
             chat_scroll: 0,
             speed_ms: 100,
             paused: false,
-            pending_prompt: None,
+            show_ai_panel: false,
+            input_mode: InputMode::Spectating,
             human_prompt_rx: None,
             human_response_tx: None,
+            hex_grid: None,
+        }
+    }
+
+    /// Send a response back to the game engine.
+    fn send_response(&self, response: HumanResponse) {
+        if let Some(ref tx) = self.human_response_tx {
+            let _ = tx.send(response);
+        }
+    }
+
+    /// Push a message to the game log, capping at MAX_MESSAGES to prevent
+    /// unbounded growth. Auto-scrolls to the latest message.
+    fn push_message(&mut self, msg: String) {
+        const MAX_MESSAGES: usize = 2000;
+        self.messages.push(msg);
+        if self.messages.len() > MAX_MESSAGES {
+            self.messages.drain(..self.messages.len() - MAX_MESSAGES);
+        }
+        self.log_scroll = self.messages.len().saturating_sub(1) as u16;
+    }
+
+    /// Convert an incoming HumanPrompt into the appropriate InputMode.
+    fn apply_prompt(&mut self, prompt: player::tui_human::HumanPrompt) {
+        self.input_mode = match prompt.kind {
+            PromptKind::ChooseAction { choices } => InputMode::ActionBar {
+                choices,
+                selected: 0,
+            },
+            PromptKind::PlaceSettlement { legal } => {
+                let positions = self.compute_vertex_cursor_positions(&legal);
+                InputMode::BoardCursor {
+                    kind: CursorKind::Settlement,
+                    legal_vertices: legal,
+                    legal_edges: Vec::new(),
+                    legal_hexes: Vec::new(),
+                    positions,
+                    selected: 0,
+                }
+            }
+            PromptKind::PlaceRoad { legal } => {
+                let positions = self.compute_edge_cursor_positions(&legal);
+                InputMode::BoardCursor {
+                    kind: CursorKind::Road,
+                    legal_vertices: Vec::new(),
+                    legal_edges: legal,
+                    legal_hexes: Vec::new(),
+                    positions,
+                    selected: 0,
+                }
+            }
+            PromptKind::PlaceRobber { legal } => {
+                let positions = self.compute_hex_cursor_positions(&legal);
+                InputMode::BoardCursor {
+                    kind: CursorKind::Robber,
+                    legal_vertices: Vec::new(),
+                    legal_edges: Vec::new(),
+                    legal_hexes: legal,
+                    positions,
+                    selected: 0,
+                }
+            }
+            PromptKind::ChooseStealTarget { targets } => InputMode::StealTarget {
+                targets,
+                selected: 0,
+            },
+            PromptKind::Discard { count, available } => InputMode::Discard {
+                selected: Vec::new(),
+                count,
+                remaining: available,
+            },
+            PromptKind::ChooseResource { context } => InputMode::ResourcePicker { context },
+            PromptKind::ProposeTrade { available } => InputMode::TradeBuilder {
+                give: [0; 5],
+                get: [0; 5],
+                side: TradeSide::Give,
+                available,
+                player_id: prompt.player_id,
+            },
+            PromptKind::RespondToTrade { offer } => InputMode::TradeResponse { offer },
+        };
+    }
+
+    /// Compute screen positions for vertex cursor targets.
+    fn compute_vertex_cursor_positions(&self, vertices: &[VertexCoord]) -> Vec<CursorTarget> {
+        if let Some(ref grid) = self.hex_grid {
+            vertices
+                .iter()
+                .map(|v| {
+                    let (col, row) = grid.vertex_screen_pos(v).unwrap_or((0, 0));
+                    CursorTarget {
+                        screen_col: col,
+                        screen_row: row,
+                    }
+                })
+                .collect()
+        } else {
+            vertices
+                .iter()
+                .enumerate()
+                .map(|(i, _)| CursorTarget {
+                    screen_col: i as u16 * 4,
+                    screen_row: 0,
+                })
+                .collect()
+        }
+    }
+
+    /// Compute screen positions for edge cursor targets.
+    fn compute_edge_cursor_positions(&self, edges: &[EdgeCoord]) -> Vec<CursorTarget> {
+        if let Some(ref grid) = self.hex_grid {
+            edges
+                .iter()
+                .map(|e| {
+                    let (col, row) = grid.edge_screen_pos(e).unwrap_or((0, 0));
+                    CursorTarget {
+                        screen_col: col,
+                        screen_row: row,
+                    }
+                })
+                .collect()
+        } else {
+            edges
+                .iter()
+                .enumerate()
+                .map(|(i, _)| CursorTarget {
+                    screen_col: i as u16 * 4,
+                    screen_row: 0,
+                })
+                .collect()
+        }
+    }
+
+    /// Compute screen positions for hex cursor targets.
+    fn compute_hex_cursor_positions(&self, hexes: &[HexCoord]) -> Vec<CursorTarget> {
+        if let Some(ref grid) = self.hex_grid {
+            hexes
+                .iter()
+                .map(|h| {
+                    let (col, row) = grid.hex_center_pos(h);
+                    CursorTarget {
+                        screen_col: col,
+                        screen_row: row,
+                    }
+                })
+                .collect()
+        } else {
+            hexes
+                .iter()
+                .enumerate()
+                .map(|(i, _)| CursorTarget {
+                    screen_col: i as u16 * 8,
+                    screen_row: 0,
+                })
+                .collect()
         }
     }
 
     /// Apply a UI event from the game engine.
     fn handle_game_event(&mut self, ui_event: UiEvent) {
         match ui_event {
-            UiEvent::StateUpdate { state, event: _, message } => {
+            UiEvent::StateUpdate {
+                state,
+                event: _,
+                message,
+            } => {
+                // Initialize hex grid on first state.
+                if self.hex_grid.is_none() {
+                    self.hex_grid = Some(board_view::HexGrid::new());
+                }
                 self.state = Some(state);
                 if !message.is_empty() {
-                    self.messages.push(message);
-                    let total = self.messages.len() as u16;
-                    self.log_scroll = total.saturating_sub(1);
+                    self.push_message(message);
                 }
             }
-            UiEvent::AiReasoning { player_id, player_name, reasoning } => {
+            UiEvent::AiReasoning {
+                player_id,
+                player_name,
+                reasoning,
+            } => {
                 self.chat_messages.push(chat_panel::ChatMessage {
                     player: player_name,
                     player_id,
                     text: reasoning,
                 });
-                let total = self.chat_messages.len() as u16;
-                self.chat_scroll = total.saturating_sub(1);
+                // Cap chat messages to prevent unbounded growth.
+                const MAX_CHAT: usize = 500;
+                if self.chat_messages.len() > MAX_CHAT {
+                    self.chat_messages
+                        .drain(..self.chat_messages.len() - MAX_CHAT);
+                }
+                self.chat_scroll = self.chat_messages.len().saturating_sub(1) as u16;
             }
             UiEvent::GameOver { winner, message } => {
-                let winner_name = self.player_names.get(winner)
+                let winner_name = self
+                    .player_names
+                    .get(winner)
                     .cloned()
                     .unwrap_or_else(|| "?".into());
-                self.messages.push(format!(
+                self.push_message(format!(
                     "GAME OVER: Player {} ({}) wins!",
                     winner, winner_name,
                 ));
-                self.messages.push(message.clone());
+                self.push_message(message.clone());
                 self.game_over = true;
                 self.game_over_winner = Some((winner, winner_name));
-                let total = self.messages.len() as u16;
-                self.log_scroll = total.saturating_sub(1);
             }
         }
     }
@@ -279,14 +517,10 @@ async fn run_event_loop(
             }
 
             // Check for incoming human prompts.
-            if ps.pending_prompt.is_none() {
+            if matches!(ps.input_mode, InputMode::Spectating) {
                 if let Some(ref mut prompt_rx) = ps.human_prompt_rx {
                     if let Ok(prompt) = prompt_rx.try_recv() {
-                        ps.pending_prompt = Some(PendingHumanPrompt {
-                            title: prompt.title,
-                            options: prompt.options,
-                            selected: 0,
-                        });
+                        ps.apply_prompt(prompt);
                     }
                 }
             }
@@ -338,15 +572,15 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 KeyCode::Enter => {
                     let selected_item = items[state.selected];
                     match selected_item {
-                        "New Game" => Action::Transition(
-                            Screen::NewGame(NewGameState::new(&app.personalities))
-                        ),
-                        "Continue Game" => Action::Transition(
-                            Screen::FilePicker(FilePickerState::new(FilePickerPurpose::Resume))
-                        ),
-                        "Replay Game" => Action::Transition(
-                            Screen::FilePicker(FilePickerState::new(FilePickerPurpose::Replay))
-                        ),
+                        "New Game" => Action::Transition(Screen::NewGame(NewGameState::new(
+                            &app.personalities,
+                        ))),
+                        "Continue Game" => Action::Transition(Screen::FilePicker(
+                            FilePickerState::new(FilePickerPurpose::Resume),
+                        )),
+                        "Replay Game" => Action::Transition(Screen::FilePicker(
+                            FilePickerState::new(FilePickerPurpose::Replay),
+                        )),
                         "Quit" => Action::Quit,
                         _ => Action::None,
                     }
@@ -397,7 +631,10 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 KeyCode::Enter => {
                     match state.focus {
                         NewGameFocus::StartButton => Action::StartGame,
-                        NewGameFocus::Player { col: NewGameCol::Name, .. } => {
+                        NewGameFocus::Player {
+                            col: NewGameCol::Name,
+                            ..
+                        } => {
                             state.editing = true;
                             Action::None
                         }
@@ -416,123 +653,498 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
             }
         }
 
-        Screen::FilePicker(state) => {
-            match key {
-                KeyCode::Esc => Action::Transition(Screen::MainMenu(MainMenuState::new())),
-                KeyCode::Up | KeyCode::Char('k') => {
-                    state.selected = state.selected.checked_sub(1).unwrap_or(
-                        state.files.len().saturating_sub(1)
-                    );
-                    Action::None
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    if !state.files.is_empty() {
-                        state.selected = (state.selected + 1) % state.files.len();
-                    }
-                    Action::None
-                }
-                KeyCode::Enter => {
-                    if !state.files.is_empty() {
-                        Action::LoadFile
-                    } else {
-                        Action::None
-                    }
-                }
-                _ => Action::None,
+        Screen::FilePicker(state) => match key {
+            KeyCode::Esc => Action::Transition(Screen::MainMenu(MainMenuState::new())),
+            KeyCode::Up | KeyCode::Char('k') => {
+                state.selected = state
+                    .selected
+                    .checked_sub(1)
+                    .unwrap_or(state.files.len().saturating_sub(1));
+                Action::None
             }
-        }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if !state.files.is_empty() {
+                    state.selected = (state.selected + 1) % state.files.len();
+                }
+                Action::None
+            }
+            KeyCode::Enter => {
+                if !state.files.is_empty() {
+                    Action::LoadFile
+                } else {
+                    Action::None
+                }
+            }
+            _ => Action::None,
+        },
 
         Screen::Playing(ps) => {
-            // If a human prompt is pending, intercept input for selection.
-            if let Some(ref mut prompt) = ps.pending_prompt {
-                match key {
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        prompt.selected = prompt.selected.saturating_sub(1);
-                    }
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        if prompt.selected + 1 < prompt.options.len() {
-                            prompt.selected += 1;
+            // Global keys (always active regardless of mode).
+            match key {
+                KeyCode::Char('q') => {
+                    if matches!(ps.input_mode, InputMode::Spectating) {
+                        if ps.game_over {
+                            let post = build_post_game(ps);
+                            return Action::Transition(Screen::PostGame(post));
+                        } else {
+                            return Action::Transition(Screen::MainMenu(MainMenuState::new()));
                         }
                     }
-                    KeyCode::Enter => {
-                        let selected = prompt.selected;
-                        if let Some(ref tx) = ps.human_response_tx {
-                            let _ = tx.send(selected);
-                        }
-                        ps.pending_prompt = None;
-                    }
-                    _ => {}
                 }
-                return Action::None;
+                // Tab toggles AI panel ONLY when not in TradeBuilder (where Tab
+                // switches give/get sides).
+                KeyCode::Tab if !matches!(ps.input_mode, InputMode::TradeBuilder { .. }) => {
+                    ps.show_ai_panel = !ps.show_ai_panel;
+                    return Action::None;
+                }
+                _ => {}
             }
 
-            match key {
-                KeyCode::Char('q') | KeyCode::Esc => {
-                    if ps.game_over {
-                        // Build post-game from final state.
-                        let post = build_post_game(ps);
-                        Action::Transition(Screen::PostGame(post))
-                    } else {
-                        // Quit back to menu mid-game.
-                        Action::Transition(Screen::MainMenu(MainMenuState::new()))
+            // Mode-specific input handling.
+            match &mut ps.input_mode {
+                InputMode::Spectating => {
+                    match key {
+                        KeyCode::Esc => {
+                            if ps.game_over {
+                                let post = build_post_game(ps);
+                                return Action::Transition(Screen::PostGame(post));
+                            } else {
+                                return Action::Transition(Screen::MainMenu(MainMenuState::new()));
+                            }
+                        }
+                        KeyCode::Enter if ps.game_over => {
+                            let post = build_post_game(ps);
+                            return Action::Transition(Screen::PostGame(post));
+                        }
+                        KeyCode::Char(' ') => ps.paused = !ps.paused,
+                        KeyCode::Char('+') | KeyCode::Char('=') => {
+                            ps.speed_ms = ps.speed_ms.saturating_sub(25).max(25);
+                        }
+                        KeyCode::Char('-') => {
+                            ps.speed_ms = (ps.speed_ms + 25).min(500);
+                        }
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            ps.log_scroll = ps.log_scroll.saturating_sub(1);
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            ps.log_scroll = ps.log_scroll.saturating_add(1);
+                        }
+                        _ => {}
                     }
-                }
-                KeyCode::Enter if ps.game_over => {
-                    let post = build_post_game(ps);
-                    Action::Transition(Screen::PostGame(post))
-                }
-                KeyCode::Char(' ') => {
-                    ps.paused = !ps.paused;
                     Action::None
                 }
-                KeyCode::Char('+') | KeyCode::Char('=') => {
-                    ps.speed_ms = ps.speed_ms.saturating_sub(25).max(25);
+
+                InputMode::ActionBar { choices, selected } => {
+                    match key {
+                        KeyCode::Left => {
+                            *selected = selected.saturating_sub(1);
+                        }
+                        KeyCode::Right => {
+                            if *selected + 1 < choices.len() {
+                                *selected += 1;
+                            }
+                        }
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            *selected = selected.saturating_sub(1);
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            if *selected + 1 < choices.len() {
+                                *selected += 1;
+                            }
+                        }
+                        KeyCode::Enter => {
+                            let idx = *selected;
+                            ps.send_response(HumanResponse::Index(idx));
+                            ps.input_mode = InputMode::Spectating;
+                        }
+                        // Keyboard shortcuts for actions
+                        KeyCode::Char('e') => {
+                            // Find "End Turn" action
+                            if let Some(idx) = choices.iter().position(|c| c.contains("End Turn")) {
+                                ps.send_response(HumanResponse::Index(idx));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        KeyCode::Char('s') => {
+                            if let Some(idx) =
+                                choices.iter().position(|c| c.contains("Build Settlement"))
+                            {
+                                ps.send_response(HumanResponse::Index(idx));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        KeyCode::Char('r') => {
+                            if let Some(idx) = choices.iter().position(|c| c.contains("Build Road"))
+                            {
+                                ps.send_response(HumanResponse::Index(idx));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        KeyCode::Char('c') => {
+                            if let Some(idx) = choices.iter().position(|c| c.contains("Build City"))
+                            {
+                                ps.send_response(HumanResponse::Index(idx));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        KeyCode::Char('d') => {
+                            if let Some(idx) = choices
+                                .iter()
+                                .position(|c| c.contains("Buy Development Card"))
+                            {
+                                ps.send_response(HumanResponse::Index(idx));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        KeyCode::Char('t') => {
+                            if let Some(idx) =
+                                choices.iter().position(|c| c.contains("Propose Trade"))
+                            {
+                                ps.send_response(HumanResponse::Index(idx));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        KeyCode::Char('p') => {
+                            // Play dev card (any variant)
+                            if let Some(idx) = choices.iter().position(|c| c.starts_with("Play ")) {
+                                ps.send_response(HumanResponse::Index(idx));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        KeyCode::Esc => {
+                            // Select "End Turn" on Esc if available
+                            if let Some(idx) = choices.iter().position(|c| c.contains("End Turn")) {
+                                ps.send_response(HumanResponse::Index(idx));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        _ => {}
+                    }
                     Action::None
                 }
-                KeyCode::Char('-') => {
-                    ps.speed_ms = (ps.speed_ms + 25).min(500);
+
+                InputMode::BoardCursor {
+                    positions,
+                    selected,
+                    ..
+                } => {
+                    let len = positions.len();
+                    match key {
+                        KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
+                            if len > 0 {
+                                let cur = &positions[*selected];
+                                let cur_col = cur.screen_col as i32;
+                                let cur_row = cur.screen_row as i32;
+                                if let Some(next) = find_nearest_in_direction(
+                                    cur_col, cur_row, key, positions, *selected,
+                                ) {
+                                    *selected = next;
+                                }
+                            }
+                        }
+                        KeyCode::Char('n') => {
+                            if len > 0 {
+                                *selected = (*selected + 1) % len;
+                            }
+                        }
+                        KeyCode::Char('p') => {
+                            if len > 0 {
+                                *selected = selected.checked_sub(1).unwrap_or(len - 1);
+                            }
+                        }
+                        KeyCode::Enter | KeyCode::Esc => {
+                            if len > 0 {
+                                let idx = *selected;
+                                ps.send_response(HumanResponse::Index(idx));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        _ => {}
+                    }
                     Action::None
                 }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    ps.log_scroll = ps.log_scroll.saturating_sub(1);
+
+                InputMode::TradeBuilder {
+                    give,
+                    get,
+                    side,
+                    available,
+                    player_id,
+                } => {
+                    let res_key = match key {
+                        KeyCode::Char('w') => Some(0usize),
+                        KeyCode::Char('b') => Some(1),
+                        KeyCode::Char('s') => Some(2),
+                        KeyCode::Char('h') => Some(3),
+                        KeyCode::Char('o') => Some(4),
+                        _ => None,
+                    };
+                    if let Some(idx) = res_key {
+                        match side {
+                            TradeSide::Give => {
+                                if give[idx] < available[idx] {
+                                    give[idx] += 1;
+                                }
+                            }
+                            TradeSide::Get => {
+                                get[idx] += 1;
+                            }
+                        }
+                    }
+                    match key {
+                        KeyCode::Tab => {
+                            *side = match side {
+                                TradeSide::Give => TradeSide::Get,
+                                TradeSide::Get => TradeSide::Give,
+                            };
+                        }
+                        KeyCode::Backspace => {
+                            let arr = match side {
+                                TradeSide::Give => give,
+                                TradeSide::Get => get,
+                            };
+                            // Remove last-added resource (highest index with count > 0)
+                            for i in (0..5).rev() {
+                                if arr[i] > 0 {
+                                    arr[i] -= 1;
+                                    break;
+                                }
+                            }
+                        }
+                        KeyCode::Enter => {
+                            let has_give = give.iter().any(|&g| g > 0);
+                            let has_get = get.iter().any(|&g| g > 0);
+                            if has_give && has_get {
+                                let resources = [
+                                    Resource::Wood,
+                                    Resource::Brick,
+                                    Resource::Sheep,
+                                    Resource::Wheat,
+                                    Resource::Ore,
+                                ];
+                                let offering: Vec<(Resource, u32)> = give
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, &c)| c > 0)
+                                    .map(|(i, &c)| (resources[i], c))
+                                    .collect();
+                                let requesting: Vec<(Resource, u32)> = get
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, &c)| c > 0)
+                                    .map(|(i, &c)| (resources[i], c))
+                                    .collect();
+                                let offer = TradeOffer {
+                                    from: *player_id,
+                                    offering,
+                                    requesting,
+                                    message: String::new(),
+                                };
+                                ps.send_response(HumanResponse::Trade(Some(offer)));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        KeyCode::Esc => {
+                            ps.send_response(HumanResponse::Trade(None));
+                            ps.input_mode = InputMode::Spectating;
+                        }
+                        _ => {}
+                    }
                     Action::None
                 }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    ps.log_scroll = ps.log_scroll.saturating_add(1);
+
+                InputMode::Discard {
+                    selected: sel_resources,
+                    count,
+                    remaining,
+                    ..
+                } => {
+                    let res_key = match key {
+                        KeyCode::Char('w') => Some(0usize),
+                        KeyCode::Char('b') => Some(1),
+                        KeyCode::Char('s') => Some(2),
+                        KeyCode::Char('h') => Some(3),
+                        KeyCode::Char('o') => Some(4),
+                        _ => None,
+                    };
+                    let resources = [
+                        Resource::Wood,
+                        Resource::Brick,
+                        Resource::Sheep,
+                        Resource::Wheat,
+                        Resource::Ore,
+                    ];
+                    if let Some(idx) = res_key {
+                        if sel_resources.len() < *count && remaining[idx] > 0 {
+                            remaining[idx] -= 1;
+                            sel_resources.push(resources[idx]);
+                        }
+                    }
+                    match key {
+                        KeyCode::Backspace => {
+                            if let Some(last) = sel_resources.pop() {
+                                let idx = resources.iter().position(|&r| r == last).unwrap_or(0);
+                                remaining[idx] += 1;
+                            }
+                        }
+                        KeyCode::Enter => {
+                            if sel_resources.len() == *count {
+                                let result = sel_resources.clone();
+                                ps.send_response(HumanResponse::Resources(result));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        KeyCode::Esc => {
+                            // Auto-complete: fill remaining discards with first available resources.
+                            while sel_resources.len() < *count {
+                                let mut filled = false;
+                                for i in 0..5 {
+                                    if remaining[i] > 0 {
+                                        remaining[i] -= 1;
+                                        sel_resources.push(resources[i]);
+                                        filled = true;
+                                        break;
+                                    }
+                                }
+                                if !filled {
+                                    break;
+                                }
+                            }
+                            let result = sel_resources.clone();
+                            ps.send_response(HumanResponse::Resources(result));
+                            ps.input_mode = InputMode::Spectating;
+                        }
+                        _ => {}
+                    }
                     Action::None
                 }
-                _ => Action::None,
+
+                InputMode::ResourcePicker { .. } => {
+                    let idx = match key {
+                        KeyCode::Char('w') => Some(0usize),
+                        KeyCode::Char('b') => Some(1),
+                        KeyCode::Char('s') => Some(2),
+                        KeyCode::Char('h') => Some(3),
+                        KeyCode::Char('o') => Some(4),
+                        KeyCode::Esc => Some(0), // Default to Wood on Esc
+                        _ => None,
+                    };
+                    if let Some(i) = idx {
+                        ps.send_response(HumanResponse::Index(i));
+                        ps.input_mode = InputMode::Spectating;
+                    }
+                    Action::None
+                }
+
+                InputMode::StealTarget { targets, selected } => {
+                    match key {
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            *selected = selected.saturating_sub(1);
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            if *selected + 1 < targets.len() {
+                                *selected += 1;
+                            }
+                        }
+                        KeyCode::Char(c) if c.is_ascii_digit() => {
+                            // Match player by 1-indexed number: key '1' = player 0, etc.
+                            let num = c.to_digit(10).unwrap_or(0) as usize;
+                            let player_id = num.saturating_sub(1);
+                            if let Some(idx) = targets.iter().position(|(id, _)| *id == player_id) {
+                                ps.send_response(HumanResponse::Index(idx));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        KeyCode::Enter | KeyCode::Esc => {
+                            if !targets.is_empty() {
+                                let idx = *selected;
+                                ps.send_response(HumanResponse::Index(idx));
+                                ps.input_mode = InputMode::Spectating;
+                            }
+                        }
+                        _ => {}
+                    }
+                    Action::None
+                }
+
+                InputMode::TradeResponse { .. } => {
+                    match key {
+                        KeyCode::Char('y') | KeyCode::Enter => {
+                            ps.send_response(HumanResponse::TradeAnswer(true));
+                            ps.input_mode = InputMode::Spectating;
+                        }
+                        KeyCode::Char('n') | KeyCode::Esc => {
+                            ps.send_response(HumanResponse::TradeAnswer(false));
+                            ps.input_mode = InputMode::Spectating;
+                        }
+                        _ => {}
+                    }
+                    Action::None
+                }
             }
         }
 
-        Screen::PostGame(state) => {
-            match key {
-                KeyCode::Up | KeyCode::Char('k') => {
-                    state.selected = state.selected.checked_sub(1)
-                        .unwrap_or(POST_GAME_ITEMS.len() - 1);
-                    Action::None
+        Screen::PostGame(state) => match key {
+            KeyCode::Up | KeyCode::Char('k') => {
+                state.selected = state
+                    .selected
+                    .checked_sub(1)
+                    .unwrap_or(POST_GAME_ITEMS.len() - 1);
+                Action::None
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                state.selected = (state.selected + 1) % POST_GAME_ITEMS.len();
+                Action::None
+            }
+            KeyCode::Enter => match POST_GAME_ITEMS[state.selected] {
+                "Play Again" => {
+                    Action::Transition(Screen::NewGame(NewGameState::new(&app.personalities)))
                 }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    state.selected = (state.selected + 1) % POST_GAME_ITEMS.len();
-                    Action::None
-                }
-                KeyCode::Enter => {
-                    match POST_GAME_ITEMS[state.selected] {
-                        "Play Again" => Action::Transition(
-                            Screen::NewGame(NewGameState::new(&app.personalities))
-                        ),
-                        "Main Menu" => Action::Transition(
-                            Screen::MainMenu(MainMenuState::new())
-                        ),
-                        "Quit" => Action::Quit,
-                        _ => Action::None,
-                    }
-                }
-                KeyCode::Char('q') | KeyCode::Esc => Action::Quit,
+                "Main Menu" => Action::Transition(Screen::MainMenu(MainMenuState::new())),
+                "Quit" => Action::Quit,
                 _ => Action::None,
+            },
+            KeyCode::Char('q') | KeyCode::Esc => Action::Quit,
+            _ => Action::None,
+        },
+    }
+}
+
+// ── Board Cursor Navigation ───────────────────────────────────────────
+
+/// Find the nearest cursor position in the pressed arrow direction.
+fn find_nearest_in_direction(
+    cur_col: i32,
+    cur_row: i32,
+    key: KeyCode,
+    positions: &[CursorTarget],
+    current: usize,
+) -> Option<usize> {
+    let mut best: Option<(usize, i64)> = None;
+    for (i, pos) in positions.iter().enumerate() {
+        if i == current {
+            continue;
+        }
+        let dx = pos.screen_col as i32 - cur_col;
+        let dy = pos.screen_row as i32 - cur_row;
+
+        // Check if position is in the direction of the pressed key (90-degree cone).
+        let in_direction = match key {
+            KeyCode::Up => dy < 0 && dy.abs() >= dx.abs(),
+            KeyCode::Down => dy > 0 && dy.abs() >= dx.abs(),
+            KeyCode::Left => dx < 0 && dx.abs() >= dy.abs(),
+            KeyCode::Right => dx > 0 && dx.abs() >= dy.abs(),
+            _ => false,
+        };
+
+        if in_direction {
+            let dist = (dx as i64) * (dx as i64) + (dy as i64) * (dy as i64);
+            if best.is_none() || dist < best.unwrap().1 {
+                best = Some((i, dist));
             }
         }
     }
+    best.map(|(i, _)| i)
 }
 
 // ── New Game Input Helpers ─────────────────────────────────────────────
@@ -549,18 +1161,28 @@ fn handle_new_game_editing(state: &mut NewGameState, key: KeyCode) -> Action {
         }
         KeyCode::Backspace => {
             match state.focus {
-                NewGameFocus::Player { row, col: NewGameCol::Name } => {
+                NewGameFocus::Player {
+                    row,
+                    col: NewGameCol::Name,
+                } => {
                     state.players[row].name.pop();
                 }
-                NewGameFocus::Setting(0) => { state.seed_input.pop(); }
-                NewGameFocus::Setting(1) => { state.max_turns_input.pop(); }
+                NewGameFocus::Setting(0) => {
+                    state.seed_input.pop();
+                }
+                NewGameFocus::Setting(1) => {
+                    state.max_turns_input.pop();
+                }
                 _ => {}
             }
             Action::None
         }
         KeyCode::Char(c) => {
             match state.focus {
-                NewGameFocus::Player { row, col: NewGameCol::Name } => {
+                NewGameFocus::Player {
+                    row,
+                    col: NewGameCol::Name,
+                } => {
                     if state.players[row].name.len() < 12 {
                         state.players[row].name.push(c);
                     }
@@ -592,12 +1214,10 @@ fn move_new_game_focus_up(state: &mut NewGameState) {
                 NewGameFocus::Player { row: 0, col }
             }
         }
-        NewGameFocus::Setting(0) => {
-            NewGameFocus::Player {
-                row: state.num_players() - 1,
-                col: NewGameCol::Kind,
-            }
-        }
+        NewGameFocus::Setting(0) => NewGameFocus::Player {
+            row: state.num_players() - 1,
+            col: NewGameCol::Kind,
+        },
         NewGameFocus::Setting(1) => NewGameFocus::Setting(0),
         NewGameFocus::StartButton => NewGameFocus::Setting(1),
         _ => state.focus,
@@ -622,13 +1242,19 @@ fn move_new_game_focus_down(state: &mut NewGameState) {
 
 fn move_new_game_focus_next_col(state: &mut NewGameState) {
     if let NewGameFocus::Player { row, col } = state.focus {
-        state.focus = NewGameFocus::Player { row, col: col.next() };
+        state.focus = NewGameFocus::Player {
+            row,
+            col: col.next(),
+        };
     }
 }
 
 fn move_new_game_focus_prev_col(state: &mut NewGameState) {
     if let NewGameFocus::Player { row, col } = state.focus {
-        state.focus = NewGameFocus::Player { row, col: col.prev() };
+        state.focus = NewGameFocus::Player {
+            row,
+            col: col.prev(),
+        };
     }
 }
 
@@ -638,7 +1264,11 @@ fn cycle_new_game_value(state: &mut NewGameState, forward: bool) {
             let player = &mut state.players[row];
             match col {
                 NewGameCol::Kind => {
-                    player.kind = if forward { player.kind.next() } else { player.kind.prev() };
+                    player.kind = if forward {
+                        player.kind.next()
+                    } else {
+                        player.kind.prev()
+                    };
                 }
                 NewGameCol::Model => {
                     if player.kind == PlayerKind::Llm {
@@ -672,8 +1302,8 @@ fn cycle_new_game_value(state: &mut NewGameState, forward: bool) {
 // ── Game Launch ────────────────────────────────────────────────────────
 
 fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> Screen {
-    use std::sync::Arc;
     use player::tui_human::{HumanInputChannel, TuiHumanPlayer};
+    use std::sync::Arc;
     use tokio::sync::Mutex;
 
     // Build board.
@@ -699,9 +1329,13 @@ fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> S
 
     // Create human input channels if any human players exist.
     let has_human = ng.players.iter().any(|p| p.kind == PlayerKind::Human);
-    let human_channels = if has_human {
+    let human_channels: Option<(
+        Arc<HumanInputChannel>,
+        mpsc::UnboundedReceiver<player::tui_human::HumanPrompt>,
+        mpsc::UnboundedSender<HumanResponse>,
+    )> = if has_human {
         let (prompt_tx, prompt_rx) = mpsc::unbounded_channel();
-        let (response_tx, response_rx) = mpsc::unbounded_channel();
+        let (response_tx, response_rx) = mpsc::unbounded_channel::<HumanResponse>();
         let channel = Arc::new(HumanInputChannel {
             prompt_tx,
             response_rx: Mutex::new(response_rx),
@@ -711,14 +1345,15 @@ fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> S
         None
     };
 
-    let players: Vec<Box<dyn player::Player>> = ng.players.iter().map(|pc| {
-        match pc.kind {
-            PlayerKind::Random => {
-                Box::new(player::random::RandomPlayer::new(pc.name.clone()))
-                    as Box<dyn player::Player>
-            }
+    let players: Vec<Box<dyn player::Player>> = ng
+        .players
+        .iter()
+        .map(|pc| match pc.kind {
+            PlayerKind::Random => Box::new(player::random::RandomPlayer::new(pc.name.clone()))
+                as Box<dyn player::Player>,
             PlayerKind::Llm => {
-                let model = AVAILABLE_MODELS.get(pc.model_index)
+                let model = AVAILABLE_MODELS
+                    .get(pc.model_index)
                     .copied()
                     .unwrap_or("claude-sonnet-4-6")
                     .to_string();
@@ -726,20 +1361,23 @@ fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> S
                     built_in_personalities[pc.personality_index].clone()
                 } else {
                     let disc_idx = pc.personality_index - built_in_personalities.len();
-                    discovered_personalities.get(disc_idx)
+                    discovered_personalities
+                        .get(disc_idx)
                         .cloned()
                         .unwrap_or_default()
                 };
-                Box::new(player::llm::LlmPlayer::new(pc.name.clone(), model, personality))
-                    as Box<dyn player::Player>
+                Box::new(player::llm::LlmPlayer::new(
+                    pc.name.clone(),
+                    model,
+                    personality,
+                )) as Box<dyn player::Player>
             }
             PlayerKind::Human => {
                 let channel = human_channels.as_ref().unwrap().0.clone();
-                Box::new(TuiHumanPlayer::new(pc.name.clone(), channel))
-                    as Box<dyn player::Player>
+                Box::new(TuiHumanPlayer::new(pc.name.clone(), channel)) as Box<dyn player::Player>
             }
-        }
-    }).collect();
+        })
+        .collect();
 
     let player_names: Vec<String> = ng.players.iter().map(|p| p.name.clone()).collect();
 
@@ -756,14 +1394,18 @@ fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> S
         let result = orchestrator.run().await;
 
         // Save game log and replay.
-        let _ = orchestrator.log.write_jsonl(std::path::Path::new("game_log.jsonl"));
+        let _ = orchestrator
+            .log
+            .write_jsonl(std::path::Path::new("game_log.jsonl"));
         if let Ok(json) = serde_json::to_string_pretty(&orchestrator.replay) {
             let _ = std::fs::write("game_replay.json", json);
         }
 
         // Save game state on error for resume.
         if result.is_err() {
-            let model_ids: Vec<String> = orchestrator.player_names.iter()
+            let model_ids: Vec<String> = orchestrator
+                .player_names
+                .iter()
                 .map(|_| String::new()) // Can't recover model IDs here easily
                 .collect();
             let save = SaveGame::new(
@@ -790,12 +1432,12 @@ fn launch_resume(path: &std::path::Path) -> Option<Screen> {
     let save = SaveGame::load_from_file(path).ok()?;
     let player_names = save.player_names.clone();
 
-    let players: Vec<Box<dyn player::Player>> = save.player_names.iter()
+    let players: Vec<Box<dyn player::Player>> = save
+        .player_names
+        .iter()
         .enumerate()
         .map(|(i, name)| {
-            let model = save.player_models.get(i)
-                .filter(|m| !m.is_empty())
-                .cloned();
+            let model = save.player_models.get(i).filter(|m| !m.is_empty()).cloned();
             if let Some(model_id) = model {
                 Box::new(player::llm::LlmPlayer::new(
                     name.clone(),
@@ -803,8 +1445,7 @@ fn launch_resume(path: &std::path::Path) -> Option<Screen> {
                     Personality::default(),
                 )) as Box<dyn player::Player>
             } else {
-                Box::new(player::random::RandomPlayer::new(name.clone()))
-                    as Box<dyn player::Player>
+                Box::new(player::random::RandomPlayer::new(name.clone())) as Box<dyn player::Player>
             }
         })
         .collect();
@@ -820,7 +1461,9 @@ fn launch_resume(path: &std::path::Path) -> Option<Screen> {
 
         let result = orchestrator.run().await;
 
-        let _ = orchestrator.log.write_jsonl(std::path::Path::new("game_log.jsonl"));
+        let _ = orchestrator
+            .log
+            .write_jsonl(std::path::Path::new("game_log.jsonl"));
         if let Ok(json) = serde_json::to_string_pretty(&orchestrator.replay) {
             let _ = std::fs::write("game_replay.json", json);
         }
@@ -844,7 +1487,9 @@ fn launch_replay(path: &std::path::Path) -> Option<Screen> {
         tokio::spawn(async move {
             // Feed replay frames as synthetic UiEvents.
             for frame in &replay.frames {
-                let vp_str: String = frame.victory_points.iter()
+                let vp_str: String = frame
+                    .victory_points
+                    .iter()
                     .enumerate()
                     .map(|(p, v)| format!("P{}:{}", p, v))
                     .collect::<Vec<_>>()
@@ -852,10 +1497,7 @@ fn launch_replay(path: &std::path::Path) -> Option<Screen> {
                 let message = format!("[T{}] {} [{}]", frame.turn, frame.description, vp_str);
 
                 let _ = tx.send(UiEvent::StateUpdate {
-                    state: Arc::new(GameState::new(
-                        Board::default_board(),
-                        replay.num_players,
-                    )),
+                    state: Arc::new(GameState::new(Board::default_board(), replay.num_players)),
                     event: None,
                     message,
                 });
@@ -878,15 +1520,17 @@ fn launch_replay(path: &std::path::Path) -> Option<Screen> {
     // Fall back to JSONL event log — simpler playback.
     if let Ok(log) = crate::replay::event::GameLog::read_jsonl(path) {
         let (tx, rx) = mpsc::unbounded_channel();
-        let player_names = vec!["Player 0".into(), "Player 1".into(), "Player 2".into(), "Player 3".into()];
+        let player_names = vec![
+            "Player 0".into(),
+            "Player 1".into(),
+            "Player 2".into(),
+            "Player 3".into(),
+        ];
 
         tokio::spawn(async move {
             for event in log.events() {
                 let _ = tx.send(UiEvent::StateUpdate {
-                    state: Arc::new(GameState::new(
-                        Board::default_board(),
-                        4,
-                    )),
+                    state: Arc::new(GameState::new(Board::default_board(), 4)),
                     event: None,
                     message: format!("{:?}", event),
                 });
@@ -901,15 +1545,19 @@ fn launch_replay(path: &std::path::Path) -> Option<Screen> {
 }
 
 fn build_post_game(ps: &PlayingState) -> PostGameState {
-    let (winner_index, winner_name) = ps.game_over_winner.clone()
-        .unwrap_or((0, "Unknown".into()));
+    let (winner_index, winner_name) = ps.game_over_winner.clone().unwrap_or((0, "Unknown".into()));
 
     let scores: Vec<(String, u8)> = if let Some(ref state) = ps.state {
-        ps.player_names.iter().enumerate().map(|(i, name)| {
-            (name.clone(), state.victory_points(i) as u8)
-        }).collect()
+        ps.player_names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| (name.clone(), state.victory_points(i) as u8))
+            .collect()
     } else {
-        ps.player_names.iter().map(|name| (name.clone(), 0u8)).collect()
+        ps.player_names
+            .iter()
+            .map(|name| (name.clone(), 0u8))
+            .collect()
     };
 
     PostGameState {

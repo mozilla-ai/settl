@@ -3,9 +3,9 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph};
 
+use super::PLAYER_COLORS;
 use crate::game::board::Resource;
 use crate::game::state::GameState;
-use super::PLAYER_COLORS;
 
 /// Resource display colors.
 fn resource_color(r: Resource) -> Color {
@@ -19,12 +19,7 @@ fn resource_color(r: Resource) -> Color {
 }
 
 /// Render the player info panel.
-pub fn render_players(
-    state: &GameState,
-    player_names: &[String],
-    area: Rect,
-    buf: &mut Buffer,
-) {
+pub fn render_players(state: &GameState, player_names: &[String], area: Rect, buf: &mut Buffer) {
     let mut lines: Vec<Line> = Vec::new();
 
     for (i, ps) in state.players.iter().enumerate() {
@@ -42,7 +37,9 @@ pub fn render_players(
             ),
             Span::styled(
                 format!("{}VP", vp),
-                Style::default().fg(if vp >= 8 { Color::Yellow } else { Color::White }).bold(),
+                Style::default()
+                    .fg(if vp >= 8 { Color::Yellow } else { Color::White })
+                    .bold(),
             ),
         ]));
 
@@ -84,10 +81,16 @@ pub fn render_players(
 
         // Longest road / largest army indicators.
         if state.longest_road_player == Some(i) {
-            extras.push(Span::styled("LR ", Style::default().fg(Color::Yellow).bold()));
+            extras.push(Span::styled(
+                "LR ",
+                Style::default().fg(Color::Yellow).bold(),
+            ));
         }
         if state.largest_army_player == Some(i) {
-            extras.push(Span::styled("LA ", Style::default().fg(Color::Yellow).bold()));
+            extras.push(Span::styled(
+                "LA ",
+                Style::default().fg(Color::Yellow).bold(),
+            ));
         }
 
         if extras.len() > 1 {
@@ -109,7 +112,10 @@ pub fn render_players(
     lines.push(Line::from(vec![
         Span::styled("Phase: ", Style::default().fg(Color::DarkGray)),
         Span::styled(
-            format!("{:?}", state.phase).chars().take(15).collect::<String>(),
+            format!("{:?}", state.phase)
+                .chars()
+                .take(15)
+                .collect::<String>(),
             Style::default().fg(Color::White),
         ),
     ]));

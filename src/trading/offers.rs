@@ -8,9 +8,17 @@ use crate::game::state::PlayerState;
 #[derive(Debug, Clone, PartialEq)]
 pub enum TradeError {
     /// The proposer doesn't have enough resources to give.
-    InsufficientOfferingResources { resource: Resource, have: u32, need: u32 },
+    InsufficientOfferingResources {
+        resource: Resource,
+        have: u32,
+        need: u32,
+    },
     /// The acceptor doesn't have enough resources to fulfill the request.
-    InsufficientRequestedResources { resource: Resource, have: u32, need: u32 },
+    InsufficientRequestedResources {
+        resource: Resource,
+        have: u32,
+        need: u32,
+    },
     /// The offer is empty (nothing offered or nothing requested).
     EmptyOffer,
     /// Trading the same resource for itself.
@@ -20,11 +28,27 @@ pub enum TradeError {
 impl std::fmt::Display for TradeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TradeError::InsufficientOfferingResources { resource, have, need } => {
-                write!(f, "Need {} {} to offer but only have {}", need, resource, have)
+            TradeError::InsufficientOfferingResources {
+                resource,
+                have,
+                need,
+            } => {
+                write!(
+                    f,
+                    "Need {} {} to offer but only have {}",
+                    need, resource, have
+                )
             }
-            TradeError::InsufficientRequestedResources { resource, have, need } => {
-                write!(f, "Acceptor needs {} {} but only has {}", need, resource, have)
+            TradeError::InsufficientRequestedResources {
+                resource,
+                have,
+                need,
+            } => {
+                write!(
+                    f,
+                    "Acceptor needs {} {} but only has {}",
+                    need, resource, have
+                )
             }
             TradeError::EmptyOffer => write!(f, "Trade offer is empty"),
             TradeError::SelfTrade { resource } => {
@@ -111,7 +135,13 @@ mod tests {
     use super::*;
     use crate::game::board::Resource;
 
-    fn make_offer(from: usize, give: Resource, give_n: u32, want: Resource, want_n: u32) -> TradeOffer {
+    fn make_offer(
+        from: usize,
+        give: Resource,
+        give_n: u32,
+        want: Resource,
+        want_n: u32,
+    ) -> TradeOffer {
         TradeOffer {
             from,
             offering: vec![(give, give_n)],
@@ -148,7 +178,10 @@ mod tests {
             requesting: vec![(Resource::Ore, 1)],
             message: String::new(),
         };
-        assert!(matches!(validate_offer(&offer, &ps), Err(TradeError::EmptyOffer)));
+        assert!(matches!(
+            validate_offer(&offer, &ps),
+            Err(TradeError::EmptyOffer)
+        ));
     }
 
     #[test]

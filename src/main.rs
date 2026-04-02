@@ -15,8 +15,7 @@ async fn main() {
     // run in text mode. Otherwise, boot straight into the TUI.
     let args: Vec<String> = std::env::args().collect();
     let has_headless_flag = args.iter().any(|a| {
-        a == "--headless" || a == "--demo" || a == "--replay"
-            || a == "--resume" || a == "--models"
+        a == "--headless" || a == "--demo" || a == "--replay" || a == "--resume" || a == "--models"
     });
 
     if has_headless_flag {

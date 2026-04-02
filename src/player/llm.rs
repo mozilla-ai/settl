@@ -234,12 +234,7 @@ impl LlmPlayer {
                     );
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[{}] Attempt {}: API error: {}",
-                        self.name,
-                        attempt + 1,
-                        e
-                    );
+                    eprintln!("[{}] Attempt {}: API error: {}", self.name, attempt + 1, e);
                     if attempt < self.max_retries {
                         // Exponential backoff.
                         let delay = std::time::Duration::from_secs(1 << attempt);
@@ -548,19 +543,15 @@ impl Player for LlmPlayer {
                     .and_then(|v| v.as_str())
                     .map(Self::parse_resource)
                     .unwrap_or(Resource::Wood);
-                let give_count = args
-                    .get("give_count")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(1) as u32;
+                let give_count =
+                    args.get("give_count").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
                 let want_resource = args
                     .get("want_resource")
                     .and_then(|v| v.as_str())
                     .map(Self::parse_resource)
                     .unwrap_or(Resource::Wheat);
-                let want_count = args
-                    .get("want_count")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(1) as u32;
+                let want_count =
+                    args.get("want_count").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
                 let message = args
                     .get("message")
                     .and_then(|v| v.as_str())
@@ -642,7 +633,10 @@ impl Player for LlmPlayer {
 }
 
 /// Fallback discard: drop the most abundant resources first.
-pub(crate) fn fallback_discard(ps: &crate::game::state::PlayerState, count: usize) -> Vec<Resource> {
+pub(crate) fn fallback_discard(
+    ps: &crate::game::state::PlayerState,
+    count: usize,
+) -> Vec<Resource> {
     let mut pool: Vec<(Resource, u32)> = Resource::all()
         .iter()
         .map(|&r| (r, ps.resource_count(r)))
