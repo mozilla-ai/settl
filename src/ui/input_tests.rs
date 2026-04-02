@@ -10,28 +10,6 @@ use super::screens::*;
 use super::testing::*;
 use super::*;
 
-// ── Title Screen ─────────────────────────────────────────────────────
-
-#[test]
-fn title_any_key_transitions_to_main_menu() {
-    let mut app = title_app();
-    let action = handle_input(&mut app, KeyCode::Enter);
-    assert!(
-        matches!(action, Action::Transition(Screen::MainMenu(_))),
-        "any key on title should go to main menu"
-    );
-}
-
-#[test]
-fn title_char_key_transitions_to_main_menu() {
-    let mut app = title_app();
-    let action = handle_input(&mut app, KeyCode::Char('x'));
-    assert!(
-        matches!(action, Action::Transition(Screen::MainMenu(_))),
-        "char key on title should go to main menu"
-    );
-}
-
 // ── Main Menu ────────────────────────────────────────────────────────
 
 #[test]

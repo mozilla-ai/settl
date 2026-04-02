@@ -78,9 +78,9 @@ pub enum UiEvent {
 /// The active screen.
 #[allow(clippy::large_enum_variant)]
 pub enum Screen {
-    Title { frame: u64 },
     MainMenu(MainMenuState),
     NewGame(NewGameState),
+    About(AboutState),
     LlamafileSetup(LlamafileSetupState),
     Playing(PlayingState),
     PostGame(PostGameState),
@@ -457,7 +457,7 @@ pub async fn run_app() -> io::Result<()> {
     }));
 
     let mut app = App {
-        screen: Screen::Title { frame: 0 },
+        screen: Screen::MainMenu(MainMenuState::new()),
         personalities,
         llamafile_process: None,
     };
@@ -482,7 +482,6 @@ async fn run_event_loop(
 
         // Poll timeout depends on screen type.
         let timeout = match &app.screen {
-            Screen::Title { .. } => Duration::from_millis(33), // ~30fps for blink
             Screen::LlamafileSetup(_) => Duration::from_millis(50), // Fast refresh for progress
             Screen::Playing(ps) => {
                 Duration::from_millis(if ps.paused { 50 } else { ps.speed_ms.min(50) })
@@ -530,11 +529,6 @@ async fn run_event_loop(
             }
         }
 
-        // Tick frame counter for title blink.
-        if let Screen::Title { ref mut frame } = app.screen {
-            *frame += 1;
-        }
-
         // Poll llamafile setup progress.
         if let Screen::LlamafileSetup(ref mut setup) = app.screen {
             while let Ok(status) = setup.status_rx.try_recv() {
@@ -553,7 +547,7 @@ async fn run_event_loop(
                 }
                 // Move saved_config out of the setup state.
                 if let Screen::LlamafileSetup(setup) =
-                    std::mem::replace(&mut app.screen, Screen::Title { frame: 0 })
+                    std::mem::replace(&mut app.screen, Screen::MainMenu(MainMenuState::new()))
                 {
                     let screen = launch_game(&setup.saved_config, &app.personalities, Some(port));
                     app.screen = screen;
@@ -585,9 +579,9 @@ async fn run_event_loop(
 
 fn draw_screen(f: &mut Frame, screen: &Screen) {
     match screen {
-        Screen::Title { frame } => screens::draw_title(f, *frame),
         Screen::MainMenu(state) => screens::draw_main_menu(f, state),
         Screen::NewGame(state) => screens::draw_new_game(f, state),
+        Screen::About(_) => screens::draw_about(f),
         Screen::LlamafileSetup(state) => screens::draw_llamafile_setup(f, state),
         Screen::Playing(ps) => layout::draw_playing(f, ps),
         Screen::PostGame(state) => screens::draw_post_game(f, state),
@@ -606,11 +600,6 @@ enum Action {
 
 fn handle_input(app: &mut App, key: KeyCode) -> Action {
     match &mut app.screen {
-        Screen::Title { .. } => {
-            // Any key → main menu.
-            Action::Transition(Screen::MainMenu(MainMenuState::new()))
-        }
-
         Screen::MainMenu(state) => {
             let items = state.menu_items();
             match key {
@@ -628,6 +617,7 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                         "New Game" => Action::Transition(Screen::NewGame(NewGameState::new(
                             &app.personalities,
                         ))),
+                        "About" => Action::Transition(Screen::About(AboutState)),
                         "Quit" => Action::Quit,
                         _ => Action::None,
                     }
@@ -636,6 +626,13 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 _ => Action::None,
             }
         }
+
+        Screen::About(_) => match key {
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter => {
+                Action::Transition(Screen::MainMenu(MainMenuState::new()))
+            }
+            _ => Action::None,
+        },
 
         Screen::NewGame(state) => {
             if state.editing {
@@ -700,7 +697,7 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
             KeyCode::Esc => {
                 // Cancel setup: abort the background task and return to NewGame.
                 if let Screen::LlamafileSetup(mut setup) =
-                    std::mem::replace(&mut app.screen, Screen::Title { frame: 0 })
+                    std::mem::replace(&mut app.screen, Screen::MainMenu(MainMenuState::new()))
                 {
                     if let Some(handle) = setup.task_handle.take() {
                         handle.abort();

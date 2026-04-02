@@ -90,11 +90,6 @@ pub fn make_test_app(screen: Screen) -> App {
     }
 }
 
-/// Create an `App` on the Title screen.
-pub fn title_app() -> App {
-    make_test_app(Screen::Title { frame: 0 })
-}
-
 /// Create an `App` on the MainMenu screen.
 pub fn main_menu_app() -> App {
     make_test_app(Screen::MainMenu(MainMenuState::new()))
