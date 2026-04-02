@@ -1,7 +1,6 @@
-//! LLM player implementation using the `genai` crate for multi-provider support.
+//! Llamafile player implementation using the `genai` crate with a local llamafile backend.
 //!
-//! Uses tool/function calling for structured responses. Supports Claude, GPT,
-//! Gemini, and any other provider supported by genai.
+//! Uses tool/function calling for structured responses.
 
 use async_trait::async_trait;
 use genai::chat::{ChatMessage, ChatRequest, Tool};
@@ -15,7 +14,7 @@ use crate::player::prompt;
 use crate::player::{Player, PlayerChoice};
 
 /// An LLM-powered Catan player using genai for multi-provider support.
-pub struct LlmPlayer {
+pub struct LlamafilePlayer {
     /// Display name (e.g. "Alice", "Bob").
     name: String,
     /// Model identifier for genai (e.g. "openai::bonsai").
@@ -30,7 +29,7 @@ pub struct LlmPlayer {
     extra_context: tokio::sync::Mutex<String>,
 }
 
-impl LlmPlayer {
+impl LlamafilePlayer {
     /// Create an LLM player backed by a pre-configured genai Client.
     pub fn with_client(
         name: String,
@@ -326,7 +325,7 @@ impl LlmPlayer {
 }
 
 #[async_trait]
-impl Player for LlmPlayer {
+impl Player for LlamafilePlayer {
     fn name(&self) -> &str {
         &self.name
     }
@@ -747,33 +746,33 @@ mod tests {
     #[test]
     fn extract_index_valid() {
         let args = json!({"index": 3});
-        assert_eq!(LlmPlayer::extract_index(&args, 5), 3);
+        assert_eq!(LlamafilePlayer::extract_index(&args, 5), 3);
     }
 
     #[test]
     fn extract_index_clamps_to_max() {
         let args = json!({"index": 10});
-        assert_eq!(LlmPlayer::extract_index(&args, 5), 4);
+        assert_eq!(LlamafilePlayer::extract_index(&args, 5), 4);
     }
 
     #[test]
     fn extract_index_missing_defaults_to_zero() {
         let args = json!({"reasoning": "test"});
-        assert_eq!(LlmPlayer::extract_index(&args, 5), 0);
+        assert_eq!(LlamafilePlayer::extract_index(&args, 5), 0);
     }
 
     #[test]
     fn parse_resource_valid() {
-        assert_eq!(LlmPlayer::parse_resource("Wood"), Resource::Wood);
-        assert_eq!(LlmPlayer::parse_resource("brick"), Resource::Brick);
-        assert_eq!(LlmPlayer::parse_resource("SHEEP"), Resource::Sheep);
-        assert_eq!(LlmPlayer::parse_resource("Wheat"), Resource::Wheat);
-        assert_eq!(LlmPlayer::parse_resource("ore"), Resource::Ore);
+        assert_eq!(LlamafilePlayer::parse_resource("Wood"), Resource::Wood);
+        assert_eq!(LlamafilePlayer::parse_resource("brick"), Resource::Brick);
+        assert_eq!(LlamafilePlayer::parse_resource("SHEEP"), Resource::Sheep);
+        assert_eq!(LlamafilePlayer::parse_resource("Wheat"), Resource::Wheat);
+        assert_eq!(LlamafilePlayer::parse_resource("ore"), Resource::Ore);
     }
 
     #[test]
     fn parse_resource_fallback() {
-        assert_eq!(LlmPlayer::parse_resource("invalid"), Resource::Wood);
+        assert_eq!(LlamafilePlayer::parse_resource("invalid"), Resource::Wood);
     }
 
     #[test]
@@ -810,7 +809,7 @@ mod tests {
 
     #[test]
     fn index_tool_has_correct_schema() {
-        let tool = LlmPlayer::index_tool(5);
+        let tool = LlamafilePlayer::index_tool(5);
         match &tool.name {
             genai::chat::ToolName::Custom(s) => assert_eq!(s, "choose_index"),
             _ => panic!("Expected custom tool name"),
@@ -819,7 +818,7 @@ mod tests {
 
     #[test]
     fn resource_tool_has_correct_schema() {
-        let tool = LlmPlayer::resource_tool();
+        let tool = LlamafilePlayer::resource_tool();
         match &tool.name {
             genai::chat::ToolName::Custom(s) => assert_eq!(s, "choose_resource"),
             _ => panic!("Expected custom tool name"),
@@ -828,7 +827,7 @@ mod tests {
 
     #[test]
     fn discard_tool_has_correct_schema() {
-        let tool = LlmPlayer::discard_tool(3);
+        let tool = LlamafilePlayer::discard_tool(3);
         match &tool.name {
             genai::chat::ToolName::Custom(s) => assert_eq!(s, "choose_discard"),
             _ => panic!("Expected custom tool name"),
@@ -837,7 +836,7 @@ mod tests {
 
     #[test]
     fn trade_response_tool_has_correct_schema() {
-        let tool = LlmPlayer::trade_response_tool();
+        let tool = LlamafilePlayer::trade_response_tool();
         match &tool.name {
             genai::chat::ToolName::Custom(s) => assert_eq!(s, "respond_to_trade"),
             _ => panic!("Expected custom tool name"),
@@ -846,7 +845,7 @@ mod tests {
 
     #[test]
     fn propose_trade_tool_has_correct_schema() {
-        let tool = LlmPlayer::propose_trade_tool();
+        let tool = LlamafilePlayer::propose_trade_tool();
         match &tool.name {
             genai::chat::ToolName::Custom(s) => assert_eq!(s, "propose_trade"),
             _ => panic!("Expected custom tool name"),
@@ -861,7 +860,7 @@ mod tests {
     #[test]
     fn with_client_constructor_sets_fields() {
         let client = llamafile_client(8080);
-        let player = LlmPlayer::with_client(
+        let player = LlamafilePlayer::with_client(
             "Test".into(),
             LLAMAFILE_MODEL.into(),
             Personality::default(),

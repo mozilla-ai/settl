@@ -1347,7 +1347,7 @@ fn launch_game(
     };
 
     // Build a shared llamafile client if any player needs it.
-    let llama_client = llamafile_port.map(player::llm::llamafile_client);
+    let llama_client = llamafile_port.map(player::llamafile_player::llamafile_client);
 
     let players: Vec<Box<dyn player::Player>> = ng
         .players
@@ -1366,9 +1366,9 @@ fn launch_game(
                 let client = llama_client
                     .clone()
                     .expect("llamafile client should exist when Llamafile players are used");
-                Box::new(player::llm::LlmPlayer::with_client(
+                Box::new(player::llamafile_player::LlamafilePlayer::with_client(
                     pc.name.clone(),
-                    player::llm::LLAMAFILE_MODEL.into(),
+                    player::llamafile_player::LLAMAFILE_MODEL.into(),
                     personality,
                     client,
                 )) as Box<dyn player::Player>
