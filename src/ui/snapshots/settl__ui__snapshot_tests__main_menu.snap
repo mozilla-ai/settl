@@ -26,7 +26,6 @@ expression: buffer_to_string(&buf)
 
 
 
-
                                                                 ███████╗███████╗████████╗████████╗██╗
                                                                 ██╔════╝██╔════╝╚══██╔══╝╚══██╔══╝██║
                                                                 ███████╗█████╗     ██║      ██║   ██║
@@ -35,8 +34,10 @@ expression: buffer_to_string(&buf)
                                                                 ╚══════╝╚══════╝   ╚═╝      ╚═╝   ╚══════╝
 
 
+                                                                              terminal catan
 
                                                                                > New Game
+                                                                                 About
                                                                                  Quit
 
                                                                   [↑↓] navigate  [Enter] select  [q] quit

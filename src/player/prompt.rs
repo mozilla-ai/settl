@@ -170,24 +170,6 @@ pub fn format_hex_options(hexes: &[HexCoord]) -> String {
         .join("\n")
 }
 
-/// The full Catan rulebook, embedded at compile time.
-const CATAN_RULES: &str = include_str!("../../CATAN_RULES.md");
-
-/// Build the full system prompt for an LLM player.
-///
-/// Includes the complete rulebook. Use `system_prompt_compact` for small models.
-pub fn system_prompt(player_name: &str, personality_prompt: &str) -> String {
-    format!(
-        "You are playing a game of Settlers of Catan in a terminal environment.\n\
-         Your name is {player_name}.\n\n\
-         {personality_prompt}\n\n\
-         {CATAN_RULES}\n\n\
-         INSTRUCTIONS:\n\
-         - When you choose, ALWAYS explain your strategic reasoning before deciding.\n\
-         - Be concise but specific -- reference coordinates and resource counts.",
-    )
-}
-
 /// Build a compact system prompt for small/local models (e.g. Bonsai-1.7B).
 ///
 /// Uses a condensed rules summary instead of the full rulebook to fit in
