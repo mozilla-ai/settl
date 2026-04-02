@@ -9,8 +9,8 @@ expression: buffer_to_string(&buf)
 │                                          *                                   │
 │                                                                              │
 │                                                                              │
-│                              Brick               Brick               Brick   │
-│                                5                   2                   6     │
+│                               Ore                Sheep               Wood    │
+│                               10                   2                   9     │
 │                                                                              │
 │                                                                              │
 │                                                                              │
@@ -18,8 +18,8 @@ expression: buffer_to_string(&buf)
 │            *                                                                 │
 │                                                                              │
 │                                                                              │
-│                    Wood                Wood                Wood              │
-│                      3                   8                  10               │
+│                    Wheat               Brick               Sheep             │
+│                     12                   6                   4               │
 │                                                                              │
 │                                                                              │
 │                                                                              │

@@ -70,15 +70,8 @@ pub async fn run(cli: HeadlessCli) {
         cli.players
     );
 
-    // Create board.
-    let board = if let Some(seed) = cli.seed {
-        use rand::SeedableRng;
-        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-        game::board::Board::generate(&mut rng)
-    } else {
-        let mut rng = rand::rng();
-        game::board::Board::generate(&mut rng)
-    };
+    // Use the fixed beginner board layout (randomization deferred to a future design).
+    let board = game::board::Board::default_board();
 
     let state = game::state::GameState::new(board.clone(), cli.players);
 

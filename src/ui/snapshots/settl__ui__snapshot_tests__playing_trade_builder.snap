@@ -12,8 +12,8 @@ expression: buffer_to_string(&buf)
 │                                                          *                                       *                                       ││ P2 Charlie 0VP             │
 │                                                                                                                                          ││  W:0 B:0 S:0 H:0 O:0       │
 │                                                                                                                                          ││                            │
-│                                              Brick               Brick               Brick                                               ││ P3 Diana 0VP               │
-│                                                5                   2                   6                                                 ││  W:0 B:0 S:0 H:0 O:0       │
+│                                               Ore                Sheep               Wood                                                ││ P3 Diana 0VP               │
+│                                               10                   2                   9                                                 ││  W:0 B:0 S:0 H:0 O:0       │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││Turn: 1                     │
 │                                                                                                                                          ││Phase: Setup { round:       │
@@ -21,8 +21,8 @@ expression: buffer_to_string(&buf)
 │                            *                                                                               *                             ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                                    Wood                Wood                Wood                Wood                                      │└────────────────────────────┘
-│                                      3                   8                  10                   9                                       │┌ Game Log (2/2) ────────────┐
+│                                    Wheat               Brick               Sheep               Brick                                     │└────────────────────────────┘
+│                                     12                   6                   4                  10                                       │┌ Game Log (2/2) ────────────┐
 │                                                                                                                                          ││   1| Game started -- your  │
 │                                                                                                                                          ││turn will show a prompt     │
 │                                                                                                                                          ││   2| q:quit  Space:pause   │
@@ -30,8 +30,8 @@ expression: buffer_to_string(&buf)
 │                                                                                                                      *                   ││Tab:AI panel                │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                           Ore                 Ore                 Ore                Wheat               Wheat                           ││                            │
-│                           12                  11                   4                   8                  10                             ││                            │
+│                          Wood                Wheat            R Desert               Wood                 Ore                            ││                            │
+│                            9                  11                   R                   3                   8                             ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
@@ -39,8 +39,8 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                                    Wheat               Wheat               Sheep               Sheep                                     ││                            │
-│                                      9                   4                   5                   6                                       ││                            │
+│                                    Wood                 Ore                Wheat               Sheep                                     ││                            │
+│                                      8                   3                   4                   5                                       ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
@@ -48,8 +48,8 @@ expression: buffer_to_string(&buf)
 │                                                                                                  *                                       ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                                              Sheep               Sheep            R Desert                                               ││                            │
-│                                                3                  11                   R                                                 ││                            │
+│                                              Brick               Wheat               Sheep                                               ││                            │
+│                                                5                   6                  11                                                 ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │

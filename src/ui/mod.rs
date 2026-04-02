@@ -1326,15 +1326,8 @@ fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> S
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
-    // Build board.
-    let board = if let Some(seed) = ng.seed() {
-        use rand::SeedableRng;
-        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-        Board::generate(&mut rng)
-    } else {
-        let mut rng = rand::rng();
-        Board::generate(&mut rng)
-    };
+    // Use the fixed beginner board layout (randomization deferred to a future design).
+    let board = Board::default_board();
 
     let state = GameState::new(board, ng.num_players());
 
