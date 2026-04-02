@@ -22,11 +22,11 @@ impl HexCoord {
     pub fn neighbors(self) -> [HexCoord; 6] {
         [
             HexCoord::new(self.q + 1, self.r - 1), // NE
-            HexCoord::new(self.q + 1, self.r),      // E
-            HexCoord::new(self.q, self.r + 1),      // SE
-            HexCoord::new(self.q - 1, self.r + 1),  // SW
-            HexCoord::new(self.q - 1, self.r),      // W
-            HexCoord::new(self.q, self.r - 1),      // NW
+            HexCoord::new(self.q + 1, self.r),     // E
+            HexCoord::new(self.q, self.r + 1),     // SE
+            HexCoord::new(self.q - 1, self.r + 1), // SW
+            HexCoord::new(self.q - 1, self.r),     // W
+            HexCoord::new(self.q, self.r - 1),     // NW
         ]
     }
 
@@ -214,7 +214,7 @@ pub struct Hex {
 pub enum PortType {
     /// Trade any 3 identical resources for 1 of any other.
     Generic, // 3:1
-    // Specialised 2:1 ports are deferred.
+             // Specialised 2:1 ports are deferred.
 }
 
 /// A harbour on the coast, accessible from two vertices.
@@ -452,12 +452,12 @@ pub fn hex_vertices(h: HexCoord) -> [VertexCoord; 6] {
     let q = h.q;
     let r = h.r;
     [
-        VertexCoord::new(HexCoord::new(q, r), VertexDirection::North),         // v0
+        VertexCoord::new(HexCoord::new(q, r), VertexDirection::North), // v0
         VertexCoord::new(HexCoord::new(q + 1, r - 1), VertexDirection::South), // v1
-        VertexCoord::new(HexCoord::new(q, r + 1), VertexDirection::North),     // v2
-        VertexCoord::new(HexCoord::new(q, r), VertexDirection::South),         // v3
+        VertexCoord::new(HexCoord::new(q, r + 1), VertexDirection::North), // v2
+        VertexCoord::new(HexCoord::new(q, r), VertexDirection::South), // v3
         VertexCoord::new(HexCoord::new(q - 1, r + 1), VertexDirection::North), // v4
-        VertexCoord::new(HexCoord::new(q, r - 1), VertexDirection::South),     // v5
+        VertexCoord::new(HexCoord::new(q, r - 1), VertexDirection::South), // v5
     ]
 }
 
@@ -659,23 +659,17 @@ impl Board {
 
         // Standard terrain distribution placed in coordinate order.
         let terrains = vec![
-            Hills, Hills, Hills,
-            Forest, Forest, Forest, Forest,
-            Mountains, Mountains, Mountains,
-            Fields, Fields, Fields, Fields,
-            Pasture, Pasture, Pasture, Pasture,
-            Desert,
+            Hills, Hills, Hills, Forest, Forest, Forest, Forest, Mountains, Mountains, Mountains,
+            Fields, Fields, Fields, Fields, Pasture, Pasture, Pasture, Pasture, Desert,
         ];
 
         // Standard number tokens in a fixed order.
-        let numbers: Vec<u8> = vec![
-            5, 2, 6, 3, 8, 10, 9, 12, 11, 4, 8, 10, 9, 4, 5, 6, 3, 11,
-        ];
+        let numbers: Vec<u8> = vec![5, 2, 6, 3, 8, 10, 9, 12, 11, 4, 8, 10, 9, 4, 5, 6, 3, 11];
 
         let mut number_iter = numbers.into_iter();
         let hexes: Vec<Hex> = coords
             .into_iter()
-            .zip(terrains.into_iter())
+            .zip(terrains)
             .map(|(coord, terrain)| {
                 let number_token = if terrain == Desert {
                     None
@@ -803,11 +797,7 @@ mod tests {
     #[test]
     fn correct_number_token_distribution() {
         let board = make_board();
-        let mut tokens: Vec<u8> = board
-            .hexes
-            .iter()
-            .filter_map(|h| h.number_token)
-            .collect();
+        let mut tokens: Vec<u8> = board.hexes.iter().filter_map(|h| h.number_token).collect();
         tokens.sort();
         let mut expected = standard_number_tokens();
         expected.sort();
@@ -1027,7 +1017,11 @@ mod tests {
                 shared.len(),
                 2,
                 "Adjacent hexes ({},{}) and ({},{}) should share 2 vertices, got {}",
-                h1.q, h1.r, h2.q, h2.r, shared.len()
+                h1.q,
+                h1.r,
+                h2.q,
+                h2.r,
+                shared.len()
             );
         }
     }
@@ -1068,7 +1062,11 @@ mod tests {
     fn north_vertex_neighbors_are_all_south() {
         let v = VertexCoord::new(HexCoord::new(1, -1), VertexDirection::North);
         for adj in adjacent_vertices(v) {
-            assert_eq!(adj.dir, VertexDirection::South, "N vertex neighbors should all be S vertices");
+            assert_eq!(
+                adj.dir,
+                VertexDirection::South,
+                "N vertex neighbors should all be S vertices"
+            );
         }
     }
 
@@ -1076,7 +1074,11 @@ mod tests {
     fn south_vertex_neighbors_are_all_north() {
         let v = VertexCoord::new(HexCoord::new(1, -1), VertexDirection::South);
         for adj in adjacent_vertices(v) {
-            assert_eq!(adj.dir, VertexDirection::North, "S vertex neighbors should all be N vertices");
+            assert_eq!(
+                adj.dir,
+                VertexDirection::North,
+                "S vertex neighbors should all be N vertices"
+            );
         }
     }
 

@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph};
 
+use super::PLAYER_COLORS;
 use crate::game::board::{Terrain, VertexDirection};
 use crate::game::state::{Building, GameState};
-use super::PLAYER_COLORS;
 
 /// Color for each terrain type.
 fn terrain_color(t: Terrain) -> Color {
@@ -69,10 +69,16 @@ pub fn render_board(state: &GameState, area: Rect, buf: &mut Buffer) {
             };
 
             spans.push(Span::styled("[".to_string(), Style::default().fg(color)));
-            spans.push(Span::styled(abbr, Style::default().fg(Color::White).bg(color)));
+            spans.push(Span::styled(
+                abbr,
+                Style::default().fg(Color::White).bg(color),
+            ));
             spans.push(Span::styled(number, num_style));
             if is_robber {
-                spans.push(Span::styled("!".to_string(), Style::default().fg(Color::Black).bg(Color::Red).bold()));
+                spans.push(Span::styled(
+                    "!".to_string(),
+                    Style::default().fg(Color::Black).bg(Color::Red).bold(),
+                ));
             }
             spans.push(Span::styled("]".to_string(), Style::default().fg(color)));
         }
@@ -115,7 +121,7 @@ pub fn render_board(state: &GameState, area: Rect, buf: &mut Buffer) {
     // Road counts per player.
     if !state.roads.is_empty() {
         let mut road_counts = [0u32; 4];
-        for (_, &p) in &state.roads {
+        for &p in state.roads.values() {
             if p < 4 {
                 road_counts[p] += 1;
             }

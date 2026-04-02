@@ -52,11 +52,7 @@ impl GameReplay {
         let victory_points: Vec<u8> = (0..self.num_players)
             .map(|p| state.victory_points(p))
             .collect();
-        let resource_totals: Vec<u32> = state
-            .players
-            .iter()
-            .map(|p| p.total_resources())
-            .collect();
+        let resource_totals: Vec<u32> = state.players.iter().map(|p| p.total_resources()).collect();
 
         self.frames.push(ReplayFrame {
             event,
@@ -69,20 +65,34 @@ impl GameReplay {
 
     /// Format an event for human-readable display.
     pub fn format_event(event: &GameEvent, player_names: &[String]) -> String {
-        let name = |p: PlayerId| -> &str {
-            player_names.get(p).map(|s| s.as_str()).unwrap_or("???")
-        };
+        let name =
+            |p: PlayerId| -> &str { player_names.get(p).map(|s| s.as_str()).unwrap_or("???") };
 
         match event {
             GameEvent::InitialSettlementPlaced { player, vertex } => {
-                format!("{} placed settlement at ({},{},{:?})",
-                    name(*player), vertex.hex.q, vertex.hex.r, vertex.dir)
+                format!(
+                    "{} placed settlement at ({},{},{:?})",
+                    name(*player),
+                    vertex.hex.q,
+                    vertex.hex.r,
+                    vertex.dir
+                )
             }
             GameEvent::InitialRoadPlaced { player, edge } => {
                 format!("{} placed road at {}", name(*player), edge)
             }
-            GameEvent::DiceRolled { player, values, total } => {
-                format!("{} rolled {} ({} + {})", name(*player), total, values.0, values.1)
+            GameEvent::DiceRolled {
+                player,
+                values,
+                total,
+            } => {
+                format!(
+                    "{} rolled {} ({} + {})",
+                    name(*player),
+                    total,
+                    values.0,
+                    values.1
+                )
             }
             GameEvent::ResourcesDistributed { distributions } => {
                 if distributions.is_empty() {
@@ -94,26 +104,65 @@ impl GameReplay {
                     .collect();
                 format!("Resources: {}", parts.join(", "))
             }
-            GameEvent::SettlementBuilt { player, vertex, reasoning } => {
-                format!("{} built settlement at ({},{},{:?}) — {}",
-                    name(*player), vertex.hex.q, vertex.hex.r, vertex.dir, reasoning)
+            GameEvent::SettlementBuilt {
+                player,
+                vertex,
+                reasoning,
+            } => {
+                format!(
+                    "{} built settlement at ({},{},{:?}) — {}",
+                    name(*player),
+                    vertex.hex.q,
+                    vertex.hex.r,
+                    vertex.dir,
+                    reasoning
+                )
             }
-            GameEvent::CityUpgraded { player, vertex, reasoning } => {
-                format!("{} upgraded to city at ({},{},{:?}) — {}",
-                    name(*player), vertex.hex.q, vertex.hex.r, vertex.dir, reasoning)
+            GameEvent::CityUpgraded {
+                player,
+                vertex,
+                reasoning,
+            } => {
+                format!(
+                    "{} upgraded to city at ({},{},{:?}) — {}",
+                    name(*player),
+                    vertex.hex.q,
+                    vertex.hex.r,
+                    vertex.dir,
+                    reasoning
+                )
             }
-            GameEvent::RoadBuilt { player, edge, reasoning } => {
+            GameEvent::RoadBuilt {
+                player,
+                edge,
+                reasoning,
+            } => {
                 format!("{} built road at {} — {}", name(*player), edge, reasoning)
             }
-            GameEvent::TradeProposed { from, offer, reasoning } => {
-                let offering: String = offer.offering.iter()
+            GameEvent::TradeProposed {
+                from,
+                offer,
+                reasoning,
+            } => {
+                let offering: String = offer
+                    .offering
+                    .iter()
                     .map(|(r, n)| format!("{} {}", n, r))
-                    .collect::<Vec<_>>().join(", ");
-                let requesting: String = offer.requesting.iter()
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let requesting: String = offer
+                    .requesting
+                    .iter()
                     .map(|(r, n)| format!("{} {}", n, r))
-                    .collect::<Vec<_>>().join(", ");
-                format!("{} proposed trade: [{}] for [{}] — {}",
-                    name(*from), offering, requesting, reasoning)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!(
+                    "{} proposed trade: [{}] for [{}] — {}",
+                    name(*from),
+                    offering,
+                    requesting,
+                    reasoning
+                )
             }
             GameEvent::TradeAccepted { by, reasoning } => {
                 format!("{} accepted trade — {}", name(*by), reasoning)
@@ -121,35 +170,70 @@ impl GameReplay {
             GameEvent::TradeRejected { by, reasoning } => {
                 format!("{} rejected trade — {}", name(*by), reasoning)
             }
-            GameEvent::TradeCountered { by, counter_offer, reasoning } => {
-                let offering: String = counter_offer.offering.iter()
+            GameEvent::TradeCountered {
+                by,
+                counter_offer,
+                reasoning,
+            } => {
+                let offering: String = counter_offer
+                    .offering
+                    .iter()
                     .map(|(r, n)| format!("{} {}", n, r))
-                    .collect::<Vec<_>>().join(", ");
-                let requesting: String = counter_offer.requesting.iter()
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let requesting: String = counter_offer
+                    .requesting
+                    .iter()
                     .map(|(r, n)| format!("{} {}", n, r))
-                    .collect::<Vec<_>>().join(", ");
-                format!("{} counter-offered: [{}] for [{}] — {}",
-                    name(*by), offering, requesting, reasoning)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!(
+                    "{} counter-offered: [{}] for [{}] — {}",
+                    name(*by),
+                    offering,
+                    requesting,
+                    reasoning
+                )
             }
             GameEvent::TradeWithdrawn { by } => {
                 format!("{} withdrew trade", name(*by))
             }
             GameEvent::BankTradeExecuted { player, gave, got } => {
-                format!("{} bank traded {} {} for {} {}",
-                    name(*player), gave.1, gave.0, got.1, got.0)
+                format!(
+                    "{} bank traded {} {} for {} {}",
+                    name(*player),
+                    gave.1,
+                    gave.0,
+                    got.1,
+                    got.0
+                )
             }
             GameEvent::DevCardBought { player } => {
                 format!("{} bought a dev card", name(*player))
             }
-            GameEvent::DevCardPlayed { player, card, action: _, reasoning } => {
+            GameEvent::DevCardPlayed {
+                player,
+                card,
+                action: _,
+                reasoning,
+            } => {
                 format!("{} played {} — {}", name(*player), card, reasoning)
             }
-            GameEvent::RobberMoved { player, to, stole_from } => {
+            GameEvent::RobberMoved {
+                player,
+                to,
+                stole_from,
+            } => {
                 let steal = stole_from
                     .map(|t| format!(", stole from {}", name(t)))
                     .unwrap_or_default();
-                format!("{} moved robber to ({},{}){}",
-                    name(*player), to.q, to.r, steal)
+                format!(
+                    "{} moved robber to ({},{}){}",
+                    name(*player),
+                    to.q,
+                    to.r,
+                    steal
+                )
             }
             GameEvent::CardsDiscarded { player, cards } => {
                 let card_str: Vec<String> = cards.iter().map(|r| format!("{}", r)).collect();
@@ -159,7 +243,11 @@ impl GameReplay {
                 format!("{} claimed Longest Road ({})", name(*player), length)
             }
             GameEvent::LargestArmyClaimed { player, knights } => {
-                format!("{} claimed Largest Army ({} knights)", name(*player), knights)
+                format!(
+                    "{} claimed Largest Army ({} knights)",
+                    name(*player),
+                    knights
+                )
             }
             GameEvent::GameWon { player, final_vp } => {
                 format!("{} wins with {} VP!", name(*player), final_vp)
@@ -227,7 +315,11 @@ impl std::fmt::Display for GameStats {
         writeln!(f, "  Settlements:  {}", self.settlements_built)?;
         writeln!(f, "  Cities:       {}", self.cities_built)?;
         writeln!(f, "  Roads:        {}", self.roads_built)?;
-        writeln!(f, "  Trades:       {} proposed, {} accepted", self.trades_proposed, self.trades_accepted)?;
+        writeln!(
+            f,
+            "  Trades:       {} proposed, {} accepted",
+            self.trades_proposed, self.trades_accepted
+        )?;
         writeln!(f, "  Robber moves: {}", self.robber_moves)?;
         writeln!(f, "  Dev cards:    {}", self.dev_cards_bought)?;
         if let Some(w) = self.winner {
@@ -249,12 +341,20 @@ mod tests {
         let mut replay = GameReplay::new(vec!["A".into(), "B".into(), "C".into()]);
 
         replay.record(
-            GameEvent::DiceRolled { player: 0, values: (3, 4), total: 7 },
+            GameEvent::DiceRolled {
+                player: 0,
+                values: (3, 4),
+                total: 7,
+            },
             &state,
             "Roll".into(),
         );
         replay.record(
-            GameEvent::RobberMoved { player: 0, to: HexCoord::new(1, 0), stole_from: None },
+            GameEvent::RobberMoved {
+                player: 0,
+                to: HexCoord::new(1, 0),
+                stole_from: None,
+            },
             &state,
             "Robber".into(),
         );
@@ -266,7 +366,11 @@ mod tests {
     #[test]
     fn format_event_dice_roll() {
         let names = vec!["Alice".into(), "Bob".into()];
-        let event = GameEvent::DiceRolled { player: 0, values: (3, 5), total: 8 };
+        let event = GameEvent::DiceRolled {
+            player: 0,
+            values: (3, 5),
+            total: 8,
+        };
         let formatted = GameReplay::format_event(&event, &names);
         assert!(formatted.contains("Alice"));
         assert!(formatted.contains("8"));
@@ -293,7 +397,11 @@ mod tests {
         let mut replay = GameReplay::new(vec!["A".into(), "B".into()]);
 
         replay.record(
-            GameEvent::DiceRolled { player: 0, values: (1, 2), total: 3 },
+            GameEvent::DiceRolled {
+                player: 0,
+                values: (1, 2),
+                total: 3,
+            },
             &state,
             "".into(),
         );
@@ -305,13 +413,13 @@ mod tests {
             &state,
             "".into(),
         );
+        replay.record(GameEvent::DevCardBought { player: 1 }, &state, "".into());
         replay.record(
-            GameEvent::DevCardBought { player: 1 },
-            &state,
-            "".into(),
-        );
-        replay.record(
-            GameEvent::RobberMoved { player: 0, to: HexCoord::new(1, 0), stole_from: Some(1) },
+            GameEvent::RobberMoved {
+                player: 0,
+                to: HexCoord::new(1, 0),
+                stole_from: Some(1),
+            },
             &state,
             "".into(),
         );

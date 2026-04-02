@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Paragraph, Clear};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::player::personality::Personality;
 
@@ -33,8 +33,8 @@ pub struct MainMenuState {
     pub has_replay_files: bool,
 }
 
-impl MainMenuState {
-    pub fn new() -> Self {
+impl Default for MainMenuState {
+    fn default() -> Self {
         let has_save_files = find_files_with_extension("game_save", "json").is_some();
         let has_replay_files = find_files_with_extension("game_replay", "json").is_some()
             || find_files_with_extension("game_log", "jsonl").is_some();
@@ -44,7 +44,9 @@ impl MainMenuState {
             has_replay_files,
         }
     }
+}
 
+impl MainMenuState {
     pub fn menu_items(&self) -> Vec<&'static str> {
         let mut items = vec!["New Game"];
         if self.has_save_files {
@@ -189,7 +191,10 @@ impl NewGameState {
             players,
             seed_input: String::new(),
             max_turns_input: "500".into(),
-            focus: NewGameFocus::Player { row: 0, col: NewGameCol::Kind },
+            focus: NewGameFocus::Player {
+                row: 0,
+                col: NewGameCol::Kind,
+            },
             personality_names,
             editing: false,
         }
@@ -251,7 +256,9 @@ impl FilePickerState {
     pub fn new(purpose: FilePickerPurpose) -> Self {
         let files = match purpose {
             FilePickerPurpose::Resume => scan_files(&["game_save"], &["json"]),
-            FilePickerPurpose::Replay => scan_files(&["game_replay", "game_log"], &["json", "jsonl"]),
+            FilePickerPurpose::Replay => {
+                scan_files(&["game_replay", "game_log"], &["json", "jsonl"])
+            }
         };
         Self {
             purpose,
@@ -337,7 +344,13 @@ pub fn draw_main_menu(f: &mut Frame, state: &MainMenuState) {
     // Menu.
     let menu_y = y_start + art_lines + 2;
     let menu_area = Rect::new(area.x, menu_y, area.width, menu_height);
-    render_menu(&items, state.selected, menu_area, f.buffer_mut(), Color::Yellow);
+    render_menu(
+        &items,
+        state.selected,
+        menu_area,
+        f.buffer_mut(),
+        Color::Yellow,
+    );
 
     // Hint bar.
     let hint_y = menu_y + menu_height + 1;
@@ -367,12 +380,8 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
 
     // Player count.
     let count_area = Rect::new(x_start, area.y + 3, content_width, 1);
-    let count_text = format!(
-        "Players: {}  (press +/- to change)",
-        state.num_players()
-    );
-    let count = Paragraph::new(count_text)
-        .style(Style::default().fg(Color::Cyan));
+    let count_text = format!("Players: {}  (press +/- to change)", state.num_players());
+    let count = Paragraph::new(count_text).style(Style::default().fg(Color::Cyan));
     f.render_widget(count, count_area);
 
     // Player table header.
@@ -391,12 +400,17 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
         let row_area = Rect::new(x_start, row_y, content_width, 1);
 
         let model_str = if player.kind == PlayerKind::Llm {
-            AVAILABLE_MODELS.get(player.model_index).copied().unwrap_or("?")
+            AVAILABLE_MODELS
+                .get(player.model_index)
+                .copied()
+                .unwrap_or("?")
         } else {
             "—"
         };
         let personality_str = if player.kind == PlayerKind::Llm {
-            state.personality_names.get(player.personality_index)
+            state
+                .personality_names
+                .get(player.personality_index)
                 .map(|s| s.as_str())
                 .unwrap_or("?")
         } else {
@@ -406,15 +420,54 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
         // Build columns with highlights.
         let is_focused_row = matches!(state.focus, NewGameFocus::Player { row, .. } if row == i);
 
-        let name_style = cell_style(is_focused_row && matches!(state.focus, NewGameFocus::Player { col: NewGameCol::Name, .. }));
-        let kind_style = cell_style(is_focused_row && matches!(state.focus, NewGameFocus::Player { col: NewGameCol::Kind, .. }));
-        let model_style = cell_style(is_focused_row && matches!(state.focus, NewGameFocus::Player { col: NewGameCol::Model, .. }));
-        let pers_style = cell_style(is_focused_row && matches!(state.focus, NewGameFocus::Player { col: NewGameCol::Personality, .. }));
+        let name_style = cell_style(
+            is_focused_row
+                && matches!(
+                    state.focus,
+                    NewGameFocus::Player {
+                        col: NewGameCol::Name,
+                        ..
+                    }
+                ),
+        );
+        let kind_style = cell_style(
+            is_focused_row
+                && matches!(
+                    state.focus,
+                    NewGameFocus::Player {
+                        col: NewGameCol::Kind,
+                        ..
+                    }
+                ),
+        );
+        let model_style = cell_style(
+            is_focused_row
+                && matches!(
+                    state.focus,
+                    NewGameFocus::Player {
+                        col: NewGameCol::Model,
+                        ..
+                    }
+                ),
+        );
+        let pers_style = cell_style(
+            is_focused_row
+                && matches!(
+                    state.focus,
+                    NewGameFocus::Player {
+                        col: NewGameCol::Personality,
+                        ..
+                    }
+                ),
+        );
 
         let marker = if is_focused_row { ">" } else { " " };
 
         let line = Line::from(vec![
-            Span::styled(format!("{} {}  ", marker, i + 1), Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!("{} {}  ", marker, i + 1),
+                Style::default().fg(Color::DarkGray),
+            ),
             Span::styled(format!("{:<12} ", player.name), name_style),
             Span::styled(format!("{:<8} ", player.kind.label()), kind_style),
             Span::styled(format!("{:<18} ", truncate_str(model_str, 18)), model_style),
@@ -434,7 +487,11 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
     let seed_y = settings_y + 1;
     let seed_focused = matches!(state.focus, NewGameFocus::Setting(0));
     let seed_style = cell_style(seed_focused);
-    let seed_display = if state.seed_input.is_empty() { "random" } else { &state.seed_input };
+    let seed_display = if state.seed_input.is_empty() {
+        "random"
+    } else {
+        &state.seed_input
+    };
     let seed_line = Line::from(vec![
         Span::styled("  Seed: ", Style::default().fg(Color::White)),
         Span::styled(format!("[{}]", seed_display), seed_style),
@@ -461,8 +518,7 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
         Style::default().fg(Color::Green).bold()
     };
     let button_area = Rect::new(x_start, button_y, content_width, 1);
-    let button = Paragraph::new("  [ Start Game ]")
-        .style(button_style);
+    let button = Paragraph::new("  [ Start Game ]").style(button_style);
     f.render_widget(button, button_area);
 
     // Hint bar at bottom.
@@ -502,13 +558,21 @@ pub fn draw_file_picker(f: &mut Frame, state: &FilePickerState) {
             .style(Style::default().fg(Color::DarkGray));
         f.render_widget(msg, msg_area);
     } else {
-        let items: Vec<&str> = state.files.iter()
+        let items: Vec<&str> = state
+            .files
+            .iter()
             .map(|p| p.file_name().and_then(|n| n.to_str()).unwrap_or("?"))
             .collect();
         let menu_y = area.y + 3;
         let menu_height = items.len().min(area.height.saturating_sub(6) as usize) as u16;
         let menu_area = Rect::new(area.x, menu_y, area.width, menu_height);
-        render_menu(&items, state.selected, menu_area, f.buffer_mut(), Color::Cyan);
+        render_menu(
+            &items,
+            state.selected,
+            menu_area,
+            f.buffer_mut(),
+            Color::Cyan,
+        );
     }
 
     // Hint.
@@ -535,7 +599,12 @@ pub fn draw_post_game(f: &mut Frame, state: &PostGameState) {
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Yellow));
-    let winner_area = Rect::new(x_start, winner_y, content_width, 3 + state.scores.len() as u16 + 1);
+    let winner_area = Rect::new(
+        x_start,
+        winner_y,
+        content_width,
+        3 + state.scores.len() as u16 + 1,
+    );
     f.render_widget(winner_block, winner_area);
 
     // Winner line.
@@ -569,7 +638,13 @@ pub fn draw_post_game(f: &mut Frame, state: &PostGameState) {
     let menu_height = POST_GAME_ITEMS.len() as u16;
     if menu_y + menu_height < area.y + area.height {
         let menu_area = Rect::new(area.x, menu_y, area.width, menu_height);
-        render_menu(POST_GAME_ITEMS, state.selected, menu_area, f.buffer_mut(), Color::Yellow);
+        render_menu(
+            POST_GAME_ITEMS,
+            state.selected,
+            menu_area,
+            f.buffer_mut(),
+            Color::Yellow,
+        );
     }
 
     // Hint.
@@ -601,7 +676,7 @@ fn truncate_str(s: &str, max: usize) -> &str {
 
 /// Find a file matching `{prefix}*.{ext}` in the current directory.
 fn find_files_with_extension(prefix: &str, ext: &str) -> Option<PathBuf> {
-    let pattern = format!("{}", prefix);
+    let pattern = prefix.to_string();
     std::fs::read_dir(".")
         .ok()?
         .filter_map(|e| e.ok())

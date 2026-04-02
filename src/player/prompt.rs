@@ -216,11 +216,7 @@ pub fn format_recent_history(
 }
 
 /// Build the turn prompt with board state, recent history, and choices.
-pub fn turn_prompt(
-    state: &GameState,
-    player_id: PlayerId,
-    choices: &[PlayerChoice],
-) -> String {
+pub fn turn_prompt(state: &GameState, player_id: PlayerId, choices: &[PlayerChoice]) -> String {
     turn_prompt_with_history(state, player_id, choices, &[], &[])
 }
 

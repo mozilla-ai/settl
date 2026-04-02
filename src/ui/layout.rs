@@ -3,11 +3,11 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
-use super::PlayingState;
 use super::board_view;
 use super::chat_panel;
 use super::game_log;
 use super::resource_bar;
+use super::PlayingState;
 
 /// Draw the full TUI game layout (used during the Playing screen).
 ///
@@ -33,7 +33,7 @@ pub fn draw_playing(f: &mut Frame, ps: &PlayingState) {
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(12),       // Board + players
+            Constraint::Min(12),        // Board + players
             Constraint::Percentage(40), // Game log + AI chat
             Constraint::Length(1),      // Status bar
         ])
@@ -43,8 +43,8 @@ pub fn draw_playing(f: &mut Frame, ps: &PlayingState) {
     let top_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Min(40),       // Board
-            Constraint::Length(24),     // Players panel
+            Constraint::Min(40),    // Board
+            Constraint::Length(24), // Players panel
         ])
         .split(main_chunks[0]);
 
@@ -63,13 +63,12 @@ pub fn draw_playing(f: &mut Frame, ps: &PlayingState) {
             .alignment(Alignment::Center);
         f.render_widget(waiting, top_chunks[0]);
 
-        let no_players = Paragraph::new("")
-            .block(
-                Block::default()
-                    .title(" Players ")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
-            );
+        let no_players = Paragraph::new("").block(
+            Block::default()
+                .title(" Players ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
         f.render_widget(no_players, top_chunks[1]);
     }
 
@@ -83,8 +82,18 @@ pub fn draw_playing(f: &mut Frame, ps: &PlayingState) {
         .split(main_chunks[1]);
 
     // Render game log and AI chat.
-    game_log::render_log(&ps.messages, ps.log_scroll, bottom_chunks[0], f.buffer_mut());
-    chat_panel::render_chat(&ps.chat_messages, ps.chat_scroll, bottom_chunks[1], f.buffer_mut());
+    game_log::render_log(
+        &ps.messages,
+        ps.log_scroll,
+        bottom_chunks[0],
+        f.buffer_mut(),
+    );
+    chat_panel::render_chat(
+        &ps.chat_messages,
+        ps.chat_scroll,
+        bottom_chunks[1],
+        f.buffer_mut(),
+    );
 
     // Status bar.
     let pause_indicator = if ps.paused { " PAUSED " } else { "" };
@@ -102,7 +111,11 @@ pub fn draw_playing(f: &mut Frame, ps: &PlayingState) {
             Style::default().fg(Color::DarkGray),
         ),
         Span::styled(
-            if ps.game_over { " GAME OVER — press Enter " } else { "" },
+            if ps.game_over {
+                " GAME OVER — press Enter "
+            } else {
+                ""
+            },
             Style::default().fg(Color::Black).bg(Color::Green).bold(),
         ),
     ]);
@@ -121,7 +134,9 @@ fn draw_human_prompt(f: &mut Frame, prompt: &super::PendingHumanPrompt) {
 
     // Size the popup to fit the content.
     let max_option_len = prompt.options.iter().map(|o| o.len()).max().unwrap_or(10);
-    let popup_width = (max_option_len as u16 + 8).max(prompt.title.len() as u16 + 6).min(area.width - 4);
+    let popup_width = (max_option_len as u16 + 8)
+        .max(prompt.title.len() as u16 + 6)
+        .min(area.width - 4);
     let popup_height = (prompt.options.len() as u16 + 4).min(area.height - 2);
 
     let popup_x = area.x + (area.width.saturating_sub(popup_width)) / 2;

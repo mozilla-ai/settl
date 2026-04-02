@@ -11,7 +11,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
 use crossterm::ExecutableCommand;
 use ratatui::prelude::*;
 use tokio::sync::mpsc;
@@ -19,20 +21,15 @@ use tokio::sync::mpsc;
 use crate::game::board::Board;
 use crate::game::orchestrator::GameOrchestrator;
 use crate::game::state::GameState;
-use crate::player::personality::Personality;
 use crate::player;
+use crate::player::personality::Personality;
 use crate::replay::event::GameEvent;
 use crate::replay::save::SaveGame;
 
 use screens::*;
 
 /// Player colors shared across all UI panels.
-pub const PLAYER_COLORS: [Color; 4] = [
-    Color::Red,
-    Color::Blue,
-    Color::Green,
-    Color::Magenta,
-];
+pub const PLAYER_COLORS: [Color; 4] = [Color::Red, Color::Blue, Color::Green, Color::Magenta];
 
 /// Events sent from the game orchestrator to the TUI.
 #[derive(Debug, Clone)]
@@ -51,10 +48,7 @@ pub enum UiEvent {
         reasoning: String,
     },
     /// The game has ended.
-    GameOver {
-        winner: usize,
-        message: String,
-    },
+    GameOver { winner: usize, message: String },
 }
 
 // ── Screen State Machine ───────────────────────────────────────────────
@@ -98,7 +92,11 @@ pub struct PlayingState {
 }
 
 impl PlayingState {
-    fn new(rx: mpsc::UnboundedReceiver<UiEvent>, player_names: Vec<String>, has_human: bool) -> Self {
+    fn new(
+        rx: mpsc::UnboundedReceiver<UiEvent>,
+        player_names: Vec<String>,
+        has_human: bool,
+    ) -> Self {
         let start_msg = if has_human {
             "Game started — your turn will show a prompt".into()
         } else {
@@ -128,7 +126,11 @@ impl PlayingState {
     /// Apply a UI event from the game engine.
     fn handle_game_event(&mut self, ui_event: UiEvent) {
         match ui_event {
-            UiEvent::StateUpdate { state, event: _, message } => {
+            UiEvent::StateUpdate {
+                state,
+                event: _,
+                message,
+            } => {
                 self.state = Some(state);
                 if !message.is_empty() {
                     self.messages.push(message);
@@ -136,7 +138,11 @@ impl PlayingState {
                     self.log_scroll = total.saturating_sub(1);
                 }
             }
-            UiEvent::AiReasoning { player_id, player_name, reasoning } => {
+            UiEvent::AiReasoning {
+                player_id,
+                player_name,
+                reasoning,
+            } => {
                 self.chat_messages.push(chat_panel::ChatMessage {
                     player: player_name,
                     player_id,
@@ -146,7 +152,9 @@ impl PlayingState {
                 self.chat_scroll = total.saturating_sub(1);
             }
             UiEvent::GameOver { winner, message } => {
-                let winner_name = self.player_names.get(winner)
+                let winner_name = self
+                    .player_names
+                    .get(winner)
                     .cloned()
                     .unwrap_or_else(|| "?".into());
                 self.messages.push(format!(
@@ -235,7 +243,7 @@ async fn run_event_loop(
                     match action {
                         Action::None => {}
                         Action::Quit => return Ok(()),
-                        Action::Transition(screen) => app.screen = screen,
+                        Action::Transition(screen) => app.screen = *screen,
                         Action::StartGame => {
                             if let Screen::NewGame(ref ng) = app.screen {
                                 let screen = launch_game(ng, &app.personalities);
@@ -312,7 +320,7 @@ fn draw_screen(f: &mut Frame, screen: &Screen) {
 enum Action {
     None,
     Quit,
-    Transition(Screen),
+    Transition(Box<Screen>),
     StartGame,
     LoadFile,
 }
@@ -321,7 +329,7 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
     match &mut app.screen {
         Screen::Title { .. } => {
             // Any key → main menu.
-            Action::Transition(Screen::MainMenu(MainMenuState::new()))
+            Action::Transition(Box::new(Screen::MainMenu(MainMenuState::default())))
         }
 
         Screen::MainMenu(state) => {
@@ -338,15 +346,15 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 KeyCode::Enter => {
                     let selected_item = items[state.selected];
                     match selected_item {
-                        "New Game" => Action::Transition(
-                            Screen::NewGame(NewGameState::new(&app.personalities))
-                        ),
-                        "Continue Game" => Action::Transition(
-                            Screen::FilePicker(FilePickerState::new(FilePickerPurpose::Resume))
-                        ),
-                        "Replay Game" => Action::Transition(
-                            Screen::FilePicker(FilePickerState::new(FilePickerPurpose::Replay))
-                        ),
+                        "New Game" => Action::Transition(Box::new(Screen::NewGame(
+                            NewGameState::new(&app.personalities),
+                        ))),
+                        "Continue Game" => Action::Transition(Box::new(Screen::FilePicker(
+                            FilePickerState::new(FilePickerPurpose::Resume),
+                        ))),
+                        "Replay Game" => Action::Transition(Box::new(Screen::FilePicker(
+                            FilePickerState::new(FilePickerPurpose::Replay),
+                        ))),
                         "Quit" => Action::Quit,
                         _ => Action::None,
                     }
@@ -361,7 +369,9 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 return handle_new_game_editing(state, key);
             }
             match key {
-                KeyCode::Esc => Action::Transition(Screen::MainMenu(MainMenuState::new())),
+                KeyCode::Esc => {
+                    Action::Transition(Box::new(Screen::MainMenu(MainMenuState::default())))
+                }
                 KeyCode::Char('+') | KeyCode::Char('=') => {
                     state.add_player();
                     Action::None
@@ -397,7 +407,10 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 KeyCode::Enter => {
                     match state.focus {
                         NewGameFocus::StartButton => Action::StartGame,
-                        NewGameFocus::Player { col: NewGameCol::Name, .. } => {
+                        NewGameFocus::Player {
+                            col: NewGameCol::Name,
+                            ..
+                        } => {
                             state.editing = true;
                             Action::None
                         }
@@ -416,31 +429,32 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
             }
         }
 
-        Screen::FilePicker(state) => {
-            match key {
-                KeyCode::Esc => Action::Transition(Screen::MainMenu(MainMenuState::new())),
-                KeyCode::Up | KeyCode::Char('k') => {
-                    state.selected = state.selected.checked_sub(1).unwrap_or(
-                        state.files.len().saturating_sub(1)
-                    );
-                    Action::None
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    if !state.files.is_empty() {
-                        state.selected = (state.selected + 1) % state.files.len();
-                    }
-                    Action::None
-                }
-                KeyCode::Enter => {
-                    if !state.files.is_empty() {
-                        Action::LoadFile
-                    } else {
-                        Action::None
-                    }
-                }
-                _ => Action::None,
+        Screen::FilePicker(state) => match key {
+            KeyCode::Esc => {
+                Action::Transition(Box::new(Screen::MainMenu(MainMenuState::default())))
             }
-        }
+            KeyCode::Up | KeyCode::Char('k') => {
+                state.selected = state
+                    .selected
+                    .checked_sub(1)
+                    .unwrap_or(state.files.len().saturating_sub(1));
+                Action::None
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if !state.files.is_empty() {
+                    state.selected = (state.selected + 1) % state.files.len();
+                }
+                Action::None
+            }
+            KeyCode::Enter => {
+                if !state.files.is_empty() {
+                    Action::LoadFile
+                } else {
+                    Action::None
+                }
+            }
+            _ => Action::None,
+        },
 
         Screen::Playing(ps) => {
             // If a human prompt is pending, intercept input for selection.
@@ -471,15 +485,15 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                     if ps.game_over {
                         // Build post-game from final state.
                         let post = build_post_game(ps);
-                        Action::Transition(Screen::PostGame(post))
+                        Action::Transition(Box::new(Screen::PostGame(post)))
                     } else {
                         // Quit back to menu mid-game.
-                        Action::Transition(Screen::MainMenu(MainMenuState::new()))
+                        Action::Transition(Box::new(Screen::MainMenu(MainMenuState::default())))
                     }
                 }
                 KeyCode::Enter if ps.game_over => {
                     let post = build_post_game(ps);
-                    Action::Transition(Screen::PostGame(post))
+                    Action::Transition(Box::new(Screen::PostGame(post)))
                 }
                 KeyCode::Char(' ') => {
                     ps.paused = !ps.paused;
@@ -505,33 +519,31 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
             }
         }
 
-        Screen::PostGame(state) => {
-            match key {
-                KeyCode::Up | KeyCode::Char('k') => {
-                    state.selected = state.selected.checked_sub(1)
-                        .unwrap_or(POST_GAME_ITEMS.len() - 1);
-                    Action::None
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    state.selected = (state.selected + 1) % POST_GAME_ITEMS.len();
-                    Action::None
-                }
-                KeyCode::Enter => {
-                    match POST_GAME_ITEMS[state.selected] {
-                        "Play Again" => Action::Transition(
-                            Screen::NewGame(NewGameState::new(&app.personalities))
-                        ),
-                        "Main Menu" => Action::Transition(
-                            Screen::MainMenu(MainMenuState::new())
-                        ),
-                        "Quit" => Action::Quit,
-                        _ => Action::None,
-                    }
-                }
-                KeyCode::Char('q') | KeyCode::Esc => Action::Quit,
-                _ => Action::None,
+        Screen::PostGame(state) => match key {
+            KeyCode::Up | KeyCode::Char('k') => {
+                state.selected = state
+                    .selected
+                    .checked_sub(1)
+                    .unwrap_or(POST_GAME_ITEMS.len() - 1);
+                Action::None
             }
-        }
+            KeyCode::Down | KeyCode::Char('j') => {
+                state.selected = (state.selected + 1) % POST_GAME_ITEMS.len();
+                Action::None
+            }
+            KeyCode::Enter => match POST_GAME_ITEMS[state.selected] {
+                "Play Again" => Action::Transition(Box::new(Screen::NewGame(NewGameState::new(
+                    &app.personalities,
+                )))),
+                "Main Menu" => {
+                    Action::Transition(Box::new(Screen::MainMenu(MainMenuState::default())))
+                }
+                "Quit" => Action::Quit,
+                _ => Action::None,
+            },
+            KeyCode::Char('q') | KeyCode::Esc => Action::Quit,
+            _ => Action::None,
+        },
     }
 }
 
@@ -549,18 +561,28 @@ fn handle_new_game_editing(state: &mut NewGameState, key: KeyCode) -> Action {
         }
         KeyCode::Backspace => {
             match state.focus {
-                NewGameFocus::Player { row, col: NewGameCol::Name } => {
+                NewGameFocus::Player {
+                    row,
+                    col: NewGameCol::Name,
+                } => {
                     state.players[row].name.pop();
                 }
-                NewGameFocus::Setting(0) => { state.seed_input.pop(); }
-                NewGameFocus::Setting(1) => { state.max_turns_input.pop(); }
+                NewGameFocus::Setting(0) => {
+                    state.seed_input.pop();
+                }
+                NewGameFocus::Setting(1) => {
+                    state.max_turns_input.pop();
+                }
                 _ => {}
             }
             Action::None
         }
         KeyCode::Char(c) => {
             match state.focus {
-                NewGameFocus::Player { row, col: NewGameCol::Name } => {
+                NewGameFocus::Player {
+                    row,
+                    col: NewGameCol::Name,
+                } => {
                     if state.players[row].name.len() < 12 {
                         state.players[row].name.push(c);
                     }
@@ -592,12 +614,10 @@ fn move_new_game_focus_up(state: &mut NewGameState) {
                 NewGameFocus::Player { row: 0, col }
             }
         }
-        NewGameFocus::Setting(0) => {
-            NewGameFocus::Player {
-                row: state.num_players() - 1,
-                col: NewGameCol::Kind,
-            }
-        }
+        NewGameFocus::Setting(0) => NewGameFocus::Player {
+            row: state.num_players() - 1,
+            col: NewGameCol::Kind,
+        },
         NewGameFocus::Setting(1) => NewGameFocus::Setting(0),
         NewGameFocus::StartButton => NewGameFocus::Setting(1),
         _ => state.focus,
@@ -622,58 +642,65 @@ fn move_new_game_focus_down(state: &mut NewGameState) {
 
 fn move_new_game_focus_next_col(state: &mut NewGameState) {
     if let NewGameFocus::Player { row, col } = state.focus {
-        state.focus = NewGameFocus::Player { row, col: col.next() };
+        state.focus = NewGameFocus::Player {
+            row,
+            col: col.next(),
+        };
     }
 }
 
 fn move_new_game_focus_prev_col(state: &mut NewGameState) {
     if let NewGameFocus::Player { row, col } = state.focus {
-        state.focus = NewGameFocus::Player { row, col: col.prev() };
+        state.focus = NewGameFocus::Player {
+            row,
+            col: col.prev(),
+        };
     }
 }
 
 fn cycle_new_game_value(state: &mut NewGameState, forward: bool) {
-    match state.focus {
-        NewGameFocus::Player { row, col } => {
-            let player = &mut state.players[row];
-            match col {
-                NewGameCol::Kind => {
-                    player.kind = if forward { player.kind.next() } else { player.kind.prev() };
-                }
-                NewGameCol::Model => {
-                    if player.kind == PlayerKind::Llm {
-                        let n = AVAILABLE_MODELS.len();
-                        player.model_index = if forward {
-                            (player.model_index + 1) % n
-                        } else {
-                            player.model_index.checked_sub(1).unwrap_or(n - 1)
-                        };
-                    }
-                }
-                NewGameCol::Personality => {
-                    if player.kind == PlayerKind::Llm {
-                        let n = state.personality_names.len();
-                        player.personality_index = if forward {
-                            (player.personality_index + 1) % n
-                        } else {
-                            player.personality_index.checked_sub(1).unwrap_or(n - 1)
-                        };
-                    }
-                }
-                NewGameCol::Name => {
-                    // Name doesn't cycle. Enter to edit instead.
+    if let NewGameFocus::Player { row, col } = state.focus {
+        let player = &mut state.players[row];
+        match col {
+            NewGameCol::Kind => {
+                player.kind = if forward {
+                    player.kind.next()
+                } else {
+                    player.kind.prev()
+                };
+            }
+            NewGameCol::Model => {
+                if player.kind == PlayerKind::Llm {
+                    let n = AVAILABLE_MODELS.len();
+                    player.model_index = if forward {
+                        (player.model_index + 1) % n
+                    } else {
+                        player.model_index.checked_sub(1).unwrap_or(n - 1)
+                    };
                 }
             }
+            NewGameCol::Personality => {
+                if player.kind == PlayerKind::Llm {
+                    let n = state.personality_names.len();
+                    player.personality_index = if forward {
+                        (player.personality_index + 1) % n
+                    } else {
+                        player.personality_index.checked_sub(1).unwrap_or(n - 1)
+                    };
+                }
+            }
+            NewGameCol::Name => {
+                // Name doesn't cycle. Enter to edit instead.
+            }
         }
-        _ => {}
     }
 }
 
 // ── Game Launch ────────────────────────────────────────────────────────
 
 fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> Screen {
-    use std::sync::Arc;
     use player::tui_human::{HumanInputChannel, TuiHumanPlayer};
+    use std::sync::Arc;
     use tokio::sync::Mutex;
 
     // Build board.
@@ -711,14 +738,15 @@ fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> S
         None
     };
 
-    let players: Vec<Box<dyn player::Player>> = ng.players.iter().map(|pc| {
-        match pc.kind {
-            PlayerKind::Random => {
-                Box::new(player::random::RandomPlayer::new(pc.name.clone()))
-                    as Box<dyn player::Player>
-            }
+    let players: Vec<Box<dyn player::Player>> = ng
+        .players
+        .iter()
+        .map(|pc| match pc.kind {
+            PlayerKind::Random => Box::new(player::random::RandomPlayer::new(pc.name.clone()))
+                as Box<dyn player::Player>,
             PlayerKind::Llm => {
-                let model = AVAILABLE_MODELS.get(pc.model_index)
+                let model = AVAILABLE_MODELS
+                    .get(pc.model_index)
                     .copied()
                     .unwrap_or("claude-sonnet-4-6")
                     .to_string();
@@ -726,20 +754,23 @@ fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> S
                     built_in_personalities[pc.personality_index].clone()
                 } else {
                     let disc_idx = pc.personality_index - built_in_personalities.len();
-                    discovered_personalities.get(disc_idx)
+                    discovered_personalities
+                        .get(disc_idx)
                         .cloned()
                         .unwrap_or_default()
                 };
-                Box::new(player::llm::LlmPlayer::new(pc.name.clone(), model, personality))
-                    as Box<dyn player::Player>
+                Box::new(player::llm::LlmPlayer::new(
+                    pc.name.clone(),
+                    model,
+                    personality,
+                )) as Box<dyn player::Player>
             }
             PlayerKind::Human => {
                 let channel = human_channels.as_ref().unwrap().0.clone();
-                Box::new(TuiHumanPlayer::new(pc.name.clone(), channel))
-                    as Box<dyn player::Player>
+                Box::new(TuiHumanPlayer::new(pc.name.clone(), channel)) as Box<dyn player::Player>
             }
-        }
-    }).collect();
+        })
+        .collect();
 
     let player_names: Vec<String> = ng.players.iter().map(|p| p.name.clone()).collect();
 
@@ -756,14 +787,18 @@ fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> S
         let result = orchestrator.run().await;
 
         // Save game log and replay.
-        let _ = orchestrator.log.write_jsonl(std::path::Path::new("game_log.jsonl"));
+        let _ = orchestrator
+            .log
+            .write_jsonl(std::path::Path::new("game_log.jsonl"));
         if let Ok(json) = serde_json::to_string_pretty(&orchestrator.replay) {
             let _ = std::fs::write("game_replay.json", json);
         }
 
         // Save game state on error for resume.
         if result.is_err() {
-            let model_ids: Vec<String> = orchestrator.player_names.iter()
+            let model_ids: Vec<String> = orchestrator
+                .player_names
+                .iter()
                 .map(|_| String::new()) // Can't recover model IDs here easily
                 .collect();
             let save = SaveGame::new(
@@ -790,12 +825,12 @@ fn launch_resume(path: &std::path::Path) -> Option<Screen> {
     let save = SaveGame::load_from_file(path).ok()?;
     let player_names = save.player_names.clone();
 
-    let players: Vec<Box<dyn player::Player>> = save.player_names.iter()
+    let players: Vec<Box<dyn player::Player>> = save
+        .player_names
+        .iter()
         .enumerate()
         .map(|(i, name)| {
-            let model = save.player_models.get(i)
-                .filter(|m| !m.is_empty())
-                .cloned();
+            let model = save.player_models.get(i).filter(|m| !m.is_empty()).cloned();
             if let Some(model_id) = model {
                 Box::new(player::llm::LlmPlayer::new(
                     name.clone(),
@@ -803,8 +838,7 @@ fn launch_resume(path: &std::path::Path) -> Option<Screen> {
                     Personality::default(),
                 )) as Box<dyn player::Player>
             } else {
-                Box::new(player::random::RandomPlayer::new(name.clone()))
-                    as Box<dyn player::Player>
+                Box::new(player::random::RandomPlayer::new(name.clone())) as Box<dyn player::Player>
             }
         })
         .collect();
@@ -820,7 +854,9 @@ fn launch_resume(path: &std::path::Path) -> Option<Screen> {
 
         let result = orchestrator.run().await;
 
-        let _ = orchestrator.log.write_jsonl(std::path::Path::new("game_log.jsonl"));
+        let _ = orchestrator
+            .log
+            .write_jsonl(std::path::Path::new("game_log.jsonl"));
         if let Ok(json) = serde_json::to_string_pretty(&orchestrator.replay) {
             let _ = std::fs::write("game_replay.json", json);
         }
@@ -844,7 +880,9 @@ fn launch_replay(path: &std::path::Path) -> Option<Screen> {
         tokio::spawn(async move {
             // Feed replay frames as synthetic UiEvents.
             for frame in &replay.frames {
-                let vp_str: String = frame.victory_points.iter()
+                let vp_str: String = frame
+                    .victory_points
+                    .iter()
                     .enumerate()
                     .map(|(p, v)| format!("P{}:{}", p, v))
                     .collect::<Vec<_>>()
@@ -852,10 +890,7 @@ fn launch_replay(path: &std::path::Path) -> Option<Screen> {
                 let message = format!("[T{}] {} [{}]", frame.turn, frame.description, vp_str);
 
                 let _ = tx.send(UiEvent::StateUpdate {
-                    state: Arc::new(GameState::new(
-                        Board::default_board(),
-                        replay.num_players,
-                    )),
+                    state: Arc::new(GameState::new(Board::default_board(), replay.num_players)),
                     event: None,
                     message,
                 });
@@ -878,15 +913,17 @@ fn launch_replay(path: &std::path::Path) -> Option<Screen> {
     // Fall back to JSONL event log — simpler playback.
     if let Ok(log) = crate::replay::event::GameLog::read_jsonl(path) {
         let (tx, rx) = mpsc::unbounded_channel();
-        let player_names = vec!["Player 0".into(), "Player 1".into(), "Player 2".into(), "Player 3".into()];
+        let player_names = vec![
+            "Player 0".into(),
+            "Player 1".into(),
+            "Player 2".into(),
+            "Player 3".into(),
+        ];
 
         tokio::spawn(async move {
             for event in log.events() {
                 let _ = tx.send(UiEvent::StateUpdate {
-                    state: Arc::new(GameState::new(
-                        Board::default_board(),
-                        4,
-                    )),
+                    state: Arc::new(GameState::new(Board::default_board(), 4)),
                     event: None,
                     message: format!("{:?}", event),
                 });
@@ -901,15 +938,19 @@ fn launch_replay(path: &std::path::Path) -> Option<Screen> {
 }
 
 fn build_post_game(ps: &PlayingState) -> PostGameState {
-    let (winner_index, winner_name) = ps.game_over_winner.clone()
-        .unwrap_or((0, "Unknown".into()));
+    let (winner_index, winner_name) = ps.game_over_winner.clone().unwrap_or((0, "Unknown".into()));
 
     let scores: Vec<(String, u8)> = if let Some(ref state) = ps.state {
-        ps.player_names.iter().enumerate().map(|(i, name)| {
-            (name.clone(), state.victory_points(i) as u8)
-        }).collect()
+        ps.player_names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| (name.clone(), state.victory_points(i)))
+            .collect()
     } else {
-        ps.player_names.iter().map(|name| (name.clone(), 0u8)).collect()
+        ps.player_names
+            .iter()
+            .map(|name| (name.clone(), 0u8))
+            .collect()
     };
 
     PostGameState {

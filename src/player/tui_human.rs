@@ -14,6 +14,7 @@ use crate::game::state::GameState;
 use crate::player::{Player, PlayerChoice};
 
 /// A prompt sent from the game engine to the TUI for human input.
+#[allow(dead_code)]
 pub struct HumanPrompt {
     pub player_id: PlayerId,
     pub title: String,
@@ -72,7 +73,9 @@ impl Player for TuiHumanPlayer {
         choices: &[PlayerChoice],
     ) -> (usize, String) {
         let options: Vec<String> = choices.iter().map(|c| format!("{}", c)).collect();
-        let idx = self.pick_index(player_id, "Choose action".into(), options).await;
+        let idx = self
+            .pick_index(player_id, "Choose action".into(), options)
+            .await;
         (idx, String::new())
     }
 
@@ -186,7 +189,9 @@ impl Player for TuiHumanPlayer {
         context: &str,
     ) -> (Resource, String) {
         let options: Vec<String> = RESOURCE_NAMES.iter().map(|s| s.to_string()).collect();
-        let idx = self.pick_index(player_id, context.to_string(), options).await;
+        let idx = self
+            .pick_index(player_id, context.to_string(), options)
+            .await;
         (RESOURCES[idx.min(RESOURCES.len() - 1)], String::new())
     }
 

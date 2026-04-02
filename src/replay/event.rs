@@ -170,7 +170,7 @@ impl GameLog {
                 }
                 Err(e) => {
                     eprintln!("Warning: failed to serialize event: {}", e);
-                    return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+                    return Err(std::io::Error::other(e));
                 }
             }
         }
@@ -219,7 +219,9 @@ impl Default for GameLog {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::game::board::{EdgeCoord, EdgeDirection, HexCoord, Resource, VertexCoord, VertexDirection};
+    use crate::game::board::{
+        EdgeCoord, EdgeDirection, HexCoord, Resource, VertexCoord, VertexDirection,
+    };
     use std::io::Read as _;
     use tempfile::NamedTempFile;
 
@@ -236,31 +238,19 @@ mod tests {
                 total: 8,
             },
             GameEvent::ResourcesDistributed {
-                distributions: vec![
-                    (0, Resource::Brick, 1),
-                    (1, Resource::Wheat, 2),
-                ],
+                distributions: vec![(0, Resource::Brick, 1), (1, Resource::Wheat, 2)],
             },
             GameEvent::InitialSettlementPlaced {
                 player: 0,
-                vertex: VertexCoord::new(
-                    HexCoord::new(0, 0),
-                    VertexDirection::North,
-                ),
+                vertex: VertexCoord::new(HexCoord::new(0, 0), VertexDirection::North),
             },
             GameEvent::InitialRoadPlaced {
                 player: 0,
-                edge: EdgeCoord::new(
-                    HexCoord::new(0, 0),
-                    EdgeDirection::East,
-                ),
+                edge: EdgeCoord::new(HexCoord::new(0, 0), EdgeDirection::East),
             },
             GameEvent::SettlementBuilt {
                 player: 1,
-                vertex: VertexCoord::new(
-                    HexCoord::new(1, -1),
-                    VertexDirection::South,
-                ),
+                vertex: VertexCoord::new(HexCoord::new(1, -1), VertexDirection::South),
                 reasoning: "good spot for ore".to_string(),
             },
             GameEvent::RobberMoved {
@@ -288,8 +278,7 @@ mod tests {
     fn event_serializes_and_deserializes() {
         for event in sample_events() {
             let json = serde_json::to_string(&event).expect("serialize");
-            let roundtrip: GameEvent =
-                serde_json::from_str(&json).expect("deserialize");
+            let roundtrip: GameEvent = serde_json::from_str(&json).expect("deserialize");
 
             // Verify round-trip by re-serializing and comparing JSON strings.
             let json2 = serde_json::to_string(&roundtrip).expect("re-serialize");
