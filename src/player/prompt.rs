@@ -170,23 +170,19 @@ pub fn format_hex_options(hexes: &[HexCoord]) -> String {
         .join("\n")
 }
 
-/// Build a compact system prompt for small/local models (e.g. Bonsai-1.7B).
+/// Condensed Catan rules for LLM system prompts -- everything needed to play
+/// correctly, without component lists, geometry explanations, or tactical tips.
+/// The full rulebook lives in CATAN_RULES.md for human reference.
+const CATAN_RULES: &str = include_str!("../../CATAN_RULES_COMPACT.md");
+
+/// Build the system prompt for an LLM player (e.g. llamafile).
 ///
-/// Uses a condensed rules summary instead of the full rulebook to fit in
-/// limited context windows.
+/// Includes the condensed rulebook from CATAN_RULES_COMPACT.md.
 pub fn system_prompt_compact(player_name: &str, personality_prompt: &str) -> String {
     format!(
         "You are playing Settlers of Catan. Your name is {player_name}.\n\n\
          {personality_prompt}\n\n\
-         RULES:\n\
-         - Build settlements at vertices, roads along edges, upgrade settlements to cities.\n\
-         - Resources: Wood (forest), Brick (hills), Sheep (pasture), Wheat (fields), Ore (mountains).\n\
-         - Costs: Road = Wood+Brick. Settlement = Wood+Brick+Wheat+Sheep. City = 2 Wheat+3 Ore. Dev Card = Wheat+Sheep+Ore.\n\
-         - Roll dice each turn: matching hexes produce resources for adjacent settlements (1) and cities (2).\n\
-         - Roll 7: players with >7 cards discard half, then move robber and steal.\n\
-         - Trade with players or bank (4:1, or 3:1/2:1 with harbors).\n\
-         - Dev cards: Knight (move robber), Road Building (2 free roads), Year of Plenty (2 free resources), Monopoly (take all of 1 type).\n\
-         - Longest Road (5+) and Largest Army (3+ knights) each give 2 VP. First to 10 VP wins.\n\n\
+         {CATAN_RULES}\n\n\
          INSTRUCTIONS:\n\
          - Explain your reasoning, then call the tool to make your choice.\n\
          - Reference coordinates and resource counts.",
