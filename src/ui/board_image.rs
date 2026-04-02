@@ -175,6 +175,7 @@ pub struct BoardImageRenderer {
     base_image: Option<RgbaImage>,
     board_fingerprint: u64,
     last_area: (u16, u16),
+    font_size: (u16, u16),
     pixel_grid: PixelHexGrid,
     font: FontRef<'static>,
     font_bold: FontRef<'static>,
@@ -190,12 +191,14 @@ impl BoardImageRenderer {
         // Create initial empty protocol with a blank image.
         let blank = RgbaImage::from_pixel(IMG_WIDTH, IMG_HEIGHT, BG_COLOR);
         let protocol = picker.new_resize_protocol(DynamicImage::ImageRgba8(blank));
+        let font_size = picker.font_size();
 
         BoardImageRenderer {
             protocol: Some(protocol),
             base_image: None,
             board_fingerprint: 0,
             last_area: (0, 0),
+            font_size,
             pixel_grid: PixelHexGrid::new(),
             font,
             font_bold,
@@ -215,6 +218,7 @@ impl BoardImageRenderer {
             base_image: None,
             board_fingerprint: 0,
             last_area: (0, 0),
+            font_size: (8, 16), // reasonable default for tests
             pixel_grid: PixelHexGrid::new(),
             font,
             font_bold,
@@ -262,19 +266,58 @@ impl BoardImageRenderer {
         if let Some(ref mut proto) = self.protocol {
             let widget = StatefulImage::default().resize(Resize::Scale(None));
             f.render_stateful_widget(widget, area, proto);
-            if let Some(Err(e)) = proto.last_encoding_result() {
-                log::error!("ratatui-image encoding error: {:?}", e);
+            if let Some(ref result) = proto.last_encoding_result() {
+                match result {
+                    Ok(()) => log::debug!(
+                        "render ok: area={}x{}+{}+{}",
+                        area.width,
+                        area.height,
+                        area.x,
+                        area.y
+                    ),
+                    Err(e) => log::error!("ratatui-image encoding error: {:?}", e),
+                }
             }
+        } else {
+            log::warn!("render called with no protocol");
         }
 
-        // Render cursor overlay as terminal cells (instant, no image re-encoding).
+        // Render cursor overlay as terminal cells on top of the image.
+        // NOTE: This writes characters over image cells. If this causes
+        // rendering issues with pixel protocols, comment out this line.
         self.render_cursor_cells(f, area, input_mode);
     }
 
     /// Map a pixel coordinate in the board image to a terminal cell position.
-    fn pixel_to_cell(&self, px: f64, py: f64, area: Rect) -> (u16, u16) {
-        let col = area.x + (px * area.width as f64 / IMG_WIDTH as f64) as u16;
-        let row = area.y + (py * area.height as f64 / IMG_HEIGHT as f64) as u16;
+    ///
+    /// Accounts for aspect-ratio letterboxing: `Resize::Scale` fits the image
+    /// proportionally, so there may be horizontal or vertical padding.
+    fn pixel_to_cell(&self, px: f64, py: f64, area: Rect, font_size: (u16, u16)) -> (u16, u16) {
+        let (fw, fh) = (font_size.0.max(1) as f64, font_size.1.max(1) as f64);
+
+        // Available pixel space in the terminal area.
+        let avail_px_w = area.width as f64 * fw;
+        let avail_px_h = area.height as f64 * fh;
+
+        // Scale factor to fit the image while keeping aspect ratio.
+        let scale_x = avail_px_w / IMG_WIDTH as f64;
+        let scale_y = avail_px_h / IMG_HEIGHT as f64;
+        let scale = scale_x.min(scale_y);
+
+        // Actual rendered image size in pixels.
+        let rendered_w = IMG_WIDTH as f64 * scale;
+        let rendered_h = IMG_HEIGHT as f64 * scale;
+
+        // Padding (image is centered in the area).
+        let pad_px_x = (avail_px_w - rendered_w) / 2.0;
+        let pad_px_y = (avail_px_h - rendered_h) / 2.0;
+
+        // Map image pixel -> terminal pixel -> terminal cell.
+        let term_px_x = pad_px_x + px * scale;
+        let term_px_y = pad_px_y + py * scale;
+
+        let col = area.x + (term_px_x / fw) as u16;
+        let row = area.y + (term_px_y / fh) as u16;
         (
             col.min(area.right().saturating_sub(1)),
             row.min(area.bottom().saturating_sub(1)),
@@ -297,12 +340,13 @@ impl BoardImageRenderer {
 
         let legal_style = Style::default().fg(Color::Yellow);
         let cursor_style = Style::default().fg(Color::Black).bg(Color::Yellow).bold();
+        let fs = self.font_size;
 
         match kind {
             CursorKind::Settlement => {
                 for (i, v) in legal_vertices.iter().enumerate() {
                     if let Some(&(px, py)) = self.pixel_grid.vertex_pos.get(v) {
-                        let (col, row) = self.pixel_to_cell(px, py, area);
+                        let (col, row) = self.pixel_to_cell(px, py, area, fs);
                         let style = if i == *selected {
                             cursor_style
                         } else {
@@ -320,7 +364,7 @@ impl BoardImageRenderer {
             CursorKind::Road => {
                 for (i, e) in legal_edges.iter().enumerate() {
                     if let Some(&(mx, my)) = self.pixel_grid.edge_midpoints.get(e) {
-                        let (col, row) = self.pixel_to_cell(mx, my, area);
+                        let (col, row) = self.pixel_to_cell(mx, my, area, fs);
                         let style = if i == *selected {
                             cursor_style
                         } else {
@@ -338,7 +382,7 @@ impl BoardImageRenderer {
             CursorKind::Robber => {
                 for (i, h) in legal_hexes.iter().enumerate() {
                     if let Some(&(px, py)) = self.pixel_grid.hex_centers.get(h) {
-                        let (col, row) = self.pixel_to_cell(px, py, area);
+                        let (col, row) = self.pixel_to_cell(px, py, area, fs);
                         let style = if i == *selected {
                             cursor_style
                         } else {
