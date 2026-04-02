@@ -16,9 +16,9 @@ use crate::player::{Player, PlayerChoice};
 
 /// An LLM-powered Catan player using genai for multi-provider support.
 pub struct LlmPlayer {
-    /// Display name (e.g. "Claude", "GPT-4o").
+    /// Display name (e.g. "Alice", "Bob").
     name: String,
-    /// Model identifier for genai (e.g. "claude-sonnet-4-6", "gpt-4o-mini").
+    /// Model identifier for genai (e.g. "openai::bonsai").
     model: String,
     /// genai client.
     client: Client,
@@ -28,26 +28,10 @@ pub struct LlmPlayer {
     max_retries: usize,
     /// Extra game context (recent history) injected by the orchestrator.
     extra_context: tokio::sync::Mutex<String>,
-    /// Use compact system prompt (for small local models).
-    compact_prompt: bool,
 }
 
 impl LlmPlayer {
-    pub fn new(name: String, model: String, personality: Personality) -> Self {
-        Self {
-            name,
-            model,
-            client: Client::default(),
-            personality,
-            max_retries: 2,
-            extra_context: tokio::sync::Mutex::new(String::new()),
-            compact_prompt: false,
-        }
-    }
-
     /// Create an LLM player backed by a pre-configured genai Client.
-    ///
-    /// Uses compact system prompts by default (suitable for small local models).
     pub fn with_client(
         name: String,
         model: String,
@@ -61,18 +45,13 @@ impl LlmPlayer {
             personality,
             max_retries: 2,
             extra_context: tokio::sync::Mutex::new(String::new()),
-            compact_prompt: true,
         }
     }
 
-    /// Build the system prompt, choosing compact or full based on model size.
+    /// Build the compact system prompt for local models.
     fn system_prompt(&self) -> String {
         let personality = self.personality.to_system_prompt();
-        if self.compact_prompt {
-            prompt::system_prompt_compact(&self.name, &personality)
-        } else {
-            prompt::system_prompt(&self.name, &personality)
-        }
+        prompt::system_prompt_compact(&self.name, &personality)
     }
 
     /// Build the choose_index tool definition (used for most selection prompts).

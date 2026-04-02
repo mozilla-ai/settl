@@ -131,32 +131,22 @@ fn new_game_minimum_two_players() {
 #[test]
 fn new_game_focus_navigation() {
     let mut app = new_game_app();
-    // Start on Player { row: 0, col: Kind }. Down should go to row 1.
+    // Start on Player { row: 0, col: Name }. Down should go to row 1.
     handle_input(&mut app, KeyCode::Down);
     if let Screen::NewGame(ref state) = app.screen {
         assert_eq!(
             state.focus,
             NewGameFocus::Player {
                 row: 1,
-                col: NewGameCol::Kind
+                col: NewGameCol::Name
             }
         );
     }
 }
 
 #[test]
-fn new_game_player_0_kind_locked_to_human() {
-    let mut app = new_game_app();
-    // Focus is on Player { row: 0, col: Kind }. Cycling should not change it.
-    handle_input(&mut app, KeyCode::Right); // cycle forward
-    if let Screen::NewGame(ref state) = app.screen {
-        assert_eq!(
-            state.players[0].kind,
-            PlayerKind::Human,
-            "player 0 should always be Human"
-        );
-    }
-    handle_input(&mut app, KeyCode::Left); // cycle backward
+fn new_game_player_0_is_always_human() {
+    let app = new_game_app();
     if let Screen::NewGame(ref state) = app.screen {
         assert_eq!(
             state.players[0].kind,
@@ -177,64 +167,15 @@ fn llamafile_setup_esc_returns_to_new_game() {
 }
 
 #[test]
-fn new_game_ai_kind_cycles_through_llamafile() {
-    let mut app = new_game_app();
-    // Navigate to player 1's Kind column (an AI player).
-    handle_input(&mut app, KeyCode::Down);
-    // Player 1 starts as Llamafile (default when no API keys).
-    // Cycle: Llamafile -> Llm -> Random -> Llamafile.
+fn new_game_ai_players_are_llamafile() {
+    let app = new_game_app();
     if let Screen::NewGame(ref state) = app.screen {
-        let initial = state.players[1].kind.clone();
-        // Regardless of starting kind, cycling should include Llamafile.
-        assert!(
-            matches!(
-                initial,
-                PlayerKind::Llamafile | PlayerKind::Random | PlayerKind::Llm
-            ),
-            "AI player should be an AI kind"
-        );
-    }
-    // Cycle forward through all AI kinds.
-    handle_input(&mut app, KeyCode::Right);
-    let kind1 = if let Screen::NewGame(ref state) = app.screen {
-        state.players[1].kind.clone()
-    } else {
-        panic!("should be on NewGame");
-    };
-    handle_input(&mut app, KeyCode::Right);
-    let kind2 = if let Screen::NewGame(ref state) = app.screen {
-        state.players[1].kind.clone()
-    } else {
-        panic!("should be on NewGame");
-    };
-    handle_input(&mut app, KeyCode::Right);
-    let kind3 = if let Screen::NewGame(ref state) = app.screen {
-        state.players[1].kind.clone()
-    } else {
-        panic!("should be on NewGame");
-    };
-    // After 3 cycles, should be back to start. All three AI kinds should appear.
-    let kinds = vec![kind1, kind2, kind3.clone()];
-    assert!(kinds.contains(&PlayerKind::Random));
-    assert!(kinds.contains(&PlayerKind::Llamafile));
-    assert!(kinds.contains(&PlayerKind::Llm));
-    // Should never be Human.
-    assert!(!kinds.contains(&PlayerKind::Human));
-}
-
-#[test]
-fn new_game_ai_players_cannot_be_human() {
-    let mut app = new_game_app();
-    // Navigate to player 1's Kind column.
-    handle_input(&mut app, KeyCode::Down);
-    // Cycle through many times -- should never land on Human.
-    for _ in 0..10 {
-        handle_input(&mut app, KeyCode::Right);
-        if let Screen::NewGame(ref state) = app.screen {
-            assert_ne!(
-                state.players[1].kind,
-                PlayerKind::Human,
-                "AI player should never become Human"
+        for i in 1..state.players.len() {
+            assert_eq!(
+                state.players[i].kind,
+                PlayerKind::Llamafile,
+                "AI player {} should be Llamafile",
+                i
             );
         }
     }
@@ -263,19 +204,19 @@ fn new_game_llamafile_personality_cycles() {
 }
 
 #[test]
-fn new_game_llamafile_model_does_not_cycle() {
-    let mut app = new_game_llamafile_app();
-    // Focus on row 1, Model column.
+fn new_game_personality_does_not_cycle_for_human() {
+    let mut app = new_game_app();
+    // Focus on row 0 (Human player), Personality column.
     if let Screen::NewGame(ref mut state) = app.screen {
         state.focus = NewGameFocus::Player {
-            row: 1,
-            col: NewGameCol::Model,
+            row: 0,
+            col: NewGameCol::Personality,
         };
     }
-    // Cycle should not change model_index (Llamafile has fixed model).
+    // Cycling should not change personality for Human player.
     handle_input(&mut app, KeyCode::Right);
     if let Screen::NewGame(ref state) = app.screen {
-        assert_eq!(state.players[1].model_index, 0);
+        assert_eq!(state.players[0].personality_index, 0);
     }
 }
 

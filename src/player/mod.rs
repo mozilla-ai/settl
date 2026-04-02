@@ -2,6 +2,7 @@ pub mod human;
 pub mod llm;
 pub mod personality;
 pub mod prompt;
+#[cfg(test)]
 pub mod random;
 pub mod tui_human;
 

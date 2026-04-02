@@ -506,9 +506,11 @@ async fn run_event_loop(
                         Action::Transition(screen) => app.screen = screen,
                         Action::StartGame => {
                             if let Screen::NewGame(ref ng) = app.screen {
-                                let needs_llamafile =
-                                    ng.players.iter().any(|p| p.kind == PlayerKind::Llamafile);
-                                if needs_llamafile && app.llamafile_process.is_none() {
+                                if let Some(ref process) = app.llamafile_process {
+                                    let screen =
+                                        launch_game(ng, &app.personalities, Some(process.port));
+                                    app.screen = screen;
+                                } else {
                                     // Transition to LlamafileSetup to download + start.
                                     let (status_tx, status_rx) = mpsc::unbounded_channel();
                                     let saved_config = clone_new_game_state(ng);
@@ -520,13 +522,6 @@ async fn run_event_loop(
                                         task_handle: Some(handle),
                                     };
                                     app.screen = Screen::LlamafileSetup(setup_state);
-                                } else if needs_llamafile {
-                                    let port = app.llamafile_process.as_ref().unwrap().port;
-                                    let screen = launch_game(ng, &app.personalities, Some(port));
-                                    app.screen = screen;
-                                } else {
-                                    let screen = launch_game(ng, &app.personalities, None);
-                                    app.screen = screen;
                                 }
                             }
                         }
@@ -1250,7 +1245,7 @@ fn move_new_game_focus_up(state: &mut NewGameState) {
         }
         NewGameFocus::StartButton => NewGameFocus::Player {
             row: state.num_players() - 1,
-            col: NewGameCol::Kind,
+            col: NewGameCol::Name,
         },
     };
 }
@@ -1290,28 +1285,9 @@ fn cycle_new_game_value(state: &mut NewGameState, forward: bool) {
     if let NewGameFocus::Player { row, col } = state.focus {
         let player = &mut state.players[row];
         match col {
-            NewGameCol::Kind => {
-                // Player 0 is always Human; only AI slots (1+) can cycle.
-                if row > 0 {
-                    player.kind = if forward {
-                        player.kind.next_ai()
-                    } else {
-                        player.kind.prev_ai()
-                    };
-                }
-            }
-            NewGameCol::Model => {
-                if player.kind == PlayerKind::Llm {
-                    let n = AVAILABLE_MODELS.len();
-                    player.model_index = if forward {
-                        (player.model_index + 1) % n
-                    } else {
-                        player.model_index.checked_sub(1).unwrap_or(n - 1)
-                    };
-                }
-            }
             NewGameCol::Personality => {
-                if matches!(player.kind, PlayerKind::Llm | PlayerKind::Llamafile) {
+                // Only AI players (Llamafile) have personalities.
+                if player.kind == PlayerKind::Llamafile {
                     let n = state.personality_names.len();
                     player.personality_index = if forward {
                         (player.personality_index + 1) % n
@@ -1376,47 +1352,30 @@ fn launch_game(
     let players: Vec<Box<dyn player::Player>> = ng
         .players
         .iter()
-        .map(|pc| {
-            let personality = if pc.personality_index < built_in_personalities.len() {
-                built_in_personalities[pc.personality_index].clone()
-            } else {
-                let disc_idx = pc.personality_index - built_in_personalities.len();
-                discovered_personalities
-                    .get(disc_idx)
-                    .cloned()
-                    .unwrap_or_default()
-            };
-            match pc.kind {
-                PlayerKind::Random => Box::new(player::random::RandomPlayer::new(pc.name.clone()))
-                    as Box<dyn player::Player>,
-                PlayerKind::Llamafile => {
-                    let client = llama_client
-                        .clone()
-                        .expect("llamafile client should exist when Llamafile players are used");
-                    Box::new(player::llm::LlmPlayer::with_client(
-                        pc.name.clone(),
-                        player::llm::LLAMAFILE_MODEL.into(),
-                        personality,
-                        client,
-                    )) as Box<dyn player::Player>
-                }
-                PlayerKind::Llm => {
-                    let model = AVAILABLE_MODELS
-                        .get(pc.model_index)
-                        .copied()
-                        .unwrap_or("claude-sonnet-4-6")
-                        .to_string();
-                    Box::new(player::llm::LlmPlayer::new(
-                        pc.name.clone(),
-                        model,
-                        personality,
-                    )) as Box<dyn player::Player>
-                }
-                PlayerKind::Human => {
-                    let channel = human_channels.as_ref().unwrap().0.clone();
-                    Box::new(TuiHumanPlayer::new(pc.name.clone(), channel))
-                        as Box<dyn player::Player>
-                }
+        .map(|pc| match pc.kind {
+            PlayerKind::Llamafile => {
+                let personality = if pc.personality_index < built_in_personalities.len() {
+                    built_in_personalities[pc.personality_index].clone()
+                } else {
+                    let disc_idx = pc.personality_index - built_in_personalities.len();
+                    discovered_personalities
+                        .get(disc_idx)
+                        .cloned()
+                        .unwrap_or_default()
+                };
+                let client = llama_client
+                    .clone()
+                    .expect("llamafile client should exist when Llamafile players are used");
+                Box::new(player::llm::LlmPlayer::with_client(
+                    pc.name.clone(),
+                    player::llm::LLAMAFILE_MODEL.into(),
+                    personality,
+                    client,
+                )) as Box<dyn player::Player>
+            }
+            PlayerKind::Human => {
+                let channel = human_channels.as_ref().unwrap().0.clone();
+                Box::new(TuiHumanPlayer::new(pc.name.clone(), channel)) as Box<dyn player::Player>
             }
         })
         .collect();

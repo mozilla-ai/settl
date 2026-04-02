@@ -43,39 +43,15 @@ impl MainMenuState {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlayerKind {
-    Random,
     Llamafile,
-    Llm,
     Human,
 }
 
 impl PlayerKind {
     pub fn label(&self) -> &'static str {
         match self {
-            PlayerKind::Random => "Random",
             PlayerKind::Llamafile => "Llamafile",
-            PlayerKind::Llm => "LLM",
             PlayerKind::Human => "Human",
-        }
-    }
-
-    /// Cycle to the next AI player kind (Human is excluded for AI slots).
-    pub fn next_ai(&self) -> Self {
-        match self {
-            PlayerKind::Random => PlayerKind::Llamafile,
-            PlayerKind::Llamafile => PlayerKind::Llm,
-            PlayerKind::Llm => PlayerKind::Random,
-            PlayerKind::Human => PlayerKind::Random,
-        }
-    }
-
-    /// Cycle to the previous AI player kind (Human is excluded for AI slots).
-    pub fn prev_ai(&self) -> Self {
-        match self {
-            PlayerKind::Random => PlayerKind::Llm,
-            PlayerKind::Llamafile => PlayerKind::Random,
-            PlayerKind::Llm => PlayerKind::Llamafile,
-            PlayerKind::Human => PlayerKind::Llm,
         }
     }
 }
@@ -84,46 +60,28 @@ impl PlayerKind {
 pub struct PlayerConfig {
     pub name: String,
     pub kind: PlayerKind,
-    pub model_index: usize,
     pub personality_index: usize,
 }
 
 const DEFAULT_NAMES: &[&str] = &["Alice", "Bob", "Charlie", "Diana"];
 
-pub const AVAILABLE_MODELS: &[&str] = &[
-    "claude-sonnet-4-6",
-    "claude-haiku-4-5-20251001",
-    "gpt-4o-mini",
-    "gpt-4o",
-    "gemini-2.0-flash",
-];
-
 /// Which column is focused in the player table.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NewGameCol {
     Name,
-    Kind,
-    Model,
     Personality,
 }
 
 impl NewGameCol {
     pub fn next(self) -> Self {
         match self {
-            NewGameCol::Name => NewGameCol::Kind,
-            NewGameCol::Kind => NewGameCol::Model,
-            NewGameCol::Model => NewGameCol::Personality,
+            NewGameCol::Name => NewGameCol::Personality,
             NewGameCol::Personality => NewGameCol::Name,
         }
     }
 
     pub fn prev(self) -> Self {
-        match self {
-            NewGameCol::Name => NewGameCol::Personality,
-            NewGameCol::Kind => NewGameCol::Name,
-            NewGameCol::Model => NewGameCol::Kind,
-            NewGameCol::Personality => NewGameCol::Model,
-        }
+        self.next() // only two columns, so prev == next
     }
 }
 
@@ -164,39 +122,18 @@ impl NewGameState {
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "Player".into());
 
-        // Default AI players to Llamafile when no provider API keys are set.
-        let has_api_key = std::env::var("ANTHROPIC_API_KEY")
-            .ok()
-            .filter(|s| !s.is_empty())
-            .is_some()
-            || std::env::var("OPENAI_API_KEY")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .is_some()
-            || std::env::var("GOOGLE_API_KEY")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .is_some();
-        let default_ai_kind = if has_api_key {
-            PlayerKind::Llm
-        } else {
-            PlayerKind::Llamafile
-        };
-
         let players = (0..4)
             .map(|i| {
                 if i == 0 {
                     PlayerConfig {
                         name: username.clone(),
                         kind: PlayerKind::Human,
-                        model_index: 0,
                         personality_index: 0,
                     }
                 } else {
                     PlayerConfig {
                         name: DEFAULT_NAMES[i].into(),
-                        kind: default_ai_kind.clone(),
-                        model_index: 0,
+                        kind: PlayerKind::Llamafile,
                         personality_index: i.min(personality_names.len().saturating_sub(1)),
                     }
                 }
@@ -207,7 +144,7 @@ impl NewGameState {
             players,
             focus: NewGameFocus::Player {
                 row: 0,
-                col: NewGameCol::Kind,
+                col: NewGameCol::Name,
             },
             personality_names,
             editing: false,
@@ -223,8 +160,7 @@ impl NewGameState {
             let i = self.players.len();
             self.players.push(PlayerConfig {
                 name: DEFAULT_NAMES[i].into(),
-                kind: PlayerKind::Random,
-                model_index: 0,
+                kind: PlayerKind::Llamafile,
                 personality_index: 0,
             });
         }
@@ -368,7 +304,7 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
     // Player table header.
     let header_y = area.y + 5;
     let header_area = Rect::new(x_start, header_y, content_width, 1);
-    let header = Paragraph::new(" #  Name         Type     Model              Personality")
+    let header = Paragraph::new(" #  Name              Role         Personality")
         .style(Style::default().fg(Color::DarkGray).bold());
     f.render_widget(header, header_area);
 
@@ -380,21 +316,14 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
         }
         let row_area = Rect::new(x_start, row_y, content_width, 1);
 
-        let model_str = match player.kind {
-            PlayerKind::Llm => AVAILABLE_MODELS
-                .get(player.model_index)
-                .copied()
-                .unwrap_or("?"),
-            PlayerKind::Llamafile => "Bonsai-1.7B",
-            _ => "\u{2014}",
-        };
+        let role_str = player.kind.label();
         let personality_str = match player.kind {
-            PlayerKind::Llm | PlayerKind::Llamafile => state
+            PlayerKind::Llamafile => state
                 .personality_names
                 .get(player.personality_index)
                 .map(|s| s.as_str())
                 .unwrap_or("?"),
-            _ => "\u{2014}",
+            PlayerKind::Human => "\u{2014}",
         };
 
         // Build columns with highlights.
@@ -406,26 +335,6 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
                     state.focus,
                     NewGameFocus::Player {
                         col: NewGameCol::Name,
-                        ..
-                    }
-                ),
-        );
-        let kind_style = cell_style(
-            is_focused_row
-                && matches!(
-                    state.focus,
-                    NewGameFocus::Player {
-                        col: NewGameCol::Kind,
-                        ..
-                    }
-                ),
-        );
-        let model_style = cell_style(
-            is_focused_row
-                && matches!(
-                    state.focus,
-                    NewGameFocus::Player {
-                        col: NewGameCol::Model,
                         ..
                     }
                 ),
@@ -448,9 +357,11 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
                 format!("{} {}  ", marker, i + 1),
                 Style::default().fg(Color::DarkGray),
             ),
-            Span::styled(format!("{:<12} ", player.name), name_style),
-            Span::styled(format!("{:<8} ", player.kind.label()), kind_style),
-            Span::styled(format!("{:<18} ", truncate_str(model_str, 18)), model_style),
+            Span::styled(format!("{:<16} ", player.name), name_style),
+            Span::styled(
+                format!("{:<12} ", role_str),
+                Style::default().fg(Color::DarkGray),
+            ),
             Span::styled(truncate_str(personality_str, 14).to_string(), pers_style),
         ]);
         let row_widget = Paragraph::new(line);
