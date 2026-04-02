@@ -34,9 +34,8 @@ fn terrain_color(t: Terrain) -> Color {
     }
 }
 
-fn terrain_fg(_t: Terrain) -> Color {
-    Color::White
-}
+/// Foreground color for text rendered on terrain fill.
+const TERRAIN_FG: Color = Color::White;
 
 // ── HexGrid ─────────────────────────────────────────────────────────
 
@@ -153,11 +152,10 @@ impl HexGrid {
     }
 
     /// Get screen position of a hex center (board-local).
-    pub fn hex_center_pos(&self, h: &HexCoord) -> (u16, u16) {
+    pub fn hex_center_pos(&self, h: &HexCoord) -> Option<(u16, u16)> {
         self.hex_centers
             .get(h)
             .map(|&(c, r)| (c.max(0) as u16, r.max(0) as u16))
-            .unwrap_or((0, 0))
     }
 }
 
@@ -278,7 +276,7 @@ fn draw_hex_cell(
     buf: &mut Buffer,
 ) {
     let bg = terrain_color(hex.terrain);
-    let fg = terrain_fg(hex.terrain);
+    let fg = TERRAIN_FG;
     let is_robber = state.robber_hex == hex.coord;
     let fill_bg = if is_robber { Color::Red } else { bg };
     let fill = Style::default().bg(fill_bg);
@@ -321,8 +319,8 @@ fn draw_hex_cell(
     }
 
     if let Some(n) = hex.number_token {
-        let num_str = format!("{:>2}", n);
         let is_hot = n == 6 || n == 8;
+        let num_str = format!("{:>2}", n);
         let num_style = if is_hot && is_robber {
             Style::default().fg(Color::White).bg(fill_bg).bold()
         } else if is_hot {
@@ -354,9 +352,9 @@ fn draw_hex_cell(
 
     // Probability dots on row cy+1 (per DESIGN.md).
     if let Some(n) = hex.number_token {
+        let is_hot = n == 6 || n == 8;
         let dots = probability_dots(n);
         if dots > 0 {
-            let is_hot = n == 6 || n == 8;
             let dot_style = if is_hot {
                 Style::default().fg(Color::Red).bg(fill_bg).bold()
             } else {
@@ -493,15 +491,16 @@ fn draw_cursor_overlay(
         }
         CursorLegal::Hexes(hexes) => {
             for (i, h) in hexes.iter().enumerate() {
-                let (hx, hy) = grid.hex_center_pos(h);
-                let sx = off_col as i16 + hx as i16;
-                let sy = off_row as i16 + hy as i16;
-                let style = if i == *selected {
-                    cursor_style
-                } else {
-                    legal_style
-                };
-                set_cell(sx, sy, 'R', style, area, buf);
+                if let Some((hx, hy)) = grid.hex_center_pos(h) {
+                    let sx = off_col as i16 + hx as i16;
+                    let sy = off_row as i16 + hy as i16;
+                    let style = if i == *selected {
+                        cursor_style
+                    } else {
+                        legal_style
+                    };
+                    set_cell(sx, sy, 'R', style, area, buf);
+                }
             }
         }
     }

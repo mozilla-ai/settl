@@ -169,18 +169,8 @@ fn drain_ui_events(rx: &mut mpsc::UnboundedReceiver<UiEvent>) -> Vec<UiEvent> {
 // ── Test A: Screen Navigation Flow ───────────────────────────────────
 
 #[test]
-fn screen_navigation_title_to_menu_to_newgame_and_back() {
-    // Title screen: any key goes to main menu.
-    let mut app = title_app();
-    let action = handle_input(&mut app, KeyCode::Enter);
-    assert!(
-        matches!(action, Action::Transition(Screen::MainMenu(_))),
-        "Enter on title should go to MainMenu"
-    );
-    app.screen = match action {
-        Action::Transition(s) => s,
-        _ => panic!("expected transition"),
-    };
+fn screen_navigation_menu_to_newgame_and_back() {
+    let mut app = main_menu_app();
 
     // Main menu: Enter on "New Game" (selected=0).
     let action = handle_input(&mut app, KeyCode::Enter);

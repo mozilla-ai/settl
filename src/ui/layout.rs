@@ -120,7 +120,7 @@ fn draw_board_placeholder(f: &mut Frame, area: Rect, msg: &str) {
 // ── Public draw function ─────────────────────────────────────────────
 
 /// Draw the playing screen with text-rendered board.
-pub fn draw_playing(f: &mut Frame, ps: &mut PlayingState) {
+pub fn draw_playing(f: &mut Frame, ps: &PlayingState) {
     let layout = compute_layout(f.area(), ps);
 
     if let Some(state) = &ps.state {
@@ -532,16 +532,12 @@ fn format_resource_list(resources: &[Resource]) -> String {
     if resources.is_empty() {
         return "(none)".to_string();
     }
+    let all = Resource::all();
     let mut counts = [0u32; 5];
     for r in resources {
-        let idx = match r {
-            Resource::Wood => 0,
-            Resource::Brick => 1,
-            Resource::Sheep => 2,
-            Resource::Wheat => 3,
-            Resource::Ore => 4,
-        };
-        counts[idx] += 1;
+        if let Some(idx) = all.iter().position(|a| a == r) {
+            counts[idx] += 1;
+        }
     }
     format_resource_counts(&counts)
 }

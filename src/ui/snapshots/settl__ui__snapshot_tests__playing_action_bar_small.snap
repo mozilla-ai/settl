@@ -3,24 +3,24 @@ source: src/ui/snapshot_tests.rs
 expression: buffer_to_string(&buf)
 ---
 ┌ Board ───────────────────────────────────────────────────────────────────────┐
-│                           Computing board layout...                          │
 │                                                                              │
 │                                                                              │
+│                                *                                       *     │
+│                                          *                                   │
 │                                                                              │
 │                                                                              │
+│                               Ore                Sheep               Wood    │
+│                               10                   2                   9     │
+│                              · · ·                 ·                · · · ·  │
 │                                                                              │
 │                                                                              │
+│                      *                                                       │
+│            *                                                                 │
 │                                                                              │
 │                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
+│                    Wheat               Brick               Sheep             │
+│                     12                   6                   4               │
+│                      ·               · · · · ·             · · ·             │
 │                                                                              │
 │                                                                              │
 │                                                                              │

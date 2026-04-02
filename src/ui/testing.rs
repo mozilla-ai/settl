@@ -25,7 +25,7 @@ use super::*;
 pub fn render_app_to_buffer(app: &mut App, width: u16, height: u16) -> Buffer {
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).unwrap();
-    terminal.draw(|f| draw_screen(f, app)).unwrap();
+    terminal.draw(|f| draw_screen(f, &app.screen)).unwrap();
     terminal.backend().buffer().clone()
 }
 
@@ -92,11 +92,6 @@ pub fn make_test_app(screen: Screen) -> App {
         personalities: vec![],
         llamafile_process: None,
     }
-}
-
-/// Create an `App` on the Title screen.
-pub fn title_app() -> App {
-    make_test_app(Screen::Title { frame: 0 })
 }
 
 /// Create an `App` on the MainMenu screen.

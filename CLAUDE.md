@@ -64,6 +64,7 @@ Use `log::debug!()` / `log::info!()` etc. from any module.
 
 - Keep code `cargo fmt`-clean and `cargo clippy`-clean.
 - Run `cargo fmt`, `cargo clippy`, and `cargo test` before finishing any task.
+- **Never use `#[allow(dead_code)]`** -- delete unused code instead of suppressing warnings.
 - **Never use emdashes** in documentation or comments.
 - **Never write to stdout/stderr** (`println!`, `eprintln!`, `dbg!`) in code that runs under the TUI. Raw terminal output corrupts the alternate screen. Use the TUI's own status/error display (e.g. `LlamafileStatus::Error`) or log to a file instead.
 - Rust naming: `snake_case` for modules/functions, `CamelCase` for types, `SCREAMING_SNAKE_CASE` for constants.

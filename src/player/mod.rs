@@ -1,6 +1,9 @@
-pub mod llm;
+#[cfg(test)]
+pub mod human;
+pub mod llamafile_player;
 pub mod personality;
 pub mod prompt;
+#[cfg(test)]
 pub mod random;
 pub mod tui_human;
 

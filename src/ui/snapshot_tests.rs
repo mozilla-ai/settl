@@ -14,21 +14,6 @@ const HEIGHT: u16 = 65;
 // ── Non-game screens ─────────────────────────────────────────────────
 
 #[test]
-fn snapshot_title_screen() {
-    let mut app = title_app();
-    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
-    insta::assert_snapshot!("title_screen", buffer_to_string(&buf));
-}
-
-#[test]
-fn snapshot_title_screen_blink_off() {
-    // frame=15 should hide the "press any key" prompt.
-    let mut app = make_test_app(Screen::Title { frame: 15 });
-    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
-    insta::assert_snapshot!("title_screen_blink_off", buffer_to_string(&buf));
-}
-
-#[test]
 fn snapshot_main_menu() {
     // Use explicit state to avoid filesystem-dependent menu items.
     let mut app = make_test_app(Screen::MainMenu(MainMenuState { selected: 0 }));
@@ -174,13 +159,6 @@ fn snapshot_new_game_with_llamafile() {
 }
 
 // ── Responsive layout ────────────────────────────────────────────────
-
-#[test]
-fn snapshot_title_small_terminal() {
-    let mut app = make_test_app(Screen::Title { frame: 0 });
-    let buf = render_app_to_buffer(&mut app, 80, 24);
-    insta::assert_snapshot!("title_small_terminal", buffer_to_string(&buf));
-}
 
 #[test]
 fn snapshot_playing_small_terminal() {

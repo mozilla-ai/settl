@@ -1,6 +1,5 @@
 ---
 source: src/ui/snapshot_tests.rs
-assertion_line: 181
 expression: buffer_to_string(&buf)
 ---
 
@@ -8,11 +7,11 @@ expression: buffer_to_string(&buf)
 
                                                      Players: 4  (press +/- to change)
 
-                                                      #  Name         Type     Model              Personality
-                                                     > 1  Player       Human    —                  —
-                                                       2  Bob          Llamafile Bonsai-1.7B        Aggressive
-                                                       3  Charlie      Llamafile Bonsai-1.7B        Grudge Holder
-                                                       4  Diana        Llamafile Bonsai-1.7B        Builder
+                                                      #  Name              Role         Personality
+                                                     > 1  Player           Human        —
+                                                       2  Bob              Llamafile    Aggressive
+                                                       3  Charlie          Llamafile    Grudge Holder
+                                                       4  Diana            Llamafile    Builder
 
 
                                                        [ Start Game ]

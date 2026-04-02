@@ -9,9 +9,7 @@ async fn main() {
     // Try parsing CLI args. If --headless is present (or any headless-only flags),
     // run in text mode. Otherwise, boot straight into the TUI.
     let args: Vec<String> = std::env::args().collect();
-    let has_headless_flag = args
-        .iter()
-        .any(|a| a == "--headless" || a == "--demo" || a == "--models" || a == "--llamafile");
+    let has_headless_flag = args.iter().any(|a| a == "--headless");
 
     if has_headless_flag {
         let cli = HeadlessCli::parse();
