@@ -12,7 +12,7 @@ expression: buffer_to_string(&buf)
 │                                                          *                                       *                                       ││ P2 Charlie 0VP             │
 │                                                                                                                                          ││  W:0 B:0 S:0 H:0 O:0       │
 │                                                                                                                                          ││                            │
-│                                            Bk                  Bk                  Bk                                                    ││ P3 Diana 0VP               │
+│                                              Brick               Brick               Brick                                               ││ P3 Diana 0VP               │
 │                                                5                   2                   6                                                 ││  W:0 B:0 S:0 H:0 O:0       │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││Turn: 1                     │
@@ -21,7 +21,7 @@ expression: buffer_to_string(&buf)
 │                            *                                                                               *                             ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                                  Wo                  Wo                  Wo                  Wo                                          │└────────────────────────────┘
+│                                    Wood                Wood                Wood                Wood                                      │└────────────────────────────┘
 │                                      3                   8                  10                   9                                       │┌ Game Log (2/2) ────────────┐
 │                                                                                                                                          ││   1| Game started -- your  │
 │                                                                                                                                          ││turn will show a prompt     │
@@ -30,7 +30,7 @@ expression: buffer_to_string(&buf)
 │                                                                                                                      *                   ││Tab:AI panel                │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                        Or                  Or                  Or                  Wh                  Wh                                ││                            │
+│                           Ore                 Ore                 Ore                Wheat               Wheat                           ││                            │
 │                           12                  11                   4                   8                  10                             ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
@@ -39,7 +39,7 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                                  Wh                  Wh                  Sh                  Sh                                          ││                            │
+│                                    Wheat               Wheat               Sheep               Sheep                                     ││                            │
 │                                      9                   4                   5                   6                                       ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
@@ -48,7 +48,7 @@ expression: buffer_to_string(&buf)
 │                                                                              ◇                   *                                       ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                                            Sh                  Sh                 R De                                                   ││                            │
+│                                              Sheep               Sheep            R Desert                                               ││                            │
 │                                                3                  11                   R                                                 ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │

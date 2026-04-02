@@ -36,16 +36,16 @@
 | Hex interior | Terrain + number + dots | Each on dedicated row (see template) |
 | Hot numbers (6, 8) | bold + bright white | High probability, must stand out |
 
-### Terrain Abbreviations
-Resource-based abbreviations (what the terrain produces, not terrain name):
-| Terrain | Abbrev | Produces |
-|---------|--------|----------|
-| Forest | `Wo` | Wood |
-| Hills | `Bk` | Brick |
-| Pasture | `Sh` | Sheep |
-| Fields | `Wh` | Wheat |
-| Mountains | `Or` | Ore |
-| Desert | `De` | Nothing |
+### Terrain Labels
+Full resource names displayed on hex tiles (what the terrain produces, not terrain name):
+| Terrain | Label | Produces |
+|---------|-------|----------|
+| Forest | `Wood` | Wood |
+| Hills | `Brick` | Brick |
+| Pasture | `Sheep` | Sheep |
+| Fields | `Wheat` | Wheat |
+| Mountains | `Ore` | Ore |
+| Desert | `Desert` | Nothing |
 
 ### Number Probability Dots
 Display below the number token inside each hex to show roll probability:
@@ -159,7 +159,7 @@ Pointy-top hexes, interlocking. Each hex cell:
             ╱   ╲             <- cy-4: upper diagonals
           ╱       ╲           <- cy-3: wider diagonals
         ╱           ╲         <- cy-2: even wider
-      ╱   Wo          ╲      <- cy-1: TERRAIN label (dedicated row)
+      ╱   Wood         ╲      <- cy-1: TERRAIN label (dedicated row)
      ·       6          ·     <- cy:   NUMBER token (dedicated row)
       ╲    ·····      ╱      <- cy+1: PROBABILITY DOTS (dedicated row)
         ╲           ╱         <- cy+2: lower diagonals

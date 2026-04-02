@@ -312,7 +312,7 @@ fn draw_hex_cell(
     }
 
     // Terrain label on row cy-1
-    let abbr = hex.terrain.abbr();
+    let label = hex.terrain.label();
     let text_style = if is_robber {
         Style::default().fg(Color::White).bg(Color::Red).bold()
     } else {
@@ -321,12 +321,14 @@ fn draw_hex_cell(
 
     if is_robber {
         set_cell(cx - 5, cy - 1, 'R', text_style, area, buf);
-        for (i, ch) in abbr.chars().enumerate() {
-            set_cell(cx - 3 + i as i16, cy - 1, ch, text_style, area, buf);
+        let label_start = cx - 3;
+        for (i, ch) in label.chars().enumerate() {
+            set_cell(label_start + i as i16, cy - 1, ch, text_style, area, buf);
         }
     } else {
-        for (i, ch) in abbr.chars().enumerate() {
-            set_cell(cx - 4 + i as i16, cy - 1, ch, text_style, area, buf);
+        let label_start = cx - (label.len() as i16) / 2;
+        for (i, ch) in label.chars().enumerate() {
+            set_cell(label_start + i as i16, cy - 1, ch, text_style, area, buf);
         }
     }
 

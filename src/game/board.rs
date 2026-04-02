@@ -179,7 +179,7 @@ impl Terrain {
         }
     }
 
-    /// Two-character abbreviation for display in ASCII and TUI boards.
+    /// Two-character abbreviation for display in ASCII boards and LLM prompts.
     pub fn abbr(self) -> &'static str {
         match self {
             Terrain::Forest => "Wo",
@@ -188,6 +188,18 @@ impl Terrain {
             Terrain::Fields => "Wh",
             Terrain::Mountains => "Or",
             Terrain::Desert => "De",
+        }
+    }
+
+    /// Full resource label for display on TUI hex tiles.
+    pub fn label(self) -> &'static str {
+        match self {
+            Terrain::Forest => "Wood",
+            Terrain::Hills => "Brick",
+            Terrain::Pasture => "Sheep",
+            Terrain::Fields => "Wheat",
+            Terrain::Mountains => "Ore",
+            Terrain::Desert => "Desert",
         }
     }
 }
@@ -1090,5 +1102,15 @@ mod tests {
         assert_eq!(Terrain::Fields.abbr(), "Wh");
         assert_eq!(Terrain::Mountains.abbr(), "Or");
         assert_eq!(Terrain::Desert.abbr(), "De");
+    }
+
+    #[test]
+    fn terrain_label_covers_all_variants() {
+        assert_eq!(Terrain::Forest.label(), "Wood");
+        assert_eq!(Terrain::Hills.label(), "Brick");
+        assert_eq!(Terrain::Pasture.label(), "Sheep");
+        assert_eq!(Terrain::Fields.label(), "Wheat");
+        assert_eq!(Terrain::Mountains.label(), "Ore");
+        assert_eq!(Terrain::Desert.label(), "Desert");
     }
 }
