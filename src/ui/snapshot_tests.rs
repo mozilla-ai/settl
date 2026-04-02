@@ -31,11 +31,7 @@ fn snapshot_title_screen_blink_off() {
 #[test]
 fn snapshot_main_menu() {
     // Use explicit state to avoid filesystem-dependent menu items.
-    let state = MainMenuState {
-        selected: 0,
-        has_save_files: false,
-        has_replay_files: false,
-    };
+    let state = MainMenuState { selected: 0 };
     let screen = Screen::MainMenu(state);
     let buf = render_to_buffer(&screen, WIDTH, HEIGHT);
     insta::assert_snapshot!("main_menu", buffer_to_string(&buf));

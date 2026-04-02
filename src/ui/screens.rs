@@ -3,8 +3,6 @@
 //! Each screen has a state struct and a `draw_*` rendering function.
 //! Input handling lives in `mod.rs` dispatch.
 
-use std::path::PathBuf;
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
@@ -26,24 +24,9 @@ const SUBTITLE: &str = "terminal catan";
 
 // ── Main Menu ──────────────────────────────────────────────────────────
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct MainMenuState {
     pub selected: usize,
-    pub has_save_files: bool,
-    pub has_replay_files: bool,
-}
-
-impl Default for MainMenuState {
-    fn default() -> Self {
-        let has_save_files = find_files_with_extension("game_save", "json").is_some();
-        let has_replay_files = find_files_with_extension("game_replay", "json").is_some()
-            || find_files_with_extension("game_log", "jsonl").is_some();
-        Self {
-            selected: 0,
-            has_save_files,
-            has_replay_files,
-        }
-    }
 }
 
 impl MainMenuState {
@@ -52,15 +35,7 @@ impl MainMenuState {
     }
 
     pub fn menu_items(&self) -> Vec<&'static str> {
-        let mut items = vec!["New Game"];
-        if self.has_save_files {
-            items.push("Continue Game");
-        }
-        if self.has_replay_files {
-            items.push("Replay Game");
-        }
-        items.push("Quit");
-        items
+        vec!["New Game", "Quit"]
     }
 }
 
@@ -251,37 +226,6 @@ impl NewGameState {
     #[allow(dead_code)]
     pub fn seed(&self) -> Option<u64> {
         self.seed_input.parse().ok()
-    }
-}
-
-// ── File Picker ────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum FilePickerPurpose {
-    Resume,
-    Replay,
-}
-
-#[derive(Debug)]
-pub struct FilePickerState {
-    pub purpose: FilePickerPurpose,
-    pub files: Vec<PathBuf>,
-    pub selected: usize,
-}
-
-impl FilePickerState {
-    pub fn new(purpose: FilePickerPurpose) -> Self {
-        let files = match purpose {
-            FilePickerPurpose::Resume => scan_files(&["game_save"], &["json"]),
-            FilePickerPurpose::Replay => {
-                scan_files(&["game_replay", "game_log"], &["json", "jsonl"])
-            }
-        };
-        Self {
-            purpose,
-            files,
-            selected: 0,
-        }
     }
 }
 
@@ -535,55 +479,6 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
     f.render_widget(hint, hint_area);
 }
 
-/// Draw the file picker screen.
-pub fn draw_file_picker(f: &mut Frame, state: &FilePickerState) {
-    let area = f.area();
-    f.render_widget(Clear, area);
-
-    let title_text = match state.purpose {
-        FilePickerPurpose::Resume => "Continue Game",
-        FilePickerPurpose::Replay => "Replay Game",
-    };
-
-    let title_area = Rect::new(area.x, area.y + 1, area.width, 1);
-    let title = Paragraph::new(title_text)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Yellow).bold());
-    f.render_widget(title, title_area);
-
-    if state.files.is_empty() {
-        let msg_area = Rect::new(area.x, area.y + 4, area.width, 1);
-        let msg = Paragraph::new("No save files found.")
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::DarkGray));
-        f.render_widget(msg, msg_area);
-    } else {
-        let items: Vec<&str> = state
-            .files
-            .iter()
-            .map(|p| p.file_name().and_then(|n| n.to_str()).unwrap_or("?"))
-            .collect();
-        let menu_y = area.y + 3;
-        let menu_height = items.len().min(area.height.saturating_sub(6) as usize) as u16;
-        let menu_area = Rect::new(area.x, menu_y, area.width, menu_height);
-        render_menu(
-            &items,
-            state.selected,
-            menu_area,
-            f.buffer_mut(),
-            Color::Cyan,
-        );
-    }
-
-    // Hint.
-    let hint_y = area.y + area.height - 1;
-    let hint_area = Rect::new(area.x, hint_y, area.width, 1);
-    let hint = Paragraph::new("[↑↓] navigate  [Enter] select  [Esc] back")
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
-    f.render_widget(hint, hint_area);
-}
-
 /// Draw the post-game screen.
 pub fn draw_post_game(f: &mut Frame, state: &PostGameState) {
     let area = f.area();
@@ -697,41 +592,4 @@ fn truncate_str(s: &str, max: usize) -> &str {
     } else {
         &s[..max.saturating_sub(1)]
     }
-}
-
-/// Find a file matching `{prefix}*.{ext}` in the current directory.
-fn find_files_with_extension(prefix: &str, ext: &str) -> Option<PathBuf> {
-    let pattern = prefix.to_string();
-    std::fs::read_dir(".")
-        .ok()?
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .find(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .map(|n| n.starts_with(&pattern) && n.ends_with(ext))
-                .unwrap_or(false)
-        })
-}
-
-/// Scan the current directory for files matching any of the given prefixes and extensions.
-fn scan_files(prefixes: &[&str], extensions: &[&str]) -> Vec<PathBuf> {
-    let mut files: Vec<PathBuf> = std::fs::read_dir(".")
-        .ok()
-        .into_iter()
-        .flatten()
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .map(|n| {
-                    prefixes.iter().any(|prefix| n.starts_with(prefix))
-                        && extensions.iter().any(|ext| n.ends_with(ext))
-                })
-                .unwrap_or(false)
-        })
-        .collect();
-    files.sort();
-    files
 }

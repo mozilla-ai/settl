@@ -1,11 +1,10 @@
-//! Headless (text-mode) game runner — preserves the original CLI-driven behavior
+//! Headless (text-mode) game runner -- preserves the original CLI-driven behavior
 //! for scripting, CI, and non-interactive use.
 
 use clap::Parser;
 
 use crate::game;
 use crate::player;
-use crate::replay;
 
 /// CLI arguments for headless mode.
 #[derive(Parser)]
@@ -34,17 +33,9 @@ pub struct HeadlessCli {
     #[arg(long)]
     pub personality: Option<String>,
 
-    /// Replay a saved game (JSON replay or JSONL event log)
-    #[arg(long)]
-    pub replay: Option<String>,
-
     /// Random seed for reproducible games
     #[arg(long)]
     pub seed: Option<u64>,
-
-    /// Resume a saved game from a JSON save file
-    #[arg(long)]
-    pub resume: Option<String>,
 
     /// Run in headless mode (no TUI)
     #[arg(long)]
@@ -52,18 +43,6 @@ pub struct HeadlessCli {
 }
 
 pub async fn run(cli: HeadlessCli) {
-    // Handle replay mode.
-    if let Some(ref replay_path) = cli.replay {
-        run_replay(replay_path);
-        return;
-    }
-
-    // Handle resume mode.
-    if let Some(ref save_path) = cli.resume {
-        run_resume(save_path).await;
-        return;
-    }
-
     assert!(
         (2..=4).contains(&cli.players),
         "Player count must be 2-4, got {}",
@@ -155,161 +134,9 @@ pub async fn run(cli: HeadlessCli) {
                     .collect::<Vec<_>>()
                     .join(", ")
             );
-
-            let log_path = std::path::Path::new("game_log.jsonl");
-            if let Err(e) = orchestrator.log.write_jsonl(log_path) {
-                eprintln!("Warning: failed to write game log: {}", e);
-            } else {
-                println!("Game log saved to {}", log_path.display());
-            }
-
-            let replay_path = std::path::Path::new("game_replay.json");
-            if let Ok(json) = serde_json::to_string_pretty(&orchestrator.replay) {
-                if let Err(e) = std::fs::write(replay_path, json) {
-                    eprintln!("Warning: failed to write replay: {}", e);
-                } else {
-                    println!("Replay saved to {}", replay_path.display());
-                    println!("\n{}", orchestrator.replay.stats());
-                }
-            }
         }
         Err(e) => {
             eprintln!("Game ended: {}", e);
-            let model_ids: Vec<String> = if let Some(ref models_str) = cli.models {
-                models_str
-                    .split(',')
-                    .map(|s| s.trim().to_string())
-                    .collect()
-            } else if cli.demo {
-                vec!["".into(); cli.players]
-            } else {
-                vec![cli.model.clone(); cli.players]
-            };
-            let save = replay::save::SaveGame::new(
-                orchestrator.state.clone(),
-                &orchestrator.log,
-                orchestrator.player_names.clone(),
-                model_ids,
-            );
-            if let Err(e) = save.save_to_file(std::path::Path::new("game_save.json")) {
-                eprintln!("Warning: failed to save game: {}", e);
-            } else {
-                println!("Game progress saved to game_save.json — resume with --headless --resume game_save.json");
-            }
         }
-    }
-}
-
-fn run_replay(replay_path: &str) {
-    let path = std::path::Path::new(replay_path);
-
-    if replay_path.ends_with(".json") {
-        match std::fs::read_to_string(path) {
-            Ok(contents) => match serde_json::from_str::<replay::recorder::GameReplay>(&contents) {
-                Ok(replay) => {
-                    println!("Replaying game: {} players", replay.num_players);
-                    println!("Players: {}\n", replay.player_names.join(", "));
-                    for (i, frame) in replay.frames.iter().enumerate() {
-                        let vp: String = frame
-                            .victory_points
-                            .iter()
-                            .enumerate()
-                            .map(|(p, v)| format!("P{}:{}", p, v))
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        println!(
-                            "{:>4}. [T{:>3}] {} [{}]",
-                            i + 1,
-                            frame.turn,
-                            frame.description,
-                            vp
-                        );
-                    }
-                    println!("\n{}", replay.stats());
-                }
-                Err(e) => eprintln!("Failed to parse replay: {}", e),
-            },
-            Err(e) => eprintln!("Failed to read replay file: {}", e),
-        }
-    } else {
-        match replay::event::GameLog::read_jsonl(path) {
-            Ok(log) => {
-                println!("Replaying game from: {}", replay_path);
-                println!("Total events: {}\n", log.events().len());
-                for (i, event) in log.events().iter().enumerate() {
-                    println!("{:>4}. {:?}", i + 1, event);
-                }
-            }
-            Err(e) => eprintln!("Failed to read replay file: {}", e),
-        }
-    }
-}
-
-async fn run_resume(save_path: &str) {
-    let path = std::path::Path::new(save_path);
-    match replay::save::SaveGame::load_from_file(path) {
-        Ok(save) => {
-            println!("Resuming game from: {}", save_path);
-            println!("Players: {}", save.player_names.join(", "));
-            println!(
-                "Turn: {}, Events: {}\n",
-                save.state.turn_number,
-                save.events.len()
-            );
-
-            let players: Vec<Box<dyn player::Player>> = save
-                .player_names
-                .iter()
-                .enumerate()
-                .map(|(i, name)| {
-                    let model = save.player_models.get(i).filter(|m| !m.is_empty()).cloned();
-                    if let Some(model_id) = model {
-                        Box::new(player::llm::LlmPlayer::new(
-                            name.clone(),
-                            model_id,
-                            player::personality::Personality::default(),
-                        )) as Box<dyn player::Player>
-                    } else {
-                        Box::new(player::random::RandomPlayer::new(name.clone()))
-                            as Box<dyn player::Player>
-                    }
-                })
-                .collect();
-
-            let log = save.recent_log();
-            let mut orchestrator = game::orchestrator::GameOrchestrator::new(save.state, players);
-            orchestrator.log = log;
-
-            match orchestrator.run().await {
-                Ok(winner) => {
-                    println!(
-                        "\nPlayer {} ({}) wins!",
-                        winner, orchestrator.player_names[winner]
-                    );
-                    let _ = orchestrator
-                        .log
-                        .write_jsonl(std::path::Path::new("game_log.jsonl"));
-                    if let Ok(json) = serde_json::to_string_pretty(&orchestrator.replay) {
-                        let _ = std::fs::write("game_replay.json", json);
-                    }
-                    println!("\n{}", orchestrator.replay.stats());
-                }
-                Err(e) => {
-                    eprintln!("Game ended: {}", e);
-                    let save = replay::save::SaveGame::new(
-                        orchestrator.state.clone(),
-                        &orchestrator.log,
-                        orchestrator.player_names.clone(),
-                        save.player_models.clone(),
-                    );
-                    if let Err(e) = save.save_to_file(std::path::Path::new("game_save.json")) {
-                        eprintln!("Warning: failed to save game: {}", e);
-                    } else {
-                        println!("Game progress saved to game_save.json");
-                    }
-                }
-            }
-        }
-        Err(e) => eprintln!("Failed to load save file: {}", e),
     }
 }

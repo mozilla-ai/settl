@@ -9,11 +9,10 @@ use tokio::sync::mpsc;
 use crate::game::actions::{Action, DevCard, DevCardAction, PlayerId, TradeResponse};
 use crate::game::board::{board_hex_coords, Resource};
 use crate::game::dice;
+use crate::game::event::GameEvent;
 use crate::game::rules;
 use crate::game::state::{GamePhase, GameState};
 use crate::player::{Player, PlayerChoice};
-use crate::replay::event::{GameEvent, GameLog};
-use crate::replay::recorder::GameReplay;
 use crate::trading;
 use crate::ui::UiEvent;
 
@@ -44,9 +43,8 @@ impl std::error::Error for OrchestratorError {}
 pub struct GameOrchestrator {
     pub state: GameState,
     pub players: Vec<Box<dyn Player>>,
-    pub log: GameLog,
-    /// Structured replay with state snapshots for richer playback.
-    pub replay: GameReplay,
+    /// Event history for LLM context.
+    pub events: Vec<GameEvent>,
     /// Player names, indexed by PlayerId.
     pub player_names: Vec<String>,
     /// Maximum turns before declaring the game stuck (safety valve).
@@ -58,12 +56,10 @@ pub struct GameOrchestrator {
 impl GameOrchestrator {
     pub fn new(state: GameState, players: Vec<Box<dyn Player>>) -> Self {
         let player_names: Vec<String> = players.iter().map(|p| p.name().to_string()).collect();
-        let replay = GameReplay::new(player_names.clone());
         Self {
             state,
             players,
-            log: GameLog::default(),
-            replay,
+            events: Vec::new(),
             player_names,
             max_turns: 500,
             ui_tx: None,
@@ -108,11 +104,9 @@ impl GameOrchestrator {
         }
     }
 
-    /// Record an event to both the log and the structured replay.
+    /// Record a game event for LLM history context.
     fn record_event(&mut self, event: GameEvent) {
-        let description = GameReplay::format_event(&event, &self.player_names);
-        self.replay.record(event.clone(), &self.state, description);
-        self.log.push(event);
+        self.events.push(event);
     }
 
     /// Run the full game and return the winner's PlayerId.
@@ -151,7 +145,6 @@ impl GameOrchestrator {
                     "Player {} ({}) wins with {} VP!",
                     winner, self.player_names[winner], vp
                 );
-                self.replay.winner = Some(winner);
                 self.record_event(GameEvent::GameWon {
                     player: winner,
                     final_vp: vp,
@@ -253,7 +246,7 @@ impl GameOrchestrator {
         let player_id = self.state.current_player();
 
         // Inject recent game history for LLM context (last 20 events).
-        let recent_events = self.log.events();
+        let recent_events = &self.events;
         let history =
             crate::player::prompt::format_recent_history(recent_events, &self.player_names, 20);
         let _ = self
@@ -964,13 +957,11 @@ mod tests {
         assert_eq!(orch.player_names[0], "P0");
         assert_eq!(orch.max_turns, 500);
         assert!(orch.ui_tx.is_none());
-        assert!(orch.log.events().is_empty());
-        assert!(orch.replay.frames.is_empty());
-        assert_eq!(orch.replay.player_names, vec!["P0", "P1", "P2"]);
+        assert!(orch.events.is_empty());
     }
 
     #[test]
-    fn record_event_populates_log_and_replay() {
+    fn record_event_populates_events() {
         let mut orch = make_orchestrator(3);
         let event = GameEvent::DiceRolled {
             player: 0,
@@ -979,10 +970,7 @@ mod tests {
         };
         orch.record_event(event);
 
-        assert_eq!(orch.log.events().len(), 1);
-        assert_eq!(orch.replay.frames.len(), 1);
-        assert!(orch.replay.frames[0].description.contains("P0"));
-        assert!(orch.replay.frames[0].description.contains("7"));
+        assert_eq!(orch.events.len(), 1);
     }
 
     #[test]
@@ -1188,22 +1176,11 @@ mod tests {
             Ok(winner) => {
                 assert!(winner < 3);
                 assert!(orch.state.victory_points(winner) >= 10);
-                assert!(!orch.log.events().is_empty());
-                // Replay should have the same number of events as the log.
-                assert_eq!(orch.replay.frames.len(), orch.log.events().len());
-                assert_eq!(orch.replay.winner, Some(winner));
-                // Stats should be populated.
-                let stats = orch.replay.stats();
-                assert!(stats.total_events > 0);
-                assert!(stats.settlements_built > 0);
-                // Replay should be serializable.
-                let json = serde_json::to_string(&orch.replay).unwrap();
-                assert!(!json.is_empty());
+                assert!(!orch.events.is_empty());
             }
             Err(OrchestratorError::GameStuck(_)) => {
-                // Random players may not converge — acceptable.
-                // But the replay should still have frames from the attempt.
-                assert!(!orch.replay.frames.is_empty());
+                // Random players may not converge -- acceptable.
+                assert!(!orch.events.is_empty());
             }
             Err(e) => panic!("Unexpected error: {}", e),
         }
