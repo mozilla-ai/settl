@@ -3,23 +3,23 @@ source: src/ui/snapshot_tests.rs
 expression: buffer_to_string(&buf)
 ---
 ┌ Board ───────────────────────────────────────────────────────────────────────┐
-│                                                                              │
-│                                                                              │
-│                                *                                       *     │
-│                                          *                                   │
-│                                                                              │
-│                                                                              │
-│                               Ore                Sheep               Wood    │
-│                               10                   2                   9     │
+│                           Computing board layout...                          │
 │                                                                              │
 │                                                                              │
 │                                                                              │
-│                      *                                                       │
-│            *                                                                 │
 │                                                                              │
 │                                                                              │
-│                    Wheat               Brick               Sheep             │
-│                     12                   6                   4               │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
@@ -29,6 +29,6 @@ expression: buffer_to_string(&buf)
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │▸ Build Settlement[s]  Build Road[r]  Buy Development Card[d]  Propose Trade[t│
 │                                                                              │
-│ [Arrow/Enter] select  [s]ettlement  [r]oad  [d]ev card  [t]rade  [e]nd turn  │
+│ [Arrow/Enter] select  [s]ettlement  [r]oad  [c]ity  [d]ev card  [t]rade  [e]n│
 └──────────────────────────────────────────────────────────────────────────────┘
  Speed: 100ms  YOUR TURN  | q:quit  ?:help  Tab:AI  Space:pause  +/-:speed

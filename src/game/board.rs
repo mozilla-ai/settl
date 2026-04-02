@@ -19,7 +19,6 @@ impl HexCoord {
     }
 
     /// The six neighbours of this hex in axial coordinates.
-    #[allow(dead_code)]
     pub fn neighbors(self) -> [HexCoord; 6] {
         [
             HexCoord::new(self.q + 1, self.r - 1), // NE
@@ -203,6 +202,18 @@ impl Terrain {
             Terrain::Desert => "Desert",
         }
     }
+
+    /// Canonical RGB color for this terrain (single source of truth for all renderers).
+    pub fn rgb(self) -> (u8, u8, u8) {
+        match self {
+            Terrain::Forest => (34, 120, 34),
+            Terrain::Hills => (178, 102, 51),
+            Terrain::Pasture => (80, 180, 60),
+            Terrain::Fields => (200, 170, 50),
+            Terrain::Mountains => (140, 140, 150),
+            Terrain::Desert => (180, 160, 120),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -226,8 +237,9 @@ pub struct Hex {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PortType {
     /// Trade any 3 identical resources for 1 of any other.
-    Generic, // 3:1
-             // Specialised 2:1 ports are deferred.
+    Generic,
+    /// Trade 2 of the specific resource for 1 of any other.
+    Specific(Resource),
 }
 
 /// A harbour on the coast, accessible from two vertices.
@@ -284,7 +296,6 @@ pub fn board_hex_coords() -> Vec<HexCoord> {
 }
 
 /// Returns `true` if the given coordinate is one of the 19 board hexes.
-#[allow(dead_code)]
 pub fn is_board_hex(c: HexCoord) -> bool {
     match c.r {
         -2 => (0..=2).contains(&c.q),
@@ -304,7 +315,6 @@ pub fn is_board_hex(c: HexCoord) -> bool {
 ///
 /// In pointy-top axial coordinates, each `(hex, dir)` pair maps to a unique
 /// geometric point, so the canonical form is simply the identity.
-#[allow(dead_code)]
 pub fn canonical_vertex(v: VertexCoord) -> VertexCoord {
     v
 }
@@ -313,7 +323,6 @@ pub fn canonical_vertex(v: VertexCoord) -> VertexCoord {
 ///
 /// Since [`EdgeDirection`] only has NE, E and SE variants, the representation
 /// is already canonical.
-#[allow(dead_code)]
 pub fn canonical_edge(e: EdgeCoord) -> EdgeCoord {
     e
 }
@@ -500,7 +509,6 @@ pub fn hex_edges(h: HexCoord) -> [EdgeCoord; 6] {
 // ---------------------------------------------------------------------------
 
 /// Standard Catan terrain distribution (19 tiles).
-#[allow(dead_code)]
 fn standard_terrains() -> Vec<Terrain> {
     vec![
         Terrain::Forest,
@@ -526,13 +534,11 @@ fn standard_terrains() -> Vec<Terrain> {
 }
 
 /// Standard Catan number tokens (18 tokens for 18 non-desert hexes).
-#[allow(dead_code)]
 fn standard_number_tokens() -> Vec<u8> {
     vec![2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12]
 }
 
 /// Check whether any two adjacent hexes both carry a 6 or 8 token.
-#[allow(dead_code)]
 fn has_adjacent_red_numbers(hexes: &[Hex]) -> bool {
     use std::collections::HashMap;
     let token_map: HashMap<HexCoord, Option<u8>> =
@@ -557,60 +563,70 @@ fn has_adjacent_red_numbers(hexes: &[Hex]) -> bool {
 /// Fixed coastal port positions for the standard Catan board.
 ///
 /// Each port is placed along a coastal edge, giving two coastal vertices.
-/// All 9 ports are Generic (3:1) for now; specialised 2:1 ports are deferred.
+/// Standard Catan has 4 generic (3:1) ports and 5 specific (2:1) ports,
+/// one for each resource type.
 fn standard_ports() -> Vec<Port> {
-    let port_vertex_pairs: [(VertexCoord, VertexCoord); 9] = [
-        // Top edge, between (0,-2) and (1,-2)
+    let port_defs: [(VertexCoord, VertexCoord, PortType); 9] = [
+        // Top edge, between (0,-2) and (1,-2) -- Generic 3:1
         (
             VertexCoord::new(HexCoord::new(0, -2), VertexDirection::North),
             VertexCoord::new(HexCoord::new(1, -3), VertexDirection::South),
+            PortType::Generic,
         ),
-        // Top-right, above (2,-2)
+        // Top-right, above (2,-2) -- Wheat 2:1
         (
             VertexCoord::new(HexCoord::new(2, -2), VertexDirection::North),
             VertexCoord::new(HexCoord::new(3, -3), VertexDirection::South),
+            PortType::Specific(Resource::Wheat),
         ),
-        // Right upper, E edge of (2,-1)
+        // Right upper, E edge of (2,-1) -- Ore 2:1
         (
             VertexCoord::new(HexCoord::new(3, -2), VertexDirection::South),
             VertexCoord::new(HexCoord::new(3, -1), VertexDirection::North),
+            PortType::Specific(Resource::Ore),
         ),
-        // Right lower, E edge of (2,0)
+        // Right lower, E edge of (2,0) -- Generic 3:1
         (
             VertexCoord::new(HexCoord::new(3, -1), VertexDirection::South),
             VertexCoord::new(HexCoord::new(3, 0), VertexDirection::North),
+            PortType::Generic,
         ),
-        // Bottom-right, SE edge of (1,1)
+        // Bottom-right, SE edge of (1,1) -- Sheep 2:1
         (
             VertexCoord::new(HexCoord::new(1, 2), VertexDirection::North),
             VertexCoord::new(HexCoord::new(1, 1), VertexDirection::South),
+            PortType::Specific(Resource::Sheep),
         ),
-        // Bottom, S of (0,2)
+        // Bottom, S of (0,2) -- Generic 3:1
         (
             VertexCoord::new(HexCoord::new(0, 2), VertexDirection::South),
             VertexCoord::new(HexCoord::new(0, 3), VertexDirection::North),
+            PortType::Generic,
         ),
-        // Bottom-left, SW edge of (-2,2)
+        // Bottom-left, SW edge of (-2,2) -- Generic 3:1
         (
             VertexCoord::new(HexCoord::new(-2, 3), VertexDirection::North),
             VertexCoord::new(HexCoord::new(-2, 2), VertexDirection::South),
+            PortType::Generic,
         ),
-        // Left lower, W edge of (-2,1)
+        // Left lower, W edge of (-2,1) -- Brick 2:1
         (
             VertexCoord::new(HexCoord::new(-3, 2), VertexDirection::North),
             VertexCoord::new(HexCoord::new(-3, 1), VertexDirection::South),
+            PortType::Specific(Resource::Brick),
         ),
-        // Left upper, NW edge of (-1,-1)
+        // Left upper, NW edge of (-1,-1) -- Wood 2:1
         (
             VertexCoord::new(HexCoord::new(-1, -1), VertexDirection::North),
             VertexCoord::new(HexCoord::new(-1, -2), VertexDirection::South),
+            PortType::Specific(Resource::Wood),
         ),
     ];
 
-    port_vertex_pairs
+    port_defs
         .into_iter()
-        .map(|(v1, v2)| Port {
-            port_type: PortType::Generic,
+        .map(|(v1, v2, port_type)| Port {
+            port_type,
             vertices: (v1, v2),
         })
         .collect()
@@ -618,7 +634,6 @@ fn standard_ports() -> Vec<Port> {
 
 impl Board {
     /// The 19 hex positions for a standard 3-4-5-4-3 board in axial coords.
-    #[allow(dead_code)]
     pub fn hex_positions() -> Vec<HexCoord> {
         board_hex_coords()
     }
@@ -629,7 +644,6 @@ impl Board {
     }
 
     /// Returns the set of all valid vertex coordinates on this board.
-    #[allow(dead_code)]
     pub fn all_vertices(&self) -> Vec<VertexCoord> {
         let mut verts: Vec<VertexCoord> = Vec::new();
         for hex in &self.hexes {
@@ -643,7 +657,6 @@ impl Board {
     }
 
     /// Returns the set of all valid edge coordinates on this board.
-    #[allow(dead_code)]
     pub fn all_edges(&self) -> Vec<EdgeCoord> {
         let mut edges: Vec<EdgeCoord> = Vec::new();
         for hex in &self.hexes {
@@ -714,7 +727,6 @@ impl Board {
     ///
     /// Uses rejection sampling to ensure that 6 and 8 tokens are never placed
     /// on adjacent hexes.
-    #[allow(dead_code)]
     pub fn generate(rng: &mut impl Rng) -> Board {
         let coords = board_hex_coords();
 
@@ -863,7 +875,7 @@ mod tests {
                     let on_board: Vec<_> =
                         neighbors.iter().filter(|h| board_set.contains(h)).collect();
                     assert!(
-                        on_board.len() >= 1 && on_board.len() <= 3,
+                        !on_board.is_empty() && on_board.len() <= 3,
                         "vertex {:?} has {} board neighbors",
                         v,
                         on_board.len()
@@ -955,8 +967,25 @@ mod tests {
     fn board_has_9_ports() {
         let board = make_board();
         assert_eq!(board.ports.len(), 9);
-        for port in &board.ports {
-            assert_eq!(port.port_type, PortType::Generic);
+        let generic_count = board
+            .ports
+            .iter()
+            .filter(|p| p.port_type == PortType::Generic)
+            .count();
+        let specific_count = board.ports.len() - generic_count;
+        assert_eq!(generic_count, 4, "Should have 4 generic (3:1) ports");
+        assert_eq!(specific_count, 5, "Should have 5 specific (2:1) ports");
+
+        // Verify one port per resource type.
+        for &r in Resource::all() {
+            assert!(
+                board
+                    .ports
+                    .iter()
+                    .any(|p| p.port_type == PortType::Specific(r)),
+                "Missing 2:1 port for {:?}",
+                r
+            );
         }
     }
 

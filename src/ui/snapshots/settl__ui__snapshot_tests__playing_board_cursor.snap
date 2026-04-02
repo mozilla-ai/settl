@@ -3,35 +3,31 @@ source: src/ui/snapshot_tests.rs
 expression: buffer_to_string(&buf)
 ---
 ┌ Board ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐┌ Players ───────────────────┐
-│                                                                                                                                          ││>P0 Alice 0VP               │
+│                                                         Computing board layout...                                                        ││▸P0 Alice 0VP               │
 │                                                                                                                                          ││  W:0 B:0 S:0 H:0 O:0       │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││ P1 Bob 0VP                 │
 │                                                                                                                                          ││  W:0 B:0 S:0 H:0 O:0       │
-│                                                *                                       *                                                 ││                            │
-│                                                          *                                       *                                       ││ P2 Charlie 0VP             │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││ P2 Charlie 0VP             │
 │                                                                                                                                          ││  W:0 B:0 S:0 H:0 O:0       │
 │                                                                                                                                          ││                            │
-│                                               Ore                Sheep               Wood                                                ││ P3 Diana 0VP               │
-│                                               10                   2                   9                                                 ││  W:0 B:0 S:0 H:0 O:0       │
+│                                                                                                                                          ││ P3 Diana 0VP               │
+│                                                                                                                                          ││  W:0 B:0 S:0 H:0 O:0       │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││Turn: 1                     │
 │                                                                                                                                          ││Phase: Setup { round:       │
-│                                      *                                                                                                   ││Deck: 25 cards              │
-│                            *                                                                               *                             ││                            │
+│                                                                                                                                          ││Deck: 25 cards              │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                                    Wheat               Brick               Sheep               Brick                                     │└────────────────────────────┘
-│                                     12                   6                   4                  10                                       │┌ Game Log (2/2) ────────────┐
+│                                                                                                                                          ││                            │
+│                                                                                                                                          │└────────────────────────────┘
+│                                                                                                                                          │┌ Game Log (2) ──────────────┐
 │                                                                                                                                          ││   1| Game started -- your  │
 │                                                                                                                                          ││turn will show a prompt     │
 │                                                                                                                                          ││   2| q:quit  Space:pause   │
-│                                                                    ◆                   ◇                                                 ││+/-:speed  j/k:scroll       │
-│                                                                                                                      *                   ││Tab:AI panel                │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
-│                          Wood                Wheat            R Desert               Wood                 Ore                            ││                            │
-│                            9                  11                   R                   3                   8                             ││                            │
+│                                                                                                                                          ││+/-:speed  j/k:scroll       │
+│                                                                                                                                          ││Tab:AI panel                │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
@@ -39,22 +35,26 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                                    Wood                 Ore                Wheat               Sheep                                     ││                            │
-│                                      8                   3                   4                   5                                       ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                            *                                                                               *                             ││                            │
-│                                                                              ◇                   *                                       ││                            │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
-│                                              Brick               Wheat               Sheep                                               ││                            │
-│                                                5                   6                  11                                                 ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                                                          *                                       *                                       ││                            │
-│                                                *                                       *                                                 ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
+│                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
@@ -64,6 +64,6 @@ expression: buffer_to_string(&buf)
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ Place settlement -- use arrow keys to navigate                                                                                                                         │
 │                                                                                                                                                                        │
-│ [Arrows] move  [n/p] next/prev  [Enter] confirm  [Esc] cancel                                                                                                          │
+│ [Arrows] move  [n/p] next/prev  [Enter] confirm                                                                                                                        │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  Speed: 100ms  PLACING  | q:quit  ?:help  Tab:AI  Space:pause  +/-:speed

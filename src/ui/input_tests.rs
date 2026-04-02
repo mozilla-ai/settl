@@ -214,7 +214,7 @@ fn new_game_ai_kind_cycles_through_llamafile() {
         panic!("should be on NewGame");
     };
     // After 3 cycles, should be back to start. All three AI kinds should appear.
-    let kinds = vec![kind1, kind2, kind3.clone()];
+    let kinds = [kind1, kind2, kind3.clone()];
     assert!(kinds.contains(&PlayerKind::Random));
     assert!(kinds.contains(&PlayerKind::Llamafile));
     assert!(kinds.contains(&PlayerKind::Llm));
@@ -1029,10 +1029,7 @@ fn board_cursor_n_cycles_forward() {
         },
     ];
     let (ps, _rx) = make_test_playing_state(InputMode::BoardCursor {
-        kind: CursorKind::Settlement,
-        legal_vertices: Vec::new(),
-        legal_edges: Vec::new(),
-        legal_hexes: Vec::new(),
+        legal: CursorLegal::Settlements(Vec::new()),
         positions,
         selected: 0,
     });
@@ -1060,10 +1057,7 @@ fn board_cursor_n_wraps_around() {
         },
     ];
     let (ps, _rx) = make_test_playing_state(InputMode::BoardCursor {
-        kind: CursorKind::Settlement,
-        legal_vertices: Vec::new(),
-        legal_edges: Vec::new(),
-        legal_hexes: Vec::new(),
+        legal: CursorLegal::Settlements(Vec::new()),
         positions,
         selected: 1,
     });
@@ -1095,10 +1089,7 @@ fn board_cursor_p_cycles_backward() {
         },
     ];
     let (ps, _rx) = make_test_playing_state(InputMode::BoardCursor {
-        kind: CursorKind::Settlement,
-        legal_vertices: Vec::new(),
-        legal_edges: Vec::new(),
-        legal_hexes: Vec::new(),
+        legal: CursorLegal::Settlements(Vec::new()),
         positions,
         selected: 0,
     });
@@ -1126,10 +1117,7 @@ fn board_cursor_enter_sends_selected_index() {
         },
     ];
     let (ps, mut rx) = make_test_playing_state(InputMode::BoardCursor {
-        kind: CursorKind::Settlement,
-        legal_vertices: Vec::new(),
-        legal_edges: Vec::new(),
-        legal_hexes: Vec::new(),
+        legal: CursorLegal::Settlements(Vec::new()),
         positions,
         selected: 1,
     });
@@ -1139,4 +1127,35 @@ fn board_cursor_enter_sends_selected_index() {
 
     let resp = rx.try_recv().unwrap();
     assert!(matches!(resp, HumanResponse::Index(1)));
+}
+
+#[test]
+fn board_cursor_esc_does_not_send_response() {
+    let positions = vec![
+        CursorTarget {
+            screen_col: 10,
+            screen_row: 5,
+        },
+        CursorTarget {
+            screen_col: 20,
+            screen_row: 5,
+        },
+    ];
+    let (ps, mut rx) = make_test_playing_state(InputMode::BoardCursor {
+        legal: CursorLegal::Settlements(Vec::new()),
+        positions,
+        selected: 0,
+    });
+    let mut app = make_test_app(Screen::Playing(ps));
+
+    handle_input(&mut app, KeyCode::Esc);
+
+    // Esc should NOT send a response -- placement is mandatory.
+    assert!(rx.try_recv().is_err(), "Esc should not confirm placement");
+    // Should remain in BoardCursor mode.
+    if let Screen::Playing(ps) = &app.screen {
+        assert!(matches!(ps.input_mode, InputMode::BoardCursor { .. }));
+    } else {
+        panic!("Expected Playing screen");
+    }
 }

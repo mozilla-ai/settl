@@ -1,4 +1,3 @@
-pub mod human;
 pub mod llm;
 pub mod personality;
 pub mod prompt;

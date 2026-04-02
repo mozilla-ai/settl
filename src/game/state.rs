@@ -30,6 +30,8 @@ pub struct PlayerState {
     pub resources: HashMap<Resource, u32>,
     /// Development cards in hand (not yet played).
     pub dev_cards: Vec<DevCard>,
+    /// Number of dev cards bought this turn (can't be played until next turn).
+    pub dev_cards_bought_this_turn: usize,
     /// Number of Knight cards played (for Largest Army).
     pub knights_played: u32,
     /// Whether the player has already played a dev card this turn.
@@ -52,6 +54,7 @@ impl PlayerState {
         PlayerState {
             resources,
             dev_cards: Vec::new(),
+            dev_cards_bought_this_turn: 0,
             knights_played: 0,
             has_played_dev_card_this_turn: false,
             settlements_remaining: MAX_SETTLEMENTS,

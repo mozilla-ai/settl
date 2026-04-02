@@ -29,7 +29,7 @@ pub fn render_players(state: &GameState, player_names: &[String], area: Rect, bu
 
         // Player header.
         let is_current = state.current_player() == i;
-        let marker = if is_current { ">" } else { " " };
+        let marker = if is_current { "\u{25b8}" } else { " " };
         lines.push(Line::from(vec![
             Span::styled(
                 format!("{}P{} {} ", marker, i, name),
@@ -82,13 +82,13 @@ pub fn render_players(state: &GameState, player_names: &[String], area: Rect, bu
         // Longest road / largest army indicators.
         if state.longest_road_player == Some(i) {
             extras.push(Span::styled(
-                "LR ",
+                "\u{2605}LR ",
                 Style::default().fg(Color::Yellow).bold(),
             ));
         }
         if state.largest_army_player == Some(i) {
             extras.push(Span::styled(
-                "LA ",
+                "\u{2605}LA ",
                 Style::default().fg(Color::Yellow).bold(),
             ));
         }

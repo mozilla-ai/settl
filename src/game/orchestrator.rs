@@ -93,8 +93,6 @@ impl GameOrchestrator {
     /// Wrap an async player decision in a timeout. Returns the fallback on timeout.
     async fn with_timeout<T>(
         &self,
-        _player_id: PlayerId,
-        _what: &str,
         future: impl std::future::Future<Output = T>,
         fallback: T,
     ) -> T {
@@ -179,8 +177,6 @@ impl GameOrchestrator {
 
             let (v_idx, _v_reasoning) = self
                 .with_timeout(
-                    player_id,
-                    "choose_settlement",
                     self.players[player_id].choose_settlement(
                         &self.state,
                         player_id,
@@ -204,8 +200,6 @@ impl GameOrchestrator {
 
             let (e_idx, _e_reasoning) = self
                 .with_timeout(
-                    player_id,
-                    "choose_road",
                     self.players[player_id].choose_road(&self.state, player_id, &legal_edges),
                     (0, "timeout fallback".into()),
                 )
@@ -250,13 +244,14 @@ impl GameOrchestrator {
         let history =
             crate::player::prompt::format_recent_history(recent_events, &self.player_names, 20);
         let _ = self
-            .with_timeout(
-                player_id,
-                "set_game_context",
-                self.players[player_id].set_game_context(&history),
-                (),
-            )
+            .with_timeout(self.players[player_id].set_game_context(&history), ())
             .await;
+
+        // Step 0: Pre-roll Knight opportunity.
+        // Per Catan rules, a player may play a Knight before rolling the dice.
+        if let Some(winner) = self.offer_pre_roll_knight(player_id).await? {
+            return Ok(Some(winner));
+        }
 
         // Step 1: Roll dice.
         let (d1, d2) = dice::roll_dice(&mut rand::rng());
@@ -306,8 +301,6 @@ impl GameOrchestrator {
 
             let (choice_idx, reasoning) = self
                 .with_timeout(
-                    player_id,
-                    "choose_action",
                     self.players[player_id].choose_action(&self.state, player_id, &choices),
                     (0, "timeout fallback".into()),
                 )
@@ -358,6 +351,7 @@ impl GameOrchestrator {
             .collect();
 
         // Add dev card intents if the player can play one.
+        // Cards bought this turn (last N entries) cannot be played.
         if let GamePhase::Playing {
             current_player,
             has_rolled: true,
@@ -369,8 +363,12 @@ impl GameOrchestrator {
                 let mut seen_monopoly = false;
                 let mut seen_yop = false;
                 let mut seen_rb = false;
+                let playable_count = ps
+                    .dev_cards
+                    .len()
+                    .saturating_sub(ps.dev_cards_bought_this_turn);
 
-                for card in &ps.dev_cards {
+                for card in &ps.dev_cards[..playable_count] {
                     match card {
                         DevCard::Knight if !seen_knight => {
                             choices.push(PlayerChoice::PlayKnight);
@@ -409,20 +407,19 @@ impl GameOrchestrator {
             .filter(|&p| self.state.players[p].total_resources() > 7)
             .collect();
 
-        for &p in &players_needing_discard {
-            let total = self.state.players[p].total_resources();
-            let discard_count = (total / 2) as usize;
-
-            // Set the discard phase so apply_discard works.
+        if !players_needing_discard.is_empty() {
             self.state.phase = GamePhase::Discarding {
                 current_player: roller,
                 players_needing_discard: players_needing_discard.clone(),
             };
+        }
+
+        for &p in &players_needing_discard {
+            let total = self.state.players[p].total_resources();
+            let discard_count = (total / 2) as usize;
 
             let (cards, _reasoning) = self
                 .with_timeout(
-                    p,
-                    "choose_discard",
                     self.players[p].choose_discard(&self.state, p, discard_count),
                     (Vec::new(), "timeout fallback".into()),
                 )
@@ -449,8 +446,6 @@ impl GameOrchestrator {
 
         let (h_idx, _h_reasoning) = self
             .with_timeout(
-                roller,
-                "choose_robber_hex",
                 self.players[roller].choose_robber_hex(&self.state, roller, &legal_hexes),
                 (0, "timeout fallback".into()),
             )
@@ -466,8 +461,6 @@ impl GameOrchestrator {
             if !targets.is_empty() {
                 let (t_idx, _t_reasoning) = self
                     .with_timeout(
-                        roller,
-                        "choose_steal_target",
                         self.players[roller].choose_steal_target(&self.state, roller, &targets),
                         (0, "timeout fallback".into()),
                     )
@@ -521,6 +514,57 @@ impl GameOrchestrator {
         });
     }
 
+    /// Offer the player a chance to play a Knight before rolling dice.
+    ///
+    /// Per Catan rules, a Knight may be played before rolling. We present the
+    /// player with a choice: "Roll Dice" or "Play Knight". If they choose the
+    /// Knight, we handle it and check victory.
+    async fn offer_pre_roll_knight(
+        &mut self,
+        player_id: PlayerId,
+    ) -> Result<Option<PlayerId>, OrchestratorError> {
+        let ps = &self.state.players[player_id];
+        if ps.has_played_dev_card_this_turn {
+            return Ok(None);
+        }
+
+        // Check if the player has a playable Knight (not bought this turn).
+        let playable_count = ps
+            .dev_cards
+            .len()
+            .saturating_sub(ps.dev_cards_bought_this_turn);
+        let has_knight = ps.dev_cards[..playable_count].contains(&DevCard::Knight);
+        if !has_knight {
+            return Ok(None);
+        }
+
+        // Build a minimal choice set: Roll Dice or Play Knight.
+        let choices = vec![
+            PlayerChoice::GameAction(Action::EndTurn), // Repurposed as "Roll Dice" (index 0)
+            PlayerChoice::PlayKnight,                  // Play Knight pre-roll (index 1)
+        ];
+
+        // Override the label: the first choice means "Roll Dice", not literally EndTurn.
+        // The orchestrator will roll dice regardless if they pick index 0.
+        let (choice_idx, reasoning) = self
+            .with_timeout(
+                self.players[player_id].choose_action(&self.state, player_id, &choices),
+                (0, "timeout fallback".into()),
+            )
+            .await;
+
+        let choice = &choices[choice_idx.min(choices.len() - 1)];
+        if matches!(choice, PlayerChoice::PlayKnight) {
+            self.send_reasoning(player_id, &reasoning);
+            self.handle_knight(player_id).await?;
+            if let Some(winner) = rules::check_victory(&self.state) {
+                return Ok(Some(winner));
+            }
+        }
+
+        Ok(None)
+    }
+
     /// Handle playing a Knight dev card (multi-step: remove card, move robber, steal).
     async fn handle_knight(&mut self, player_id: PlayerId) -> Result<(), OrchestratorError> {
         // Legal hexes for robber.
@@ -531,8 +575,6 @@ impl GameOrchestrator {
 
         let (h_idx, h_reasoning) = self
             .with_timeout(
-                player_id,
-                "knight: choose_robber_hex",
                 self.players[player_id].choose_robber_hex(&self.state, player_id, &legal_hexes),
                 (0, "timeout fallback".into()),
             )
@@ -546,8 +588,6 @@ impl GameOrchestrator {
         } else {
             let (t_idx, _) = self
                 .with_timeout(
-                    player_id,
-                    "knight: choose_steal_target",
                     self.players[player_id].choose_steal_target(&self.state, player_id, &targets),
                     (0, "timeout fallback".into()),
                 )
@@ -571,7 +611,6 @@ impl GameOrchestrator {
     /// Handle playing Monopoly (choose resource, take all from other players).
     async fn handle_monopoly(&mut self, player_id: PlayerId) -> Result<(), OrchestratorError> {
         let (resource, reasoning) = self.with_timeout(
-            player_id, "monopoly: choose_resource",
             self.players[player_id].choose_resource(
                 &self.state,
                 player_id,
@@ -592,8 +631,6 @@ impl GameOrchestrator {
     ) -> Result<(), OrchestratorError> {
         let (r1, _) = self
             .with_timeout(
-                player_id,
-                "year_of_plenty: choose_resource_1",
                 self.players[player_id].choose_resource(
                     &self.state,
                     player_id,
@@ -604,8 +641,6 @@ impl GameOrchestrator {
             .await;
         let (r2, reasoning) = self
             .with_timeout(
-                player_id,
-                "year_of_plenty: choose_resource_2",
                 self.players[player_id].choose_resource(
                     &self.state,
                     player_id,
@@ -631,24 +666,27 @@ impl GameOrchestrator {
 
         let (e1_idx, _) = self
             .with_timeout(
-                player_id,
-                "road_building: choose_road_1",
                 self.players[player_id].choose_road(&self.state, player_id, &legal_edges_1),
                 (0, "timeout fallback".into()),
             )
             .await;
         let edge1 = legal_edges_1[e1_idx.min(legal_edges_1.len() - 1)];
 
-        // Second road — need to temporarily place the first to get updated legal edges.
-        // We'll apply both together via the dev card action.
-        let legal_edges_2 = rules::legal_road_edges(&self.state, player_id);
+        // Temporarily place the first road so the second road's legal positions
+        // account for the new connectivity.
+        self.state.roads.insert(edge1, player_id);
+        let legal_edges_2: Vec<_> = rules::legal_road_edges(&self.state, player_id)
+            .into_iter()
+            .filter(|e| *e != edge1)
+            .collect();
+        // Remove the temporary road; apply_play_dev_card will place both.
+        self.state.roads.remove(&edge1);
+
         let edge2 = if legal_edges_2.is_empty() {
-            edge1 // fallback — will fail validation but handled gracefully
+            edge1 // fallback -- will fail validation but handled gracefully
         } else {
             let (e2_idx, _) = self
                 .with_timeout(
-                    player_id,
-                    "road_building: choose_road_2",
                     self.players[player_id].choose_road(&self.state, player_id, &legal_edges_2),
                     (0, "timeout fallback".into()),
                 )
@@ -669,8 +707,6 @@ impl GameOrchestrator {
         // Step 1: Get the trade offer from the proposing player.
         let offer_result = self
             .with_timeout(
-                player_id,
-                "propose_trade",
                 self.players[player_id].propose_trade(&self.state, player_id),
                 None,
             )
@@ -731,8 +767,6 @@ impl GameOrchestrator {
 
             let (response, resp_reasoning) = self
                 .with_timeout(
-                    other_id,
-                    "respond_to_trade",
                     self.players[other_id].respond_to_trade(&self.state, other_id, &offer),
                     (
                         TradeResponse::Reject {
@@ -799,8 +833,6 @@ impl GameOrchestrator {
                     // Ask the original proposer if they accept the counter.
                     let (counter_response, counter_reasoning) = self
                         .with_timeout(
-                            player_id,
-                            "respond_to_counter",
                             self.players[player_id].respond_to_trade(
                                 &self.state,
                                 player_id,
@@ -865,7 +897,8 @@ impl GameOrchestrator {
         player_id: PlayerId,
         reasoning: &str,
     ) -> Result<(), OrchestratorError> {
-        let event = action_to_event(&action, player_id, reasoning);
+        // Compute bank trade rate BEFORE applying (state still has resources).
+        let event = action_to_event(&action, player_id, reasoning, &self.state);
         rules::apply_action(&mut self.state, &action)
             .map_err(|e| OrchestratorError::RuleViolation(format!("{}: {}", action, e)))?;
 
@@ -886,6 +919,7 @@ impl GameOrchestrator {
 
     /// Advance to the next player's turn.
     fn end_turn(&mut self, current_player: PlayerId) {
+        self.state.players[current_player].dev_cards_bought_this_turn = 0;
         self.state.turn_number += 1;
         let next = (current_player + 1) % self.state.num_players;
         self.state.phase = GamePhase::Playing {
@@ -897,7 +931,12 @@ impl GameOrchestrator {
 }
 
 /// Convert a game action into a GameEvent for the log.
-fn action_to_event(action: &Action, player: PlayerId, reasoning: &str) -> Option<GameEvent> {
+fn action_to_event(
+    action: &Action,
+    player: PlayerId,
+    reasoning: &str,
+    state: &GameState,
+) -> Option<GameEvent> {
     match action {
         Action::BuildSettlement(v) => Some(GameEvent::SettlementBuilt {
             player,
@@ -920,11 +959,14 @@ fn action_to_event(action: &Action, player: PlayerId, reasoning: &str) -> Option
             card: card.clone(),
             reasoning: reasoning.to_string(),
         }),
-        Action::BankTrade { give, get } => Some(GameEvent::BankTradeExecuted {
-            player,
-            gave: (*give, 1),
-            got: (*get, 1),
-        }),
+        Action::BankTrade { give, get } => {
+            let rate = rules::trade_rate(state, player, *give);
+            Some(GameEvent::BankTradeExecuted {
+                player,
+                gave: (*give, rate),
+                got: (*get, 1),
+            })
+        }
         Action::EndTurn => None,
         Action::ProposeTrade => None,
     }
@@ -1128,11 +1170,12 @@ mod tests {
 
     #[test]
     fn action_to_event_maps_build_settlement() {
+        let state = GameState::new(Board::default_board(), 3);
         let v = crate::game::board::VertexCoord::new(
             crate::game::board::HexCoord::new(0, 0),
             crate::game::board::VertexDirection::North,
         );
-        let event = action_to_event(&Action::BuildSettlement(v), 0, "test");
+        let event = action_to_event(&Action::BuildSettlement(v), 0, "test", &state);
         assert!(matches!(
             event,
             Some(GameEvent::SettlementBuilt { player: 0, .. })
@@ -1141,12 +1184,14 @@ mod tests {
 
     #[test]
     fn action_to_event_maps_end_turn_to_none() {
-        let event = action_to_event(&Action::EndTurn, 0, "");
+        let state = GameState::new(Board::default_board(), 3);
+        let event = action_to_event(&Action::EndTurn, 0, "", &state);
         assert!(event.is_none());
     }
 
     #[test]
     fn action_to_event_maps_bank_trade() {
+        let state = GameState::new(Board::default_board(), 3);
         let event = action_to_event(
             &Action::BankTrade {
                 give: Resource::Wood,
@@ -1154,12 +1199,15 @@ mod tests {
             },
             0,
             "trade",
+            &state,
         );
         match event {
             Some(GameEvent::BankTradeExecuted { player, gave, got }) => {
                 assert_eq!(player, 0);
                 assert_eq!(gave.0, Resource::Wood);
+                assert_eq!(gave.1, 4); // default 4:1 rate with no ports
                 assert_eq!(got.0, Resource::Ore);
+                assert_eq!(got.1, 1);
             }
             _ => panic!("Expected BankTradeExecuted"),
         }

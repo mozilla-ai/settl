@@ -92,7 +92,6 @@ impl Personality {
     }
 
     /// A chaotic player who makes unpredictable moves.
-    #[allow(dead_code)]
     pub fn chaos_agent() -> Self {
         Personality {
             name: "The Wild Card".into(),

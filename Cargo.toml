@@ -22,10 +22,6 @@ toml = "1.0"
 genai = "0.6.0-beta.13"
 async-trait = "0.1.89"
 reqwest = "0.13.2"
-ratatui-image = { version = "10", default-features = false, features = ["crossterm"] }
-image = { version = "0.25", default-features = false, features = ["png"] }
-imageproc = "0.26"
-ab_glyph = "0.2"
 log = "0.4"
 
 [dev-dependencies]

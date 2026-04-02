@@ -93,14 +93,14 @@ impl TuiHumanPlayer {
             .send(HumanPrompt { player_id, kind })
             .is_err()
         {
-            eprintln!("[TuiHumanPlayer] prompt channel closed, defaulting to Index(0)");
+            log::error!("TuiHumanPlayer: prompt channel closed, defaulting to Index(0)");
             return HumanResponse::Index(0);
         }
         let mut rx = self.channel.response_rx.lock().await;
         match rx.recv().await {
             Some(resp) => resp,
             None => {
-                eprintln!("[TuiHumanPlayer] response channel closed, defaulting to Index(0)");
+                log::error!("TuiHumanPlayer: response channel closed, defaulting to Index(0)");
                 HumanResponse::Index(0)
             }
         }

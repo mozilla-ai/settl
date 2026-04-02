@@ -681,8 +681,14 @@ fn cell_style(focused: bool) -> Style {
 
 fn truncate_str(s: &str, max: usize) -> &str {
     if s.len() <= max {
-        s
-    } else {
-        &s[..max.saturating_sub(1)]
+        return s;
     }
+    // Find the last char boundary at or before `max` to avoid panicking on multi-byte strings.
+    let end = s
+        .char_indices()
+        .map(|(i, _)| i)
+        .take_while(|&i| i <= max)
+        .last()
+        .unwrap_or(0);
+    &s[..end]
 }

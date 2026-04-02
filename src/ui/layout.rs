@@ -3,8 +3,6 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 
-use ratatui_image::picker::Picker;
-
 use crate::game::board::Resource;
 
 use super::board_view;
@@ -13,7 +11,20 @@ use super::game_log;
 use super::resource_bar;
 use super::{InputMode, PlayingState, TradeSide};
 
-/// Draw the full TUI game layout (used during the Playing screen).
+// ── Shared layout ────────────────────────────────────────────────────
+
+/// Precomputed areas for the playing screen layout.
+struct PlayingLayout {
+    board: Rect,
+    right_panel: Rect,
+    players: Rect,
+    game_log: Rect,
+    context: Rect,
+    status: Rect,
+    full: Rect,
+}
+
+/// Compute the playing screen layout areas.
 ///
 /// ```text
 /// +------------------------------------------+------------------+
@@ -27,112 +38,13 @@ use super::{InputMode, PlayingState, TradeSide};
 /// |  Status bar                                                   |
 /// +--------------------------------------------------------------+
 /// ```
-pub fn draw_playing(f: &mut Frame, ps: &PlayingState) {
-    let size = f.area();
-
-    // Main vertical split: top (board + players) | context bar | status bar.
+fn compute_layout(size: Rect, ps: &PlayingState) -> PlayingLayout {
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(15),   // Board + players
             Constraint::Length(5), // Context bar
             Constraint::Length(1), // Status bar
-        ])
-        .split(size);
-
-    // Top horizontal split: board | players (or board | AI panel if toggled).
-    let right_panel_width = if ps.show_ai_panel { 38 } else { 30 };
-    let top_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(107),                  // Board
-            Constraint::Length(right_panel_width), // Players or AI panel
-        ])
-        .split(main_chunks[0]);
-
-    // Split right panel vertically: players (top) + game log (bottom).
-    let right_split = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(20), // Players (4 players * ~4 lines + game info)
-            Constraint::Min(5),     // Game Log
-        ])
-        .split(top_chunks[1]);
-
-    // Render board.
-    if let Some(state) = &ps.state {
-        if let Some(ref grid) = ps.hex_grid {
-            board_view::render_board(state, grid, top_chunks[0], f.buffer_mut(), &ps.input_mode);
-        } else {
-            let waiting = Paragraph::new("Computing board layout...")
-                .block(
-                    Block::default()
-                        .title(" Board ")
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(Color::Cyan)),
-                )
-                .alignment(Alignment::Center);
-            f.render_widget(waiting, top_chunks[0]);
-        }
-
-        // Right panel: players or AI reasoning.
-        if ps.show_ai_panel {
-            chat_panel::render_chat(
-                &ps.chat_messages,
-                ps.chat_scroll,
-                top_chunks[1],
-                f.buffer_mut(),
-            );
-        } else {
-            resource_bar::render_players(state, &ps.player_names, right_split[0], f.buffer_mut());
-            game_log::render_log(&ps.messages, u16::MAX, right_split[1], f.buffer_mut());
-        }
-    } else {
-        let waiting = Paragraph::new("Waiting for game to start...")
-            .block(
-                Block::default()
-                    .title(" Board ")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
-            )
-            .alignment(Alignment::Center);
-        f.render_widget(waiting, top_chunks[0]);
-
-        let no_players = Paragraph::new("").block(
-            Block::default()
-                .title(" Players ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
-        );
-        f.render_widget(no_players, right_split[0]);
-        game_log::render_log(&ps.messages, u16::MAX, right_split[1], f.buffer_mut());
-    }
-
-    // Context bar (mode-dependent content).
-    draw_context_bar(f, ps, main_chunks[1]);
-
-    // Status bar.
-    draw_status_bar(f, ps, main_chunks[2]);
-
-    // Help overlay (drawn last so it sits on top).
-    if ps.show_help {
-        draw_help_overlay(f, size);
-    }
-}
-
-/// Draw the playing screen with pixel-rendered board.
-///
-/// Uses `BoardImageRenderer` for the board panel, keeping all other
-/// panels as text-based ratatui widgets.
-pub fn draw_playing_mut(f: &mut Frame, ps: &mut PlayingState, picker: &Picker) {
-    let size = f.area();
-
-    let main_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(15),
-            Constraint::Length(5),
-            Constraint::Length(1),
         ])
         .split(size);
 
@@ -147,63 +59,81 @@ pub fn draw_playing_mut(f: &mut Frame, ps: &mut PlayingState, picker: &Picker) {
         .constraints([Constraint::Length(20), Constraint::Min(5)])
         .split(top_chunks[1]);
 
-    // Render board using pixel image renderer.
-    if let Some(state) = &ps.state.clone() {
-        if let Some(ref mut renderer) = ps.board_image_renderer {
-            renderer.render(f, state, picker, top_chunks[0], &ps.input_mode);
-        } else if let Some(ref grid) = ps.hex_grid {
-            // Fallback to text renderer during init.
-            board_view::render_board(state, grid, top_chunks[0], f.buffer_mut(), &ps.input_mode);
-        } else {
-            let waiting = Paragraph::new("Computing board layout...")
-                .block(
-                    Block::default()
-                        .title(" Board ")
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(Color::Cyan)),
-                )
-                .alignment(Alignment::Center);
-            f.render_widget(waiting, top_chunks[0]);
-        }
+    PlayingLayout {
+        board: top_chunks[0],
+        right_panel: top_chunks[1],
+        players: right_split[0],
+        game_log: right_split[1],
+        context: main_chunks[1],
+        status: main_chunks[2],
+        full: size,
+    }
+}
 
+/// Render the right panel, context bar, status bar, and help overlay.
+///
+/// Everything except the board area -- shared between text and pixel paths.
+fn draw_panels(f: &mut Frame, ps: &PlayingState, layout: &PlayingLayout) {
+    if let Some(state) = &ps.state {
         if ps.show_ai_panel {
             chat_panel::render_chat(
                 &ps.chat_messages,
                 ps.chat_scroll,
-                top_chunks[1],
+                layout.right_panel,
                 f.buffer_mut(),
             );
         } else {
-            resource_bar::render_players(state, &ps.player_names, right_split[0], f.buffer_mut());
-            game_log::render_log(&ps.messages, u16::MAX, right_split[1], f.buffer_mut());
+            resource_bar::render_players(state, &ps.player_names, layout.players, f.buffer_mut());
+            game_log::render_log(&ps.messages, u16::MAX, layout.game_log, f.buffer_mut());
         }
     } else {
-        let waiting = Paragraph::new("Waiting for game to start...")
-            .block(
-                Block::default()
-                    .title(" Board ")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
-            )
-            .alignment(Alignment::Center);
-        f.render_widget(waiting, top_chunks[0]);
-
         let no_players = Paragraph::new("").block(
             Block::default()
                 .title(" Players ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Cyan)),
         );
-        f.render_widget(no_players, right_split[0]);
-        game_log::render_log(&ps.messages, u16::MAX, right_split[1], f.buffer_mut());
+        f.render_widget(no_players, layout.players);
+        game_log::render_log(&ps.messages, u16::MAX, layout.game_log, f.buffer_mut());
     }
 
-    draw_context_bar(f, ps, main_chunks[1]);
-    draw_status_bar(f, ps, main_chunks[2]);
+    draw_context_bar(f, ps, layout.context);
+    draw_status_bar(f, ps, layout.status);
 
     if ps.show_help {
-        draw_help_overlay(f, size);
+        draw_help_overlay(f, layout.full);
     }
+}
+
+fn draw_board_placeholder(f: &mut Frame, area: Rect, msg: &str) {
+    let waiting = Paragraph::new(msg.to_string())
+        .block(
+            Block::default()
+                .title(" Board ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .alignment(Alignment::Center);
+    f.render_widget(waiting, area);
+}
+
+// ── Public draw function ─────────────────────────────────────────────
+
+/// Draw the playing screen with text-rendered board.
+pub fn draw_playing(f: &mut Frame, ps: &mut PlayingState) {
+    let layout = compute_layout(f.area(), ps);
+
+    if let Some(state) = &ps.state {
+        if let Some(ref grid) = ps.hex_grid {
+            board_view::render_board(state, grid, layout.board, f.buffer_mut(), &ps.input_mode);
+        } else {
+            draw_board_placeholder(f, layout.board, "Computing board layout...");
+        }
+    } else {
+        draw_board_placeholder(f, layout.board, "Waiting for game to start...");
+    }
+
+    draw_panels(f, ps, &layout);
 }
 
 /// Draw the context bar based on the current input mode.
@@ -265,19 +195,15 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
             }
             let line1 = Line::from(spans);
             let line2 = Line::from(Span::styled(
-                " [Arrow/Enter] select  [s]ettlement  [r]oad  [d]ev card  [t]rade  [e]nd turn",
+                " [Arrow/Enter] select  [s]ettlement  [r]oad  [c]ity  [d]ev card  [t]rade  [e]nd turn",
                 Style::default().fg(Color::DarkGray),
             ));
             let para = Paragraph::new(vec![line1, Line::from(""), line2]);
             f.render_widget(para, inner);
         }
 
-        InputMode::BoardCursor { kind, .. } => {
-            let kind_name = match kind {
-                super::CursorKind::Settlement => "settlement",
-                super::CursorKind::Road => "road",
-                super::CursorKind::Robber => "robber",
-            };
+        InputMode::BoardCursor { legal, .. } => {
+            let kind_name = legal.kind_name();
             let lines = vec![
                 Line::from(Span::styled(
                     format!(" Place {} -- use arrow keys to navigate", kind_name),
@@ -285,7 +211,7 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
                 )),
                 Line::from(""),
                 Line::from(Span::styled(
-                    " [Arrows] move  [n/p] next/prev  [Enter] confirm  [Esc] cancel",
+                    " [Arrows] move  [n/p] next/prev  [Enter] confirm",
                     Style::default().fg(Color::DarkGray),
                 )),
             ];
@@ -300,9 +226,8 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
             available,
             ..
         } => {
-            let res_names = ["Wood", "Brick", "Sheep", "Wheat", "Ore"];
-            let give_str = format_resource_counts(give, &res_names);
-            let get_str = format_resource_counts(get, &res_names);
+            let give_str = format_resource_counts(give);
+            let get_str = format_resource_counts(get);
             let side_indicator = match side {
                 TradeSide::Give => "\u{25b8}GIVE",
                 TradeSide::Get => "\u{25b8}GET",
@@ -347,8 +272,13 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
                 ]),
                 Line::from(Span::styled(
                     format!(
-                        " Remaining: W:{} B:{} S:{} H:{} O:{}",
-                        remaining[0], remaining[1], remaining[2], remaining[3], remaining[4]
+                        " Remaining: W:{} B:{} S:{} H:{} O:{}  (total: {})",
+                        remaining[0],
+                        remaining[1],
+                        remaining[2],
+                        remaining[3],
+                        remaining[4],
+                        remaining.iter().sum::<u32>(),
                     ),
                     Style::default().fg(Color::DarkGray),
                 )),
@@ -539,7 +469,6 @@ fn draw_help_overlay(f: &mut Frame, area: Rect) {
         Line::from("  Arrows   Move between legal positions"),
         Line::from("  n / p    Next / previous position"),
         Line::from("  Enter    Confirm placement"),
-        Line::from("  Esc      Cancel"),
         Line::from(""),
         Line::from(Span::styled(
             "Resources (trade, discard, dev cards)",
@@ -584,7 +513,7 @@ fn action_shortcut(choice: &str) -> Option<char> {
     }
 }
 
-fn format_resource_counts(counts: &[u32; 5], _names: &[&str; 5]) -> String {
+fn format_resource_counts(counts: &[u32; 5]) -> String {
     let mut parts = Vec::new();
     let labels = ["W", "B", "S", "H", "O"];
     for (i, &c) in counts.iter().enumerate() {
@@ -614,5 +543,5 @@ fn format_resource_list(resources: &[Resource]) -> String {
         };
         counts[idx] += 1;
     }
-    format_resource_counts(&counts, &["Wood", "Brick", "Sheep", "Wheat", "Ore"])
+    format_resource_counts(&counts)
 }

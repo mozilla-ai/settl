@@ -17,11 +17,15 @@ use super::board_view::HexGrid;
 use super::screens::*;
 use super::*;
 
-/// Render a `Screen` into an in-memory buffer of the given size.
-pub fn render_to_buffer(screen: &Screen, width: u16, height: u16) -> Buffer {
+/// Render an `App` into an in-memory buffer of the given size.
+///
+/// Uses the same `draw_screen` path as the real event loop, so Playing
+/// screens go through the pixel board renderer (or placeholder if the
+/// renderer hasn't been initialized, as in most tests).
+pub fn render_app_to_buffer(app: &mut App, width: u16, height: u16) -> Buffer {
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).unwrap();
-    terminal.draw(|f| draw_screen(f, screen)).unwrap();
+    terminal.draw(|f| draw_screen(f, app)).unwrap();
     terminal.backend().buffer().clone()
 }
 
@@ -39,7 +43,7 @@ pub fn buffer_to_string(buf: &Buffer) -> String {
         lines.push(line.trim_end().to_string());
     }
     // Trim trailing empty lines.
-    while lines.last().map_or(false, |l| l.is_empty()) {
+    while lines.last().is_some_and(|l| l.is_empty()) {
         lines.pop();
     }
     lines.join("\n")
@@ -86,7 +90,6 @@ pub fn make_test_app(screen: Screen) -> App {
     App {
         screen,
         personalities: vec![],
-        picker: ratatui_image::picker::Picker::halfblocks(),
         llamafile_process: None,
     }
 }

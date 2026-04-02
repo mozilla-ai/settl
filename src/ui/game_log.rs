@@ -23,30 +23,15 @@ pub fn message_color(msg: &str) -> Color {
 }
 
 /// Render the game log as a scrollable panel.
-#[allow(dead_code)]
 pub fn render_log(messages: &[String], scroll: u16, area: Rect, buf: &mut Buffer) {
     let lines: Vec<Line> = messages
         .iter()
         .enumerate()
         .map(|(i, msg)| {
-            let style = if msg.starts_with("GAME OVER") {
-                Style::default().fg(Color::Yellow).bold()
-            } else if msg.contains("wins") {
-                Style::default().fg(Color::Yellow)
-            } else if msg.contains("Trade") || msg.contains("trade") {
-                Style::default().fg(Color::Cyan)
-            } else if msg.contains("Rolled") {
-                Style::default().fg(Color::White)
-            } else if msg.contains("Settlement") || msg.contains("City") || msg.contains("Road") {
-                Style::default().fg(Color::Green)
-            } else if msg.contains("Robber") || msg.contains("Stole") {
-                Style::default().fg(Color::Red)
-            } else if msg.contains("Setup") {
-                Style::default().fg(Color::DarkGray)
-            } else {
-                Style::default().fg(Color::Gray)
-            };
-
+            let mut style = Style::default().fg(message_color(msg));
+            if msg.starts_with("GAME OVER") {
+                style = style.bold();
+            }
             Line::from(Span::styled(format!("{:>4}| {}", i + 1, msg), style))
         })
         .collect();
@@ -58,7 +43,7 @@ pub fn render_log(messages: &[String], scroll: u16, area: Rect, buf: &mut Buffer
     let effective_scroll = scroll.min(max_scroll);
 
     let block = Block::default()
-        .title(format!(" Game Log ({}/{}) ", total_lines, total_lines))
+        .title(format!(" Game Log ({}) ", total_lines))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
 

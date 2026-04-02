@@ -1,4 +1,3 @@
-pub mod board_image;
 pub mod board_view;
 pub mod chat_panel;
 pub mod game_log;
@@ -26,7 +25,6 @@ use crossterm::terminal::{
 };
 use crossterm::ExecutableCommand;
 use ratatui::prelude::*;
-use ratatui_image::picker::{Picker, ProtocolType};
 use tokio::sync::mpsc;
 
 use crate::game::board::Board;
@@ -57,7 +55,6 @@ pub const PLAYER_TEXT_COLORS: [Color; 4] = [Color::Red, Color::Blue, Color::Gree
 
 /// Events sent from the game orchestrator to the TUI.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub enum UiEvent {
     /// A game state update with the latest event and a human-readable message.
     StateUpdate {
@@ -92,14 +89,37 @@ use crate::game::actions::TradeOffer;
 use crate::game::board::{EdgeCoord, HexCoord, Resource, VertexCoord};
 use crate::player::tui_human::{HumanResponse, PromptKind};
 
+/// Map a resource key character (w/b/s/h/o) to its index in `Resource::all()`.
+fn resource_key_index(key: KeyCode) -> Option<usize> {
+    match key {
+        KeyCode::Char('w') => Some(0),
+        KeyCode::Char('b') => Some(1),
+        KeyCode::Char('s') => Some(2),
+        KeyCode::Char('h') => Some(3),
+        KeyCode::Char('o') => Some(4),
+        _ => None,
+    }
+}
+
 // ── Input Mode State Machine ──────────────────────────────────────────
 
-/// What kind of board cursor is active.
+/// Legal game-coordinate positions for the board cursor, tagged by type.
+/// Replaces the previous `CursorKind` + three mutually-exclusive Vecs.
 #[derive(Debug, Clone)]
-pub enum CursorKind {
-    Settlement,
-    Road,
-    Robber,
+pub enum CursorLegal {
+    Settlements(Vec<VertexCoord>),
+    Roads(Vec<EdgeCoord>),
+    Hexes(Vec<HexCoord>),
+}
+
+impl CursorLegal {
+    pub fn kind_name(&self) -> &'static str {
+        match self {
+            CursorLegal::Settlements(_) => "settlement",
+            CursorLegal::Roads(_) => "road",
+            CursorLegal::Hexes(_) => "robber",
+        }
+    }
 }
 
 /// A cursor target with its screen position for navigation.
@@ -128,10 +148,7 @@ pub enum InputMode {
     },
     /// Navigating legal positions on the board with arrow keys.
     BoardCursor {
-        kind: CursorKind,
-        legal_vertices: Vec<VertexCoord>,
-        legal_edges: Vec<EdgeCoord>,
-        legal_hexes: Vec<HexCoord>,
+        legal: CursorLegal,
         positions: Vec<CursorTarget>,
         selected: usize,
     },
@@ -185,8 +202,6 @@ pub struct PlayingState {
     pub human_response_tx: Option<mpsc::UnboundedSender<HumanResponse>>,
     /// Cached hex grid for board rendering (computed once on first state).
     pub hex_grid: Option<board_view::HexGrid>,
-    /// Pixel board renderer (initialized when picker is available).
-    pub board_image_renderer: Option<board_image::BoardImageRenderer>,
 }
 
 impl PlayingState {
@@ -221,7 +236,6 @@ impl PlayingState {
             human_prompt_rx: None,
             human_response_tx: None,
             hex_grid: None,
-            board_image_renderer: None,
         }
     }
 
@@ -251,34 +265,34 @@ impl PlayingState {
                 selected: 0,
             },
             PromptKind::PlaceSettlement { legal } => {
-                let positions = self.compute_vertex_cursor_positions(&legal);
+                let positions = self.compute_cursor_positions(
+                    &legal,
+                    |g, v| g.vertex_screen_pos(v).unwrap_or((0, 0)),
+                    4,
+                );
                 InputMode::BoardCursor {
-                    kind: CursorKind::Settlement,
-                    legal_vertices: legal,
-                    legal_edges: Vec::new(),
-                    legal_hexes: Vec::new(),
+                    legal: CursorLegal::Settlements(legal),
                     positions,
                     selected: 0,
                 }
             }
             PromptKind::PlaceRoad { legal } => {
-                let positions = self.compute_edge_cursor_positions(&legal);
+                let positions = self.compute_cursor_positions(
+                    &legal,
+                    |g, e| g.edge_screen_pos(e).unwrap_or((0, 0)),
+                    4,
+                );
                 InputMode::BoardCursor {
-                    kind: CursorKind::Road,
-                    legal_vertices: Vec::new(),
-                    legal_edges: legal,
-                    legal_hexes: Vec::new(),
+                    legal: CursorLegal::Roads(legal),
                     positions,
                     selected: 0,
                 }
             }
             PromptKind::PlaceRobber { legal } => {
-                let positions = self.compute_hex_cursor_positions(&legal);
+                let positions =
+                    self.compute_cursor_positions(&legal, |g, h| g.hex_center_pos(h), 8);
                 InputMode::BoardCursor {
-                    kind: CursorKind::Robber,
-                    legal_vertices: Vec::new(),
-                    legal_edges: Vec::new(),
-                    legal_hexes: legal,
+                    legal: CursorLegal::Hexes(legal),
                     positions,
                     selected: 0,
                 }
@@ -304,13 +318,18 @@ impl PlayingState {
         };
     }
 
-    /// Compute screen positions for vertex cursor targets.
-    fn compute_vertex_cursor_positions(&self, vertices: &[VertexCoord]) -> Vec<CursorTarget> {
+    /// Compute screen positions for cursor targets from a position-lookup closure.
+    fn compute_cursor_positions<T>(
+        &self,
+        items: &[T],
+        lookup: impl Fn(&board_view::HexGrid, &T) -> (u16, u16),
+        fallback_spacing: u16,
+    ) -> Vec<CursorTarget> {
         if let Some(ref grid) = self.hex_grid {
-            vertices
+            items
                 .iter()
-                .map(|v| {
-                    let (col, row) = grid.vertex_screen_pos(v).unwrap_or((0, 0));
+                .map(|item| {
+                    let (col, row) = lookup(grid, item);
                     CursorTarget {
                         screen_col: col,
                         screen_row: row,
@@ -318,61 +337,11 @@ impl PlayingState {
                 })
                 .collect()
         } else {
-            vertices
+            items
                 .iter()
                 .enumerate()
                 .map(|(i, _)| CursorTarget {
-                    screen_col: i as u16 * 4,
-                    screen_row: 0,
-                })
-                .collect()
-        }
-    }
-
-    /// Compute screen positions for edge cursor targets.
-    fn compute_edge_cursor_positions(&self, edges: &[EdgeCoord]) -> Vec<CursorTarget> {
-        if let Some(ref grid) = self.hex_grid {
-            edges
-                .iter()
-                .map(|e| {
-                    let (col, row) = grid.edge_screen_pos(e).unwrap_or((0, 0));
-                    CursorTarget {
-                        screen_col: col,
-                        screen_row: row,
-                    }
-                })
-                .collect()
-        } else {
-            edges
-                .iter()
-                .enumerate()
-                .map(|(i, _)| CursorTarget {
-                    screen_col: i as u16 * 4,
-                    screen_row: 0,
-                })
-                .collect()
-        }
-    }
-
-    /// Compute screen positions for hex cursor targets.
-    fn compute_hex_cursor_positions(&self, hexes: &[HexCoord]) -> Vec<CursorTarget> {
-        if let Some(ref grid) = self.hex_grid {
-            hexes
-                .iter()
-                .map(|h| {
-                    let (col, row) = grid.hex_center_pos(h);
-                    CursorTarget {
-                        screen_col: col,
-                        screen_row: row,
-                    }
-                })
-                .collect()
-        } else {
-            hexes
-                .iter()
-                .enumerate()
-                .map(|(i, _)| CursorTarget {
-                    screen_col: i as u16 * 8,
+                    screen_col: i as u16 * fallback_spacing,
                     screen_row: 0,
                 })
                 .collect()
@@ -387,7 +356,6 @@ impl PlayingState {
                 event: _,
                 message,
             } => {
-                // Initialize hex grid on first state.
                 if self.hex_grid.is_none() {
                     self.hex_grid = Some(board_view::HexGrid::new());
                 }
@@ -432,11 +400,10 @@ impl PlayingState {
     }
 }
 
-/// Top-level app -- holds the current screen, shared config, and graphics picker.
+/// Top-level app -- holds the current screen and shared config.
 pub struct App {
     pub screen: Screen,
     pub personalities: Vec<Personality>,
-    pub picker: Picker,
     /// Running llamafile process, if any. Survives across "Play Again" restarts.
     pub llamafile_process: Option<crate::llamafile::LlamafileProcess>,
 }
@@ -445,42 +412,8 @@ pub struct App {
 
 /// Run the full TUI application (title → menu → game → post-game loop).
 pub async fn run_app() -> io::Result<()> {
-    // Discover personalities from ./personalities/*.toml.
     let personalities = discover_personalities();
 
-    // Detect terminal graphics protocol BEFORE entering raw mode.
-    // The picker does its own raw mode toggling internally, so we must
-    // call it before crossterm takes over stdin.
-    log::info!("TERM={:?}", std::env::var("TERM").ok());
-    log::info!("TERM_PROGRAM={:?}", std::env::var("TERM_PROGRAM").ok());
-    log::info!("TMUX={:?}", std::env::var("TMUX").ok());
-    let picker = match Picker::from_query_stdio() {
-        Ok(p) => {
-            let proto = p.protocol_type();
-            let font = p.font_size();
-            log::info!("graphics protocol: {:?}, font_size: {:?}", proto, font);
-            if proto == ProtocolType::Halfblocks {
-                eprintln!(
-                    "settl requires a terminal with graphics support (Sixel, Kitty, or iTerm2)."
-                );
-                eprintln!();
-                eprintln!("Supported terminals: Ghostty, Kitty, iTerm2, WezTerm, foot, Windows Terminal, VS Code.");
-                eprintln!("For tmux, add to ~/.tmux.conf: set -g allow-passthrough on");
-                std::process::exit(1);
-            }
-            p
-        }
-        Err(e) => {
-            eprintln!("settl requires a terminal with graphics support (Sixel, Kitty, or iTerm2).");
-            eprintln!();
-            eprintln!("Error: {:?}", e);
-            eprintln!("Supported terminals: Ghostty, Kitty, iTerm2, WezTerm, foot, Windows Terminal, VS Code.");
-            eprintln!("For tmux, add to ~/.tmux.conf: set -g allow-passthrough on");
-            std::process::exit(1);
-        }
-    };
-
-    // Setup terminal.
     enable_raw_mode()?;
     io::stdout().execute(EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(io::stdout());
@@ -497,7 +430,6 @@ pub async fn run_app() -> io::Result<()> {
     let mut app = App {
         screen: Screen::Title { frame: 0 },
         personalities,
-        picker,
         llamafile_process: None,
     };
 
@@ -517,7 +449,7 @@ async fn run_event_loop(
 ) -> io::Result<()> {
     loop {
         // Draw.
-        terminal.draw(|f| draw_screen_mut(f, app))?;
+        terminal.draw(|f| draw_screen(f, app))?;
 
         // Poll timeout depends on screen type.
         let timeout = match &app.screen {
@@ -529,47 +461,62 @@ async fn run_event_loop(
             _ => Duration::from_millis(100),
         };
 
+        // Wait for the first event, then drain ALL pending events before
+        // the next draw. This prevents keyboard backlog: if 10 arrow keys
+        // arrived during a slow protocol rebuild, we process them all and
+        // only rebuild once.
         if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    // Ctrl+C exits from any screen.
-                    if key.modifiers.contains(KeyModifiers::CONTROL)
-                        && key.code == KeyCode::Char('c')
-                    {
-                        return Ok(());
-                    }
-                    let action = handle_input(app, key.code);
-                    match action {
-                        Action::None => {}
-                        Action::Quit => return Ok(()),
-                        Action::Transition(screen) => app.screen = screen,
-                        Action::StartGame => {
-                            if let Screen::NewGame(ref ng) = app.screen {
-                                let needs_llamafile =
-                                    ng.players.iter().any(|p| p.kind == PlayerKind::Llamafile);
-                                if needs_llamafile && app.llamafile_process.is_none() {
-                                    // Transition to LlamafileSetup to download + start.
-                                    let (status_tx, status_rx) = mpsc::unbounded_channel();
-                                    let saved_config = clone_new_game_state(ng);
-                                    let handle = spawn_llamafile_setup(status_tx);
-                                    let setup_state = LlamafileSetupState {
-                                        status: crate::llamafile::LlamafileStatus::Checking,
-                                        status_rx,
-                                        saved_config,
-                                        task_handle: Some(handle),
-                                    };
-                                    app.screen = Screen::LlamafileSetup(setup_state);
-                                } else if needs_llamafile {
-                                    let port = app.llamafile_process.as_ref().unwrap().port;
-                                    let screen = launch_game(ng, &app.personalities, Some(port));
-                                    app.screen = screen;
-                                } else {
-                                    let screen = launch_game(ng, &app.personalities, None);
-                                    app.screen = screen;
+            loop {
+                // read() is non-blocking here because poll() returned true,
+                // and subsequent iterations are guarded by poll(ZERO).
+                if let Event::Key(key) = event::read()? {
+                    if key.kind == KeyEventKind::Press {
+                        if key.modifiers.contains(KeyModifiers::CONTROL)
+                            && key.code == KeyCode::Char('c')
+                        {
+                            return Ok(());
+                        }
+                        let action = handle_input(app, key.code);
+                        match action {
+                            Action::None => {}
+                            Action::Quit => return Ok(()),
+                            Action::Transition(screen) => app.screen = screen,
+                            Action::StartGame => {
+                                if let Screen::NewGame(ref ng) = app.screen {
+                                    let needs_llamafile =
+                                        ng.players.iter().any(|p| p.kind == PlayerKind::Llamafile);
+                                    if needs_llamafile && app.llamafile_process.is_none() {
+                                        let (status_tx, status_rx) = mpsc::unbounded_channel();
+                                        let saved_config = clone_new_game_state(ng);
+                                        let handle = spawn_llamafile_setup(status_tx);
+                                        let setup_state = LlamafileSetupState {
+                                            status: crate::llamafile::LlamafileStatus::Checking,
+                                            status_rx,
+                                            saved_config,
+                                            task_handle: Some(handle),
+                                        };
+                                        app.screen = Screen::LlamafileSetup(setup_state);
+                                    } else if needs_llamafile {
+                                        let port = app
+                                            .llamafile_process
+                                            .as_ref()
+                                            .expect("llamafile process should exist")
+                                            .port;
+                                        let screen =
+                                            launch_game(ng, &app.personalities, Some(port));
+                                        app.screen = screen;
+                                    } else {
+                                        let screen = launch_game(ng, &app.personalities, None);
+                                        app.screen = screen;
+                                    }
                                 }
                             }
                         }
                     }
+                }
+                // Continue draining if more events are already queued.
+                if !event::poll(Duration::ZERO)? {
+                    break;
                 }
             }
         }
@@ -613,11 +560,6 @@ async fn run_event_loop(
                 }
             }
 
-            // Initialize board image renderer once state is available.
-            if ps.board_image_renderer.is_none() && ps.state.is_some() {
-                ps.board_image_renderer = Some(board_image::BoardImageRenderer::new(&app.picker));
-            }
-
             // Check for incoming human prompts.
             if matches!(ps.input_mode, InputMode::Spectating) {
                 if let Some(ref mut prompt_rx) = ps.human_prompt_rx {
@@ -632,21 +574,14 @@ async fn run_event_loop(
 
 // ── Drawing Dispatch ───────────────────────────────────────────────────
 
-fn draw_screen(f: &mut Frame, screen: &Screen) {
-    match screen {
+fn draw_screen(f: &mut Frame, app: &mut App) {
+    match &mut app.screen {
         Screen::Title { frame } => screens::draw_title(f, *frame),
         Screen::MainMenu(state) => screens::draw_main_menu(f, state),
         Screen::NewGame(state) => screens::draw_new_game(f, state),
         Screen::LlamafileSetup(state) => screens::draw_llamafile_setup(f, state),
         Screen::Playing(ps) => layout::draw_playing(f, ps),
         Screen::PostGame(state) => screens::draw_post_game(f, state),
-    }
-}
-
-fn draw_screen_mut(f: &mut Frame, app: &mut App) {
-    match &mut app.screen {
-        Screen::Playing(ps) => layout::draw_playing_mut(f, ps, &app.picker),
-        other => draw_screen(f, other),
     }
 }
 
@@ -957,13 +892,15 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                                 *selected = selected.checked_sub(1).unwrap_or(len - 1);
                             }
                         }
-                        KeyCode::Enter | KeyCode::Esc => {
+                        KeyCode::Enter => {
                             if len > 0 {
                                 let idx = *selected;
                                 ps.send_response(HumanResponse::Index(idx));
                                 ps.input_mode = InputMode::Spectating;
                             }
                         }
+                        // Esc does nothing in BoardCursor -- placement is mandatory
+                        // (setup settlements, robber, Road Building). Only Enter confirms.
                         _ => {}
                     }
                     Action::None
@@ -976,15 +913,7 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                     available,
                     player_id,
                 } => {
-                    let res_key = match key {
-                        KeyCode::Char('w') => Some(0usize),
-                        KeyCode::Char('b') => Some(1),
-                        KeyCode::Char('s') => Some(2),
-                        KeyCode::Char('h') => Some(3),
-                        KeyCode::Char('o') => Some(4),
-                        _ => None,
-                    };
-                    if let Some(idx) = res_key {
+                    if let Some(idx) = resource_key_index(key) {
                         match side {
                             TradeSide::Give => {
                                 if give[idx] < available[idx] {
@@ -1020,13 +949,7 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                             let has_give = give.iter().any(|&g| g > 0);
                             let has_get = get.iter().any(|&g| g > 0);
                             if has_give && has_get {
-                                let resources = [
-                                    Resource::Wood,
-                                    Resource::Brick,
-                                    Resource::Sheep,
-                                    Resource::Wheat,
-                                    Resource::Ore,
-                                ];
+                                let resources = Resource::all();
                                 let offering: Vec<(Resource, u32)> = give
                                     .iter()
                                     .enumerate()
@@ -1064,22 +987,8 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                     remaining,
                     ..
                 } => {
-                    let res_key = match key {
-                        KeyCode::Char('w') => Some(0usize),
-                        KeyCode::Char('b') => Some(1),
-                        KeyCode::Char('s') => Some(2),
-                        KeyCode::Char('h') => Some(3),
-                        KeyCode::Char('o') => Some(4),
-                        _ => None,
-                    };
-                    let resources = [
-                        Resource::Wood,
-                        Resource::Brick,
-                        Resource::Sheep,
-                        Resource::Wheat,
-                        Resource::Ore,
-                    ];
-                    if let Some(idx) = res_key {
+                    let resources = Resource::all();
+                    if let Some(idx) = resource_key_index(key) {
                         if sel_resources.len() < *count && remaining[idx] > 0 {
                             remaining[idx] -= 1;
                             sel_resources.push(resources[idx]);
@@ -1125,15 +1034,10 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 }
 
                 InputMode::ResourcePicker { .. } => {
-                    let idx = match key {
-                        KeyCode::Char('w') => Some(0usize),
-                        KeyCode::Char('b') => Some(1),
-                        KeyCode::Char('s') => Some(2),
-                        KeyCode::Char('h') => Some(3),
-                        KeyCode::Char('o') => Some(4),
+                    let idx = resource_key_index(key).or(match key {
                         KeyCode::Esc => Some(0), // Default to Wood on Esc
                         _ => None,
-                    };
+                    });
                     if let Some(i) = idx {
                         ps.send_response(HumanResponse::Index(i));
                         ps.input_mode = InputMode::Spectating;
@@ -1244,7 +1148,7 @@ fn find_nearest_in_direction(
 
         if in_direction {
             let dist = (dx as i64) * (dx as i64) + (dy as i64) * (dy as i64);
-            if best.is_none() || dist < best.unwrap().1 {
+            if best.is_none_or(|(_, d)| dist < d) {
                 best = Some((i, dist));
             }
         }
@@ -1464,7 +1368,11 @@ fn launch_game(
                     )) as Box<dyn player::Player>
                 }
                 PlayerKind::Human => {
-                    let channel = human_channels.as_ref().unwrap().0.clone();
+                    let channel = human_channels
+                        .as_ref()
+                        .expect("human channels required for Human player")
+                        .0
+                        .clone();
                     Box::new(TuiHumanPlayer::new(pc.name.clone(), channel))
                         as Box<dyn player::Player>
                 }
