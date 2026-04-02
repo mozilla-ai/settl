@@ -22,6 +22,7 @@ toml = "1.0"
 genai = "0.6.0-beta.13"
 async-trait = "0.1.89"
 reqwest = "0.13.2"
+log = "0.4"
 
 [dev-dependencies]
 proptest = "1"

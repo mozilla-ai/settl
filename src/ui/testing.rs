@@ -86,6 +86,7 @@ pub fn make_test_app(screen: Screen) -> App {
     App {
         screen,
         personalities: vec![],
+        llamafile_process: None,
     }
 }
 
@@ -160,4 +161,28 @@ pub fn playing_discard_app() -> App {
         remaining: [3, 2, 1, 4, 2],
     });
     make_test_app(Screen::Playing(ps))
+}
+
+/// Create an `App` on the LlamafileSetup screen (downloading status).
+pub fn llamafile_setup_app() -> App {
+    let (_tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let setup = LlamafileSetupState {
+        status: crate::llamafile::LlamafileStatus::Downloading {
+            bytes: 524_288_000,
+            total: 1_073_741_824,
+        },
+        status_rx: rx,
+        saved_config: NewGameState::new(&[]),
+    };
+    make_test_app(Screen::LlamafileSetup(setup))
+}
+
+/// Create a NewGame app with Llamafile players (for testing kind cycling).
+pub fn new_game_llamafile_app() -> App {
+    let mut ng = NewGameState::new(&[]);
+    // Ensure AI players are Llamafile type.
+    for p in ng.players.iter_mut().skip(1) {
+        p.kind = PlayerKind::Llamafile;
+    }
+    make_test_app(Screen::NewGame(ng))
 }

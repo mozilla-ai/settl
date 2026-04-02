@@ -1,6 +1,6 @@
 ---
 source: src/ui/snapshot_tests.rs
-assertion_line: 50
+assertion_line: 181
 expression: buffer_to_string(&buf)
 ---
 

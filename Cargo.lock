@@ -2454,6 +2454,7 @@ dependencies = [
  "crossterm",
  "genai",
  "insta",
+ "log",
  "proptest",
  "rand 0.9.2",
  "ratatui",

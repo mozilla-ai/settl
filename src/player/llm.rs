@@ -42,6 +42,23 @@ impl LlmPlayer {
         }
     }
 
+    /// Create an LLM player backed by a pre-configured genai Client.
+    pub fn with_client(
+        name: String,
+        model: String,
+        personality: Personality,
+        client: Client,
+    ) -> Self {
+        Self {
+            name,
+            model,
+            client,
+            personality,
+            max_retries: 2,
+            extra_context: tokio::sync::Mutex::new(String::new()),
+        }
+    }
+
     /// Build the choose_index tool definition (used for most selection prompts).
     fn index_tool(max_index: usize) -> Tool {
         Tool::new("choose_index")
@@ -200,6 +217,25 @@ impl LlmPlayer {
             _ => "unknown".to_string(),
         };
 
+        log::debug!(
+            "[{}] LLM call: tool={} model={}",
+            self.name,
+            tool_name,
+            self.model,
+        );
+        log::debug!(
+            "[{}] system prompt ({} chars):\n{}",
+            self.name,
+            system_msg.len(),
+            system_msg
+        );
+        log::debug!(
+            "[{}] user prompt ({} chars):\n{}",
+            self.name,
+            user_msg.len(),
+            user_msg
+        );
+
         for attempt in 0..=self.max_retries {
             let mut messages = vec![ChatMessage::user(user_msg)];
             if attempt > 0 {
@@ -215,7 +251,22 @@ impl LlmPlayer {
 
             match self.client.exec_chat(&self.model, chat_req, None).await {
                 Ok(res) => {
+                    // Log raw response content.
+                    if let Some(content) = res.first_text() {
+                        log::debug!("[{}] response text: {}", self.name, content);
+                    }
+
                     let tool_calls = res.into_tool_calls();
+                    log::debug!(
+                        "[{}] tool calls received: {}",
+                        self.name,
+                        tool_calls
+                            .iter()
+                            .map(|tc| format!("{}({})", tc.fn_name, tc.fn_arguments))
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    );
+
                     if let Some(tc) = tool_calls.into_iter().find(|tc| tc.fn_name == tool_name) {
                         let reasoning = tc
                             .fn_arguments
@@ -223,18 +274,25 @@ impl LlmPlayer {
                             .and_then(|v| v.as_str())
                             .unwrap_or("")
                             .to_string();
+                        log::debug!(
+                            "[{}] success: tool={} args={} reasoning={}",
+                            self.name,
+                            tool_name,
+                            tc.fn_arguments,
+                            reasoning,
+                        );
                         return Ok((tc.fn_arguments, reasoning));
                     }
-                    // No matching tool call — retry.
-                    eprintln!(
-                        "[{}] Attempt {}: No {} tool call in response",
+                    // No matching tool call -- retry.
+                    log::warn!(
+                        "[{}] attempt {}: no {} tool call in response",
                         self.name,
                         attempt + 1,
-                        tool_name
+                        tool_name,
                     );
                 }
                 Err(e) => {
-                    eprintln!("[{}] Attempt {}: API error: {}", self.name, attempt + 1, e);
+                    log::warn!("[{}] attempt {}: API error: {}", self.name, attempt + 1, e,);
                     if attempt < self.max_retries {
                         // Exponential backoff.
                         let delay = std::time::Duration::from_secs(1 << attempt);
@@ -632,6 +690,33 @@ impl Player for LlmPlayer {
     }
 }
 
+/// The model name used for llamafile players. The `openai::` prefix forces
+/// genai's OpenAI adapter, which speaks the right protocol for llamafile's
+/// OpenAI-compatible API.
+pub const LLAMAFILE_MODEL: &str = "openai::bonsai";
+
+/// Build a genai `Client` that routes all requests to a local llamafile server.
+pub fn llamafile_client(port: u16) -> Client {
+    use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
+    use genai::ServiceTarget;
+
+    let endpoint_url: String = format!("http://127.0.0.1:{}/v1/", port);
+
+    let target_resolver =
+        ServiceTargetResolver::from_resolver_fn(move |service_target: ServiceTarget| {
+            let ServiceTarget { model, .. } = service_target;
+            Ok(ServiceTarget {
+                endpoint: Endpoint::from_owned(endpoint_url.clone()),
+                auth: AuthData::from_single("no-key"),
+                model,
+            })
+        });
+
+    Client::builder()
+        .with_service_target_resolver(target_resolver)
+        .build()
+}
+
 /// Fallback discard: drop the most abundant resources first.
 pub(crate) fn fallback_discard(
     ps: &crate::game::state::PlayerState,
@@ -771,5 +856,23 @@ mod tests {
             genai::chat::ToolName::Custom(s) => assert_eq!(s, "propose_trade"),
             _ => panic!("Expected custom tool name"),
         }
+    }
+
+    #[test]
+    fn llamafile_client_builds_without_panic() {
+        let _client = llamafile_client(8080);
+    }
+
+    #[test]
+    fn with_client_constructor_sets_fields() {
+        let client = llamafile_client(8080);
+        let player = LlmPlayer::with_client(
+            "Test".into(),
+            LLAMAFILE_MODEL.into(),
+            Personality::default(),
+            client,
+        );
+        assert_eq!(player.name, "Test");
+        assert_eq!(player.model, LLAMAFILE_MODEL);
     }
 }

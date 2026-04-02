@@ -170,19 +170,19 @@ pub fn format_hex_options(hexes: &[HexCoord]) -> String {
         .join("\n")
 }
 
+/// The full Catan rulebook, embedded at compile time.
+const CATAN_RULES: &str = include_str!("../../CATAN_RULES.md");
+
 /// Build the full system prompt for an LLM player.
 pub fn system_prompt(player_name: &str, personality_prompt: &str) -> String {
     format!(
         "You are playing a game of Settlers of Catan in a terminal environment.\n\
          Your name is {player_name}.\n\n\
          {personality_prompt}\n\n\
-         RULES REMINDER:\n\
-         - Build settlements at vertices, roads along edges, upgrade settlements to cities.\n\
-         - Resources: Wood (forest), Brick (hills), Sheep (pasture), Wheat (fields), Ore (mountains).\n\
-         - Costs: Road = Wood+Brick. Settlement = Wood+Brick+Wheat+Sheep. City = 2 Wheat+3 Ore. Dev Card = Wheat+Sheep+Ore.\n\
-         - Longest Road (5+) and Largest Army (3+ knights) each give 2 VP. First to 10 VP wins.\n\
+         {CATAN_RULES}\n\n\
+         INSTRUCTIONS:\n\
          - When you choose, ALWAYS explain your strategic reasoning before deciding.\n\
-         - Be concise but specific — reference coordinates and resource counts.",
+         - Be concise but specific -- reference coordinates and resource counts.",
     )
 }
 

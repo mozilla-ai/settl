@@ -15,6 +15,14 @@ cargo run                                # Launch TUI (title screen -> menus -> 
 
 The binary boots into a TUI (title screen -> main menu -> game setup). LLM mode requires provider API keys as env vars: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`.
 
+Debug logging writes to `~/.settl/debug.log`. Enabled automatically in debug builds, off in release. Override with env var:
+```bash
+cargo run                                # Debug build: logging on automatically
+SETTL_DEBUG=0 cargo run                  # Debug build: force logging off
+SETTL_DEBUG=1 cargo run --release        # Release build: force logging on
+```
+Use `log::debug!()` / `log::info!()` etc. from any module.
+
 ## Architecture
 
 **settl** is a terminal Catan game (~9k lines Rust) where LLMs play via tool/function calling. The codebase has five modules:
@@ -63,6 +71,7 @@ The binary boots into a TUI (title screen -> main menu -> game setup). LLM mode 
 - Keep code `cargo fmt`-clean and `cargo clippy`-clean.
 - Run `cargo fmt`, `cargo clippy`, and `cargo test` before finishing any task.
 - **Never use emdashes** in documentation or comments.
+- **Never write to stdout/stderr** (`println!`, `eprintln!`, `dbg!`) in code that runs under the TUI. Raw terminal output corrupts the alternate screen. Use the TUI's own status/error display (e.g. `LlamafileStatus::Error`) or log to a file instead.
 - Rust naming: `snake_case` for modules/functions, `CamelCase` for types, `SCREAMING_SNAKE_CASE` for constants.
 - Add comments where they aid understanding, but remove obvious ones (section headers restating the next line, comments that just name what the code does).
 
