@@ -26,6 +26,7 @@ expression: buffer_to_string(&buf)
 
 
 
+
                                                                 ███████╗███████╗████████╗████████╗██╗
                                                                 ██╔════╝██╔════╝╚══██╔══╝╚══██╔══╝██║
                                                                 ███████╗█████╗     ██║      ██║   ██║
@@ -35,9 +36,7 @@ expression: buffer_to_string(&buf)
 
 
 
-                                                                            > New Game
-                                                                              Continue Game
-                                                                              Replay Game
-                                                                              Quit
+                                                                               > New Game
+                                                                                 Quit
 
                                                                   [↑↓] navigate  [Enter] select  [q] quit
