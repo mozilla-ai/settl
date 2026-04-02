@@ -4,7 +4,7 @@
 //! Input handling lives in `mod.rs` dispatch.
 
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 
 use crate::player::personality::Personality;
 
@@ -44,6 +44,7 @@ impl MainMenuState {
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlayerKind {
     Random,
+    Llamafile,
     Llm,
     Human,
 }
@@ -52,6 +53,7 @@ impl PlayerKind {
     pub fn label(&self) -> &'static str {
         match self {
             PlayerKind::Random => "Random",
+            PlayerKind::Llamafile => "Llamafile",
             PlayerKind::Llm => "LLM",
             PlayerKind::Human => "Human",
         }
@@ -60,7 +62,8 @@ impl PlayerKind {
     /// Cycle to the next AI player kind (Human is excluded for AI slots).
     pub fn next_ai(&self) -> Self {
         match self {
-            PlayerKind::Random => PlayerKind::Llm,
+            PlayerKind::Random => PlayerKind::Llamafile,
+            PlayerKind::Llamafile => PlayerKind::Llm,
             PlayerKind::Llm => PlayerKind::Random,
             PlayerKind::Human => PlayerKind::Random,
         }
@@ -70,7 +73,8 @@ impl PlayerKind {
     pub fn prev_ai(&self) -> Self {
         match self {
             PlayerKind::Random => PlayerKind::Llm,
-            PlayerKind::Llm => PlayerKind::Random,
+            PlayerKind::Llamafile => PlayerKind::Random,
+            PlayerKind::Llm => PlayerKind::Llamafile,
             PlayerKind::Human => PlayerKind::Llm,
         }
     }
@@ -128,8 +132,6 @@ impl NewGameCol {
 pub enum NewGameFocus {
     /// Player table row + column.
     Player { row: usize, col: NewGameCol },
-    /// Seed setting.
-    Seed,
     /// The "Start Game" button.
     StartButton,
 }
@@ -137,7 +139,6 @@ pub enum NewGameFocus {
 #[derive(Debug)]
 pub struct NewGameState {
     pub players: Vec<PlayerConfig>,
-    pub seed_input: String,
     pub focus: NewGameFocus,
     /// Personality names: built-ins + discovered from TOML.
     pub personality_names: Vec<String>,
@@ -163,6 +164,25 @@ impl NewGameState {
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "Player".into());
 
+        // Default AI players to Llamafile when no provider API keys are set.
+        let has_api_key = std::env::var("ANTHROPIC_API_KEY")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .is_some()
+            || std::env::var("OPENAI_API_KEY")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .is_some()
+            || std::env::var("GOOGLE_API_KEY")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .is_some();
+        let default_ai_kind = if has_api_key {
+            PlayerKind::Llm
+        } else {
+            PlayerKind::Llamafile
+        };
+
         let players = (0..4)
             .map(|i| {
                 if i == 0 {
@@ -175,9 +195,9 @@ impl NewGameState {
                 } else {
                     PlayerConfig {
                         name: DEFAULT_NAMES[i].into(),
-                        kind: PlayerKind::Random,
+                        kind: default_ai_kind.clone(),
                         model_index: 0,
-                        personality_index: 0,
+                        personality_index: i.min(personality_names.len().saturating_sub(1)),
                     }
                 }
             })
@@ -185,7 +205,6 @@ impl NewGameState {
 
         Self {
             players,
-            seed_input: String::new(),
             focus: NewGameFocus::Player {
                 row: 0,
                 col: NewGameCol::Kind,
@@ -222,11 +241,6 @@ impl NewGameState {
             }
         }
     }
-
-    #[allow(dead_code)]
-    pub fn seed(&self) -> Option<u64> {
-        self.seed_input.parse().ok()
-    }
 }
 
 // ── Post-Game ──────────────────────────────────────────────────────────
@@ -239,6 +253,19 @@ pub struct PostGameState {
     pub winner_index: usize,
     pub scores: Vec<(String, u8)>, // (name, VP)
     pub selected: usize,
+}
+
+// ── Llamafile Setup ───────────────────────────────────────────────────
+
+/// Status for the llamafile download/start screen.
+#[derive(Debug)]
+pub struct LlamafileSetupState {
+    pub status: crate::llamafile::LlamafileStatus,
+    pub status_rx: tokio::sync::mpsc::UnboundedReceiver<crate::llamafile::LlamafileStatus>,
+    /// Saved NewGame config so we can launch the game when ready.
+    pub saved_config: NewGameState,
+    /// Handle to the background setup task so we can abort it on cancel.
+    pub task_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 // ── Drawing Functions ──────────────────────────────────────────────────
@@ -353,22 +380,21 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
         }
         let row_area = Rect::new(x_start, row_y, content_width, 1);
 
-        let model_str = if player.kind == PlayerKind::Llm {
-            AVAILABLE_MODELS
+        let model_str = match player.kind {
+            PlayerKind::Llm => AVAILABLE_MODELS
                 .get(player.model_index)
                 .copied()
-                .unwrap_or("?")
-        } else {
-            "—"
+                .unwrap_or("?"),
+            PlayerKind::Llamafile => "Bonsai-1.7B",
+            _ => "\u{2014}",
         };
-        let personality_str = if player.kind == PlayerKind::Llm {
-            state
+        let personality_str = match player.kind {
+            PlayerKind::Llm | PlayerKind::Llamafile => state
                 .personality_names
                 .get(player.personality_index)
                 .map(|s| s.as_str())
-                .unwrap_or("?")
-        } else {
-            "—"
+                .unwrap_or("?"),
+            _ => "\u{2014}",
         };
 
         // Build columns with highlights.
@@ -431,30 +457,8 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
         row_widget.render(row_area, f.buffer_mut());
     }
 
-    // Settings section.
-    let settings_y = header_y + 2 + state.num_players() as u16;
-    let divider_area = Rect::new(x_start, settings_y, content_width, 1);
-    let divider = Paragraph::new("─".repeat(content_width as usize))
-        .style(Style::default().fg(Color::DarkGray));
-    f.render_widget(divider, divider_area);
-
-    let seed_y = settings_y + 1;
-    let seed_focused = matches!(state.focus, NewGameFocus::Seed);
-    let seed_style = cell_style(seed_focused);
-    let seed_display = if state.seed_input.is_empty() {
-        "random"
-    } else {
-        &state.seed_input
-    };
-    let seed_line = Line::from(vec![
-        Span::styled("  Seed: ", Style::default().fg(Color::White)),
-        Span::styled(format!("[{}]", seed_display), seed_style),
-    ]);
-    let seed_area = Rect::new(x_start, seed_y, content_width, 1);
-    Paragraph::new(seed_line).render(seed_area, f.buffer_mut());
-
     // Start button.
-    let button_y = seed_y + 2;
+    let button_y = header_y + 2 + state.num_players() as u16 + 1;
     let button_focused = matches!(state.focus, NewGameFocus::StartButton);
     let button_style = if button_focused {
         Style::default().fg(Color::Black).bg(Color::Green).bold()
@@ -546,6 +550,95 @@ pub fn draw_post_game(f: &mut Frame, state: &PostGameState) {
     let hint_y = area.y + area.height - 1;
     let hint_area = Rect::new(area.x, hint_y, area.width, 1);
     let hint = Paragraph::new("[↑↓] navigate  [Enter] select")
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::DarkGray));
+    f.render_widget(hint, hint_area);
+}
+
+/// Draw the llamafile download/setup screen.
+pub fn draw_llamafile_setup(f: &mut Frame, state: &LlamafileSetupState) {
+    use crate::llamafile::{format_bytes, LlamafileStatus};
+
+    let area = f.area();
+    f.render_widget(Clear, area);
+
+    let content_width = 60u16.min(area.width.saturating_sub(4));
+    let x_start = area.x + (area.width.saturating_sub(content_width)) / 2;
+    let y_center = area.y + area.height / 2;
+
+    // Title.
+    let title_y = y_center.saturating_sub(4);
+    let title_area = Rect::new(x_start, title_y, content_width, 1);
+    let title = Paragraph::new("Setting up local AI")
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::Yellow).bold());
+    f.render_widget(title, title_area);
+
+    // Status text.
+    let status_text = match &state.status {
+        LlamafileStatus::Checking => "Checking for Bonsai-1.7B...".to_string(),
+        LlamafileStatus::Downloading { bytes, total } => {
+            if *total > 0 {
+                let pct = (*bytes as f64 / *total as f64 * 100.0) as u16;
+                format!(
+                    "Downloading Bonsai-1.7B... {} / {} ({}%)",
+                    format_bytes(*bytes),
+                    format_bytes(*total),
+                    pct
+                )
+            } else {
+                format!("Downloading Bonsai-1.7B... {}", format_bytes(*bytes))
+            }
+        }
+        LlamafileStatus::Preparing => "Making executable...".to_string(),
+        LlamafileStatus::Starting => "Starting local AI server...".to_string(),
+        LlamafileStatus::WaitingForReady => "Waiting for server to be ready...".to_string(),
+        LlamafileStatus::Ready(port) => format!("Ready on port {}!", port),
+        LlamafileStatus::Error(msg) => format!("Error: {}", msg),
+    };
+
+    let status_y = title_y + 2;
+    let status_height = if matches!(&state.status, LlamafileStatus::Error(_)) {
+        5
+    } else {
+        1
+    };
+    let status_area = Rect::new(x_start, status_y, content_width, status_height);
+    let status_style = match &state.status {
+        LlamafileStatus::Error(_) => Style::default().fg(Color::Red),
+        LlamafileStatus::Ready(_) => Style::default().fg(Color::Green),
+        _ => Style::default().fg(Color::Cyan),
+    };
+    let status = Paragraph::new(status_text)
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true })
+        .style(status_style);
+    f.render_widget(status, status_area);
+
+    // Progress bar for download.
+    if let LlamafileStatus::Downloading { bytes, total } = &state.status {
+        if *total > 0 {
+            let bar_y = status_y + 2;
+            let bar_width = 40u16.min(content_width);
+            let bar_x = x_start + (content_width.saturating_sub(bar_width)) / 2;
+            let bar_area = Rect::new(bar_x, bar_y, bar_width, 1);
+            let filled = (*bytes as f64 / *total as f64 * bar_width as f64) as u16;
+            let bar_str: String = (0..bar_width)
+                .map(|i| if i < filled { '\u{2588}' } else { '\u{2591}' })
+                .collect();
+            let bar = Paragraph::new(bar_str).style(Style::default().fg(Color::Cyan));
+            f.render_widget(bar, bar_area);
+        }
+    }
+
+    // Hint bar.
+    let hint_y = area.y + area.height - 1;
+    let hint_area = Rect::new(area.x, hint_y, area.width, 1);
+    let hint_text = match &state.status {
+        LlamafileStatus::Error(_) => "Esc: go back",
+        _ => "Esc: cancel",
+    };
+    let hint = Paragraph::new(hint_text)
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
     f.render_widget(hint, hint_area);

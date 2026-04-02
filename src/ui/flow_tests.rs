@@ -217,12 +217,10 @@ fn screen_navigation_new_game_configure_and_start() {
 
     // Navigate down to the start button.
     // Default focus is Player { row: 0, col: Kind }.
-    // Down x4 goes through player rows, then Seed, then StartButton.
+    // Down x4 goes through player rows to StartButton.
     for _ in 0..4 {
         handle_input(&mut app, KeyCode::Down);
     }
-    // Now at Seed.
-    handle_input(&mut app, KeyCode::Down);
     // Now at StartButton.
 
     if let Screen::NewGame(ref state) = app.screen {

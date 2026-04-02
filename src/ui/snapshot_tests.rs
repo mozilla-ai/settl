@@ -160,6 +160,23 @@ fn snapshot_playing_board_cursor() {
     insta::assert_snapshot!("playing_board_cursor", buffer_to_string(&buf));
 }
 
+// ── Llamafile setup screen ───────────────────────────────────────────
+
+#[test]
+fn snapshot_llamafile_setup() {
+    let app = llamafile_setup_app();
+    let buf = render_to_buffer(&app.screen, WIDTH, HEIGHT);
+    insta::assert_snapshot!("llamafile_setup", buffer_to_string(&buf));
+}
+
+#[test]
+fn snapshot_new_game_with_llamafile() {
+    std::env::set_var("USER", "Player");
+    let app = new_game_llamafile_app();
+    let buf = render_to_buffer(&app.screen, WIDTH, HEIGHT);
+    insta::assert_snapshot!("new_game_llamafile", buffer_to_string(&buf));
+}
+
 // ── Responsive layout ────────────────────────────────────────────────
 
 #[test]

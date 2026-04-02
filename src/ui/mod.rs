@@ -38,6 +38,12 @@ use crate::player::personality::Personality;
 
 use screens::*;
 
+/// Receiver for the llamafile process from the background setup task.
+/// Set when the setup screen is active; taken when setup completes.
+static LLAMAFILE_RESULT: std::sync::Mutex<
+    Option<tokio::sync::oneshot::Receiver<crate::llamafile::LlamafileProcess>>,
+> = std::sync::Mutex::new(None);
+
 /// Bright player colors for buildings and roads on the board.
 pub const PLAYER_COLORS: [Color; 4] = [
     Color::LightRed,
@@ -77,6 +83,7 @@ pub enum Screen {
     Title { frame: u64 },
     MainMenu(MainMenuState),
     NewGame(NewGameState),
+    LlamafileSetup(LlamafileSetupState),
     Playing(PlayingState),
     PostGame(PostGameState),
 }
@@ -430,6 +437,8 @@ pub struct App {
     pub screen: Screen,
     pub personalities: Vec<Personality>,
     pub picker: Picker,
+    /// Running llamafile process, if any. Survives across "Play Again" restarts.
+    pub llamafile_process: Option<crate::llamafile::LlamafileProcess>,
 }
 
 // ── Main Entry Point ───────────────────────────────────────────────────
@@ -446,11 +455,7 @@ pub async fn run_app() -> io::Result<()> {
         Ok(p) => {
             let proto = p.protocol_type();
             let font = p.font_size();
-            // Write diagnostics for debugging.
-            let _ = std::fs::write(
-                "/tmp/settl_proto.txt",
-                format!("protocol: {:?}\nfont_size: {:?}\n", proto, font),
-            );
+            log::info!("graphics protocol: {:?}, font_size: {:?}", proto, font);
             if proto == ProtocolType::Halfblocks {
                 eprintln!(
                     "settl requires a terminal with graphics support (Sixel, Kitty, or iTerm2)."
@@ -490,6 +495,7 @@ pub async fn run_app() -> io::Result<()> {
         screen: Screen::Title { frame: 0 },
         personalities,
         picker,
+        llamafile_process: None,
     };
 
     let result = run_event_loop(&mut terminal, &mut app).await;
@@ -513,6 +519,7 @@ async fn run_event_loop(
         // Poll timeout depends on screen type.
         let timeout = match &app.screen {
             Screen::Title { .. } => Duration::from_millis(33), // ~30fps for blink
+            Screen::LlamafileSetup(_) => Duration::from_millis(50), // Fast refresh for progress
             Screen::Playing(ps) => {
                 Duration::from_millis(if ps.paused { 50 } else { ps.speed_ms.min(50) })
             }
@@ -535,8 +542,28 @@ async fn run_event_loop(
                         Action::Transition(screen) => app.screen = screen,
                         Action::StartGame => {
                             if let Screen::NewGame(ref ng) = app.screen {
-                                let screen = launch_game(ng, &app.personalities);
-                                app.screen = screen;
+                                let needs_llamafile =
+                                    ng.players.iter().any(|p| p.kind == PlayerKind::Llamafile);
+                                if needs_llamafile && app.llamafile_process.is_none() {
+                                    // Transition to LlamafileSetup to download + start.
+                                    let (status_tx, status_rx) = mpsc::unbounded_channel();
+                                    let saved_config = clone_new_game_state(ng);
+                                    let handle = spawn_llamafile_setup(status_tx);
+                                    let setup_state = LlamafileSetupState {
+                                        status: crate::llamafile::LlamafileStatus::Checking,
+                                        status_rx,
+                                        saved_config,
+                                        task_handle: Some(handle),
+                                    };
+                                    app.screen = Screen::LlamafileSetup(setup_state);
+                                } else if needs_llamafile {
+                                    let port = app.llamafile_process.as_ref().unwrap().port;
+                                    let screen = launch_game(ng, &app.personalities, Some(port));
+                                    app.screen = screen;
+                                } else {
+                                    let screen = launch_game(ng, &app.personalities, None);
+                                    app.screen = screen;
+                                }
                             }
                         }
                     }
@@ -547,6 +574,32 @@ async fn run_event_loop(
         // Tick frame counter for title blink.
         if let Screen::Title { ref mut frame } = app.screen {
             *frame += 1;
+        }
+
+        // Poll llamafile setup progress.
+        if let Screen::LlamafileSetup(ref mut setup) = app.screen {
+            while let Ok(status) = setup.status_rx.try_recv() {
+                setup.status = status;
+            }
+            // When ready, pick up the process and launch the game.
+            if let crate::llamafile::LlamafileStatus::Ready(port) = &setup.status {
+                let port = *port;
+                // Take the process from the oneshot receiver.
+                if let Ok(mut guard) = LLAMAFILE_RESULT.lock() {
+                    if let Some(mut rx) = guard.take() {
+                        if let Ok(process) = rx.try_recv() {
+                            app.llamafile_process = Some(process);
+                        }
+                    }
+                }
+                // Move saved_config out of the setup state.
+                if let Screen::LlamafileSetup(setup) =
+                    std::mem::replace(&mut app.screen, Screen::Title { frame: 0 })
+                {
+                    let screen = launch_game(&setup.saved_config, &app.personalities, Some(port));
+                    app.screen = screen;
+                }
+            }
         }
 
         // Drain game events for Playing screen.
@@ -581,6 +634,7 @@ fn draw_screen(f: &mut Frame, screen: &Screen) {
         Screen::Title { frame } => screens::draw_title(f, *frame),
         Screen::MainMenu(state) => screens::draw_main_menu(f, state),
         Screen::NewGame(state) => screens::draw_new_game(f, state),
+        Screen::LlamafileSetup(state) => screens::draw_llamafile_setup(f, state),
         Screen::Playing(ps) => layout::draw_playing(f, ps),
         Screen::PostGame(state) => screens::draw_post_game(f, state),
     }
@@ -684,10 +738,6 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                             state.editing = true;
                             Action::None
                         }
-                        NewGameFocus::Seed => {
-                            state.editing = true;
-                            Action::None
-                        }
                         _ => {
                             // For Kind/Model/Personality columns, Enter cycles forward.
                             cycle_new_game_value(state, true);
@@ -698,6 +748,27 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 _ => Action::None,
             }
         }
+
+        Screen::LlamafileSetup(_) => match key {
+            KeyCode::Esc => {
+                // Cancel setup: abort the background task and return to NewGame.
+                if let Screen::LlamafileSetup(mut setup) =
+                    std::mem::replace(&mut app.screen, Screen::Title { frame: 0 })
+                {
+                    if let Some(handle) = setup.task_handle.take() {
+                        handle.abort();
+                    }
+                    // Clear any pending oneshot receiver.
+                    if let Ok(mut guard) = LLAMAFILE_RESULT.lock() {
+                        guard.take();
+                    }
+                    Action::Transition(Screen::NewGame(setup.saved_config))
+                } else {
+                    Action::Transition(Screen::NewGame(NewGameState::new(&app.personalities)))
+                }
+            }
+            _ => Action::None,
+        },
 
         Screen::Playing(ps) => {
             // Help overlay intercepts all input when visible.
@@ -1191,36 +1262,24 @@ fn handle_new_game_editing(state: &mut NewGameState, key: KeyCode) -> Action {
             Action::None
         }
         KeyCode::Backspace => {
-            match state.focus {
-                NewGameFocus::Player {
-                    row,
-                    col: NewGameCol::Name,
-                } => {
-                    state.players[row].name.pop();
-                }
-                NewGameFocus::Seed => {
-                    state.seed_input.pop();
-                }
-                _ => {}
+            if let NewGameFocus::Player {
+                row,
+                col: NewGameCol::Name,
+            } = state.focus
+            {
+                state.players[row].name.pop();
             }
             Action::None
         }
         KeyCode::Char(c) => {
-            match state.focus {
-                NewGameFocus::Player {
-                    row,
-                    col: NewGameCol::Name,
-                } => {
-                    if state.players[row].name.len() < 12 {
-                        state.players[row].name.push(c);
-                    }
+            if let NewGameFocus::Player {
+                row,
+                col: NewGameCol::Name,
+            } = state.focus
+            {
+                if state.players[row].name.len() < 12 {
+                    state.players[row].name.push(c);
                 }
-                NewGameFocus::Seed => {
-                    if c.is_ascii_digit() && state.seed_input.len() < 18 {
-                        state.seed_input.push(c);
-                    }
-                }
-                _ => {}
             }
             Action::None
         }
@@ -1237,11 +1296,10 @@ fn move_new_game_focus_up(state: &mut NewGameState) {
                 NewGameFocus::Player { row: 0, col }
             }
         }
-        NewGameFocus::Seed => NewGameFocus::Player {
+        NewGameFocus::StartButton => NewGameFocus::Player {
             row: state.num_players() - 1,
             col: NewGameCol::Kind,
         },
-        NewGameFocus::StartButton => NewGameFocus::Seed,
     };
 }
 
@@ -1251,10 +1309,9 @@ fn move_new_game_focus_down(state: &mut NewGameState) {
             if row + 1 < state.num_players() {
                 NewGameFocus::Player { row: row + 1, col }
             } else {
-                NewGameFocus::Seed
+                NewGameFocus::StartButton
             }
         }
-        NewGameFocus::Seed => NewGameFocus::StartButton,
         NewGameFocus::StartButton => NewGameFocus::StartButton,
     };
 }
@@ -1302,7 +1359,7 @@ fn cycle_new_game_value(state: &mut NewGameState, forward: bool) {
                 }
             }
             NewGameCol::Personality => {
-                if player.kind == PlayerKind::Llm {
+                if matches!(player.kind, PlayerKind::Llm | PlayerKind::Llamafile) {
                     let n = state.personality_names.len();
                     player.personality_index = if forward {
                         (player.personality_index + 1) % n
@@ -1320,7 +1377,11 @@ fn cycle_new_game_value(state: &mut NewGameState, forward: bool) {
 
 // ── Game Launch ────────────────────────────────────────────────────────
 
-fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> Screen {
+fn launch_game(
+    ng: &NewGameState,
+    discovered_personalities: &[Personality],
+    llamafile_port: Option<u16>,
+) -> Screen {
     use player::tui_human::{HumanInputChannel, TuiHumanPlayer};
     use std::sync::Arc;
     use tokio::sync::Mutex;
@@ -1357,36 +1418,53 @@ fn launch_game(ng: &NewGameState, discovered_personalities: &[Personality]) -> S
         None
     };
 
+    // Build a shared llamafile client if any player needs it.
+    let llama_client = llamafile_port.map(player::llm::llamafile_client);
+
     let players: Vec<Box<dyn player::Player>> = ng
         .players
         .iter()
-        .map(|pc| match pc.kind {
-            PlayerKind::Random => Box::new(player::random::RandomPlayer::new(pc.name.clone()))
-                as Box<dyn player::Player>,
-            PlayerKind::Llm => {
-                let model = AVAILABLE_MODELS
-                    .get(pc.model_index)
-                    .copied()
-                    .unwrap_or("claude-sonnet-4-6")
-                    .to_string();
-                let personality = if pc.personality_index < built_in_personalities.len() {
-                    built_in_personalities[pc.personality_index].clone()
-                } else {
-                    let disc_idx = pc.personality_index - built_in_personalities.len();
-                    discovered_personalities
-                        .get(disc_idx)
-                        .cloned()
-                        .unwrap_or_default()
-                };
-                Box::new(player::llm::LlmPlayer::new(
-                    pc.name.clone(),
-                    model,
-                    personality,
-                )) as Box<dyn player::Player>
-            }
-            PlayerKind::Human => {
-                let channel = human_channels.as_ref().unwrap().0.clone();
-                Box::new(TuiHumanPlayer::new(pc.name.clone(), channel)) as Box<dyn player::Player>
+        .map(|pc| {
+            let personality = if pc.personality_index < built_in_personalities.len() {
+                built_in_personalities[pc.personality_index].clone()
+            } else {
+                let disc_idx = pc.personality_index - built_in_personalities.len();
+                discovered_personalities
+                    .get(disc_idx)
+                    .cloned()
+                    .unwrap_or_default()
+            };
+            match pc.kind {
+                PlayerKind::Random => Box::new(player::random::RandomPlayer::new(pc.name.clone()))
+                    as Box<dyn player::Player>,
+                PlayerKind::Llamafile => {
+                    let client = llama_client
+                        .clone()
+                        .expect("llamafile client should exist when Llamafile players are used");
+                    Box::new(player::llm::LlmPlayer::with_client(
+                        pc.name.clone(),
+                        player::llm::LLAMAFILE_MODEL.into(),
+                        personality,
+                        client,
+                    )) as Box<dyn player::Player>
+                }
+                PlayerKind::Llm => {
+                    let model = AVAILABLE_MODELS
+                        .get(pc.model_index)
+                        .copied()
+                        .unwrap_or("claude-sonnet-4-6")
+                        .to_string();
+                    Box::new(player::llm::LlmPlayer::new(
+                        pc.name.clone(),
+                        model,
+                        personality,
+                    )) as Box<dyn player::Player>
+                }
+                PlayerKind::Human => {
+                    let channel = human_channels.as_ref().unwrap().0.clone();
+                    Box::new(TuiHumanPlayer::new(pc.name.clone(), channel))
+                        as Box<dyn player::Player>
+                }
             }
         })
         .collect();
@@ -1433,6 +1511,55 @@ fn build_post_game(ps: &PlayingState) -> PostGameState {
         winner_index,
         scores,
         selected: 0,
+    }
+}
+
+// ── Llamafile Helpers ──────────────────────────────────────────────────
+
+/// Spawn a background task that downloads (if needed) and starts the llamafile.
+///
+/// Returns the `JoinHandle` so the caller can abort on cancel.
+/// The process is sent back via a oneshot channel stored in `LLAMAFILE_RESULT`.
+fn spawn_llamafile_setup(
+    status_tx: mpsc::UnboundedSender<crate::llamafile::LlamafileStatus>,
+) -> tokio::task::JoinHandle<()> {
+    let (process_tx, process_rx) = tokio::sync::oneshot::channel();
+    if let Ok(mut guard) = LLAMAFILE_RESULT.lock() {
+        *guard = Some(process_rx);
+    }
+
+    tokio::spawn(async move {
+        match crate::llamafile::ensure_llamafile(status_tx.clone()).await {
+            Ok(path) => {
+                let _ = status_tx.send(crate::llamafile::LlamafileStatus::Starting);
+                let _ = status_tx.send(crate::llamafile::LlamafileStatus::WaitingForReady);
+                match crate::llamafile::LlamafileProcess::start_with_port_scan(&path).await {
+                    Ok(process) => {
+                        let port = process.port;
+                        if process_tx.send(process).is_ok() {
+                            let _ = status_tx.send(crate::llamafile::LlamafileStatus::Ready(port));
+                        }
+                        // If send fails, the receiver was dropped (user cancelled).
+                    }
+                    Err(e) => {
+                        let _ = status_tx.send(crate::llamafile::LlamafileStatus::Error(e));
+                    }
+                }
+            }
+            Err(e) => {
+                let _ = status_tx.send(crate::llamafile::LlamafileStatus::Error(e));
+            }
+        }
+    })
+}
+
+/// Clone a `NewGameState` for saving across screen transitions.
+fn clone_new_game_state(ng: &NewGameState) -> NewGameState {
+    NewGameState {
+        players: ng.players.clone(),
+        focus: ng.focus,
+        personality_names: ng.personality_names.clone(),
+        editing: false,
     }
 }
 

@@ -26,6 +26,7 @@ ratatui-image = { version = "10", default-features = false, features = ["crosste
 image = { version = "0.25", default-features = false, features = ["png"] }
 imageproc = "0.26"
 ab_glyph = "0.2"
+log = "0.4"
 
 [dev-dependencies]
 proptest = "1"

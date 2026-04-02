@@ -3494,6 +3494,7 @@ dependencies = [
  "image",
  "imageproc",
  "insta",
+ "log",
  "proptest",
  "rand 0.9.2",
  "ratatui",
@@ -3501,7 +3502,6 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "tempfile",
  "tokio",
  "toml",
 ]

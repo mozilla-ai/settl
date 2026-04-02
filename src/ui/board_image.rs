@@ -174,6 +174,8 @@ pub struct BoardImageRenderer {
     protocol: Option<StatefulProtocol>,
     base_image: Option<RgbaImage>,
     board_fingerprint: u64,
+    cursor_fingerprint: u64,
+    last_area: (u16, u16),
     pixel_grid: PixelHexGrid,
     font: FontRef<'static>,
     font_bold: FontRef<'static>,
@@ -194,6 +196,8 @@ impl BoardImageRenderer {
             protocol: Some(protocol),
             base_image: None,
             board_fingerprint: 0,
+            cursor_fingerprint: 0,
+            last_area: (0, 0),
             pixel_grid: PixelHexGrid::new(),
             font,
             font_bold,
@@ -212,6 +216,8 @@ impl BoardImageRenderer {
             protocol: None,
             base_image: None,
             board_fingerprint: 0,
+            cursor_fingerprint: 0,
+            last_area: (0, 0),
             pixel_grid: PixelHexGrid::new(),
             font,
             font_bold,
@@ -231,32 +237,50 @@ impl BoardImageRenderer {
         }
 
         // Check cache: regenerate base image if board state changed.
-        let fp = compute_fingerprint(state);
-        if fp != self.board_fingerprint || self.base_image.is_none() {
+        let board_fp = compute_fingerprint(state);
+        let board_changed = board_fp != self.board_fingerprint || self.base_image.is_none();
+        if board_changed {
             let img = self.generate_base_image(state);
             self.base_image = Some(img);
-            self.board_fingerprint = fp;
+            self.board_fingerprint = board_fp;
         }
 
-        // Composite cursor overlay if in BoardCursor mode.
-        let final_image = if matches!(input_mode, InputMode::BoardCursor { .. }) {
-            let mut img = self.base_image.as_ref().unwrap().clone();
-            self.draw_cursor_overlay(&mut img, input_mode);
-            img
-        } else {
-            self.base_image.as_ref().unwrap().clone()
-        };
+        // Check if cursor state changed.
+        let cursor_fp = cursor_fingerprint(input_mode);
+        let cursor_changed = cursor_fp != self.cursor_fingerprint;
 
-        // Create protocol and render.
-        let protocol = picker.new_resize_protocol(DynamicImage::ImageRgba8(final_image));
-        self.protocol = Some(protocol);
+        // Check if area size changed (terminal resize).
+        let area_key = (area.width, area.height);
+        let area_changed = area_key != self.last_area;
+
+        // Only rebuild the protocol when something actually changed.
+        let needs_rebuild =
+            board_changed || cursor_changed || area_changed || self.protocol.is_none();
+
+        if needs_rebuild {
+            self.cursor_fingerprint = cursor_fp;
+            self.last_area = area_key;
+
+            // Composite cursor overlay if in BoardCursor mode.
+            let final_image = if matches!(input_mode, InputMode::BoardCursor { .. }) {
+                let mut img = self.base_image.as_ref().unwrap().clone();
+                self.draw_cursor_overlay(&mut img, input_mode);
+                img
+            } else {
+                self.base_image.as_ref().unwrap().clone()
+            };
+
+            let protocol = picker.new_resize_protocol(DynamicImage::ImageRgba8(final_image));
+            self.protocol = Some(protocol);
+            log::debug!("board image protocol rebuilt (board={board_changed}, cursor={cursor_changed}, area={area_changed})");
+        }
 
         if let Some(ref mut proto) = self.protocol {
             let widget = StatefulImage::default().resize(Resize::Scale(None));
             f.render_stateful_widget(widget, area, proto);
             // Log any encoding errors for debugging.
             if let Some(Err(e)) = proto.last_encoding_result() {
-                let _ = std::fs::write("/tmp/settl_render_err.txt", format!("{:?}", e));
+                log::error!("ratatui-image encoding error: {:?}", e);
             }
         }
     }
@@ -574,6 +598,23 @@ fn compute_fingerprint(state: &GameState) -> u64 {
     fp = fp.wrapping_add(state.robber_hex.q as u64 * 100 + state.robber_hex.r as u64);
     fp = fp.wrapping_add(state.turn_number as u64 * 17);
     fp
+}
+
+fn cursor_fingerprint(input_mode: &InputMode) -> u64 {
+    match input_mode {
+        InputMode::BoardCursor {
+            selected,
+            positions,
+            ..
+        } => {
+            // Hash selected index and number of positions.
+            let mut fp = *selected as u64 * 1000007;
+            fp = fp.wrapping_add(positions.len() as u64 * 31);
+            fp
+        }
+        // All non-cursor modes hash to the same value.
+        _ => 0,
+    }
 }
 
 /// Get the two vertex pixel positions for an edge (the endpoints of the road).
