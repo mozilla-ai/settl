@@ -248,6 +248,7 @@ impl NewGameState {
         }
     }
 
+    #[allow(dead_code)]
     pub fn seed(&self) -> Option<u64> {
         self.seed_input.parse().ok()
     }

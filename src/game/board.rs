@@ -19,6 +19,7 @@ impl HexCoord {
     }
 
     /// The six neighbours of this hex in axial coordinates.
+    #[allow(dead_code)]
     pub fn neighbors(self) -> [HexCoord; 6] {
         [
             HexCoord::new(self.q + 1, self.r - 1), // NE
@@ -499,6 +500,7 @@ pub fn hex_edges(h: HexCoord) -> [EdgeCoord; 6] {
 // ---------------------------------------------------------------------------
 
 /// Standard Catan terrain distribution (19 tiles).
+#[allow(dead_code)]
 fn standard_terrains() -> Vec<Terrain> {
     vec![
         Terrain::Forest,
@@ -524,11 +526,13 @@ fn standard_terrains() -> Vec<Terrain> {
 }
 
 /// Standard Catan number tokens (18 tokens for 18 non-desert hexes).
+#[allow(dead_code)]
 fn standard_number_tokens() -> Vec<u8> {
     vec![2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12]
 }
 
 /// Check whether any two adjacent hexes both carry a 6 or 8 token.
+#[allow(dead_code)]
 fn has_adjacent_red_numbers(hexes: &[Hex]) -> bool {
     use std::collections::HashMap;
     let token_map: HashMap<HexCoord, Option<u8>> =
@@ -660,23 +664,29 @@ impl Board {
             .map(|h| h.coord)
     }
 
-    /// Create a deterministic standard Catan board (unshuffled).
+    /// Create the standard Catan beginner board (official 5th Edition layout).
     ///
-    /// Useful for tests and demos.
-    #[allow(dead_code)]
+    /// Desert is in the center at (0,0) with the robber. Terrain and number
+    /// token placement matches the rulebook's "Starting Setup for Beginners."
+    /// No 6/8 tokens are adjacent.
     pub fn default_board() -> Self {
         use Terrain::*;
 
         let coords = board_hex_coords();
 
-        // Standard terrain distribution placed in coordinate order.
+        // Official beginner layout: terrain per hex in coordinate order.
+        //   Row 0 (r=-2): Mountains, Pasture, Forest
+        //   Row 1 (r=-1): Fields, Hills, Pasture, Hills
+        //   Row 2 (r= 0): Forest, Fields, Desert, Forest, Mountains
+        //   Row 3 (r= 1): Forest, Mountains, Fields, Pasture
+        //   Row 4 (r= 2): Hills, Fields, Pasture
         let terrains = vec![
-            Hills, Hills, Hills, Forest, Forest, Forest, Forest, Mountains, Mountains, Mountains,
-            Fields, Fields, Fields, Fields, Pasture, Pasture, Pasture, Pasture, Desert,
+            Mountains, Pasture, Forest, Fields, Hills, Pasture, Hills, Forest, Fields, Desert,
+            Forest, Mountains, Forest, Mountains, Fields, Pasture, Hills, Fields, Pasture,
         ];
 
-        // Standard number tokens in a fixed order.
-        let numbers: Vec<u8> = vec![5, 2, 6, 3, 8, 10, 9, 12, 11, 4, 8, 10, 9, 4, 5, 6, 3, 11];
+        // Number tokens matching the beginner layout (desert gets None).
+        let numbers: Vec<u8> = vec![10, 2, 9, 12, 6, 4, 10, 9, 11, 3, 8, 8, 3, 4, 5, 5, 6, 11];
 
         let mut number_iter = numbers.into_iter();
         let hexes: Vec<Hex> = coords
@@ -704,6 +714,7 @@ impl Board {
     ///
     /// Uses rejection sampling to ensure that 6 and 8 tokens are never placed
     /// on adjacent hexes.
+    #[allow(dead_code)]
     pub fn generate(rng: &mut impl Rng) -> Board {
         let coords = board_hex_coords();
 
@@ -1112,5 +1123,65 @@ mod tests {
         assert_eq!(Terrain::Fields.label(), "Wheat");
         assert_eq!(Terrain::Mountains.label(), "Ore");
         assert_eq!(Terrain::Desert.label(), "Desert");
+    }
+
+    #[test]
+    fn default_board_desert_in_center() {
+        let board = Board::default_board();
+        let desert = board
+            .hexes
+            .iter()
+            .find(|h| h.terrain == Terrain::Desert)
+            .expect("board must have a desert");
+        assert_eq!(
+            desert.coord,
+            HexCoord::new(0, 0),
+            "desert should be at the center"
+        );
+        assert!(desert.number_token.is_none());
+    }
+
+    #[test]
+    fn default_board_correct_distributions() {
+        let board = Board::default_board();
+        assert_eq!(board.hexes.len(), 19);
+
+        let mut forest = 0;
+        let mut hills = 0;
+        let mut pasture = 0;
+        let mut fields = 0;
+        let mut mountains = 0;
+        let mut desert = 0;
+        for hex in &board.hexes {
+            match hex.terrain {
+                Terrain::Forest => forest += 1,
+                Terrain::Hills => hills += 1,
+                Terrain::Pasture => pasture += 1,
+                Terrain::Fields => fields += 1,
+                Terrain::Mountains => mountains += 1,
+                Terrain::Desert => desert += 1,
+            }
+        }
+        assert_eq!(forest, 4);
+        assert_eq!(hills, 3);
+        assert_eq!(pasture, 4);
+        assert_eq!(fields, 4);
+        assert_eq!(mountains, 3);
+        assert_eq!(desert, 1);
+
+        let mut tokens: Vec<u8> = board.hexes.iter().filter_map(|h| h.number_token).collect();
+        tokens.sort();
+        let mut expected = standard_number_tokens();
+        expected.sort();
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn default_board_no_adjacent_6_8() {
+        let board = Board::default_board();
+        assert!(
+            !has_adjacent_red_numbers(&board.hexes),
+            "default board must not have adjacent 6/8 tokens"
+        );
     }
 }
