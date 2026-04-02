@@ -17,13 +17,14 @@ The binary boots into a TUI (title screen -> main menu -> game setup). LLM mode 
 
 ## Architecture
 
-**settl** is a terminal Catan game (~9k lines Rust) where LLMs play via tool/function calling. The codebase has five modules:
+**settl** is a terminal Catan game where LLMs play via tool/function calling. The codebase has four modules:
 
 ### `game/` -- Core engine (stateless rules + stateful orchestrator)
 - **`board.rs`** -- Hex grid using axial coordinates `(q, r)`. Vertices and edges are expressed as `(HexCoord, Direction)` pairs. Only canonical edge directions (NE, E, SE) are stored; opposites resolve to the neighbor's canonical form.
 - **`state.rs`** -- `GameState` holds the full mutable game: board, per-player resources/cards (`PlayerState`), buildings, roads, robber position, dev card deck, longest road/largest army tracking. `GamePhase` enum drives the state machine (Setup -> Playing -> Discarding -> PlacingRobber -> Stealing -> GameOver).
 - **`rules.rs`** -- Pure validation functions. Given a `GameState`, returns legal moves. Enforces distance rule, connectivity, resource costs, dev card logic, longest road calculation. Largest file (~1760 lines).
-- **`orchestrator.rs`** -- Drives the game loop. Calls `Player` trait methods at decision points, applies actions through the rules engine, records events, sends UI updates via `mpsc` channel. Runs the setup snake-draft and main turn loop.
+- **`event.rs`** -- `GameEvent` enum for all discrete game actions; `format_event()` renders them as human-readable text for LLM context.
+- **`orchestrator.rs`** -- Drives the game loop. Calls `Player` trait methods at decision points, applies actions through the rules engine, tracks events for LLM context, sends UI updates via `mpsc` channel. Runs the setup snake-draft and main turn loop.
 - **`dice.rs`** -- Dice rolling and resource distribution per hex/number.
 
 ### `player/` -- Player abstraction (async trait)
@@ -39,12 +40,6 @@ The binary boots into a TUI (title screen -> main menu -> game setup). LLM mode 
 - **`negotiation.rs`** -- Multi-round trade protocol: propose -> respond (accept/reject/counter) -> execute.
 - **`offers.rs`** -- Trade validation (both sides have resources, no self-trades) and `trade_value_heuristic()` scoring.
 
-### `replay/` -- Event sourcing
-- **`event.rs`** -- `GameEvent` enum covering all game actions (setup, turns, building, trading, dev cards, robber).
-- **`recorder.rs`** -- `GameReplay` with `ReplayFrame`s (event + VP snapshot + resource totals).
-- **`save.rs`** -- Save/resume serialization.
-- Output files: `game_log.jsonl` (one event/line), `game_replay.json` (full replay), `game_save.json` (resumable state).
-
 ### `ui/` -- TUI (ratatui + crossterm)
 - Async game engine runs in a background tokio task; TUI runs on the main thread.
 - Communication via `mpsc::unbounded_channel` sending `StateUpdate` events.
@@ -54,7 +49,6 @@ The binary boots into a TUI (title screen -> main menu -> game setup). LLM mode 
 
 - **Coordinate system**: Axial hex coordinates with vertex/edge pairs reduce duplication. Canonical edge storage means the same physical edge is never represented two ways.
 - **Tool-based LLM integration**: JSON schemas enforce structured responses rather than parsing free text. Every decision captures reasoning separately from the action.
-- **Event sourcing**: All actions become immutable `GameEvent`s, enabling perfect replays and save/resume.
 - **Game logic is UI-independent**: The engine runs headless; TUI is an optional observer via channel.
 - **Personality = system prompt injection**: No hardcoded behavioral branches; personality is entirely expressed as LLM prompt text.
 

@@ -18,8 +18,6 @@ Watch Claude, GPT, and Gemini negotiate trades, form grudges, and compete for lo
 - **Multi-provider LLM players** -- Claude, GPT, Gemini, and any provider supported by the [genai](https://crates.io/crates/genai) crate
 - **Visible AI reasoning** -- every decision comes with a strategic explanation
 - **Personality system** -- aggressive traders, grudge holders, cautious builders, chaos agents
-- **Game replays** -- JSONL event logs and structured JSON replays with full reasoning traces
-- **Save/resume** -- save a game in progress and resume later
 - **Reproducible games** -- seed the RNG for deterministic board generation
 
 ## Quick Start
@@ -46,7 +44,7 @@ cargo run -- --demo --seed 42
 
 **TUI mode** (default): `cargo run` launches an interactive terminal UI with a title screen, game setup menu, and live hex board. Player 1 is always human; configure AI opponents (Random or LLM) in the setup screen.
 
-**Headless mode**: Activated by passing `--headless`, `--demo`, `--replay`, `--resume`, or `--models`. Runs the game as plain text output, useful for scripting and CI.
+**Headless mode**: Activated by passing `--headless`, `--demo`, or `--models`. Runs the game as plain text output, useful for scripting and CI.
 
 ## Headless CLI Options
 
@@ -59,8 +57,6 @@ cargo run -- --demo --seed 42
 | `--models M1,M2,...` | Per-player model assignment | -- |
 | `--personality FILE` | TOML personality file | built-in |
 | `--seed N` | RNG seed for reproducible boards | random |
-| `--replay FILE` | Replay a saved game (.json or .jsonl) | -- |
-| `--resume FILE` | Resume a saved game | -- |
 
 ## TUI Controls
 
@@ -121,32 +117,6 @@ catchphrases = ["I haven't forgotten turn 7.", "You'll have to do better than th
 
 Built-in personalities: Default Strategist, Aggressive Trader, Grudge Holder, Cautious Builder, Chaos Agent.
 
-## Replays
-
-Games automatically save two replay formats:
-
-- `game_log.jsonl` -- one JSON event per line, lightweight
-- `game_replay.json` -- structured replay with VP tracking and event descriptions
-
-View a replay:
-
-```bash
-# Structured replay with VP tracking
-cargo run -- --replay game_replay.json
-
-# Raw event log
-cargo run -- --replay game_log.jsonl
-```
-
-## Save/Resume
-
-If a game is interrupted, progress is automatically saved to `game_save.json`.
-Resume with:
-
-```bash
-cargo run -- --resume game_save.json
-```
-
 ## Architecture
 
 ```
@@ -160,6 +130,7 @@ src/
 │   ├── rules.rs               # Legal moves, placement, dev cards
 │   ├── actions.rs             # Action/DevCard/TradeOffer types
 │   ├── dice.rs                # Dice rolls, resource distribution
+│   ├── event.rs               # GameEvent enum, format for LLM context
 │   └── orchestrator.rs        # Game loop, player interaction
 ├── player/
 │   ├── mod.rs                 # Player trait (async)
@@ -172,13 +143,9 @@ src/
 ├── trading/
 │   ├── negotiation.rs         # Trade protocol, validation, execution
 │   └── offers.rs              # Offer validation, resource checks
-├── replay/
-│   ├── event.rs               # GameEvent enum, JSONL log
-│   ├── recorder.rs            # GameReplay with state snapshots
-│   └── save.rs                # Save/resume game state
 └── ui/
     ├── mod.rs                 # TUI app state, event loop, input handling
-    ├── screens.rs             # Title, main menu, new game, file picker
+    ├── screens.rs             # Title, main menu, new game, post-game
     ├── menu.rs                # Reusable menu widget
     ├── board_view.rs          # Hex board rendering (ratatui)
     ├── resource_bar.rs        # Player resource/VP panel

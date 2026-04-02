@@ -8,9 +8,9 @@ use std::collections::HashMap;
 
 use crate::game::actions::PlayerId;
 use crate::game::board::{Board, HexCoord, Resource, VertexDirection};
+use crate::game::event::{self, GameEvent};
 use crate::game::state::{Building, GameState};
 use crate::player::PlayerChoice;
-use crate::replay::event::GameEvent;
 
 /// Render the board as an ASCII hex grid showing terrain + number tokens.
 ///
@@ -195,8 +195,6 @@ pub fn format_recent_history(
     player_names: &[String],
     max_events: usize,
 ) -> String {
-    use crate::replay::recorder::GameReplay;
-
     let recent = if events.len() > max_events {
         &events[events.len() - max_events..]
     } else {
@@ -209,7 +207,7 @@ pub fn format_recent_history(
 
     let lines: Vec<String> = recent
         .iter()
-        .map(|e| format!("- {}", GameReplay::format_event(e, player_names)))
+        .map(|e| format!("- {}", event::format_event(e, player_names)))
         .collect();
 
     format!("RECENT HISTORY:\n{}", lines.join("\n"))

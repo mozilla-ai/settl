@@ -205,8 +205,8 @@ mod tests {
                     "Winner should have at least 10 VP"
                 );
                 assert!(
-                    !orchestrator.log.events().is_empty(),
-                    "Game log should have events"
+                    !orchestrator.events.is_empty(),
+                    "Game should have recorded events"
                 );
                 println!(
                     "Game finished in {} turns. Winner: Player {} with {} VP",
