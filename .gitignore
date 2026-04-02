@@ -32,3 +32,4 @@ Thumbs.db
 *.so
 *.dylib
 debug.log
+*.png
