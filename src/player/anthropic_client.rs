@@ -24,8 +24,12 @@ pub struct MessagesRequest {
     pub messages: Vec<Message>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<ToolDef>,
-    /// Explicitly disable streaming (llamafile may default to streaming otherwise).
+    /// Enable streaming (SSE) responses.
     pub stream: bool,
+    /// Controls how much reasoning effort the model uses ("low", "medium", "high").
+    /// Omitted when None (model uses default).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
     // -- llamafile extensions (omitted when None) --
     /// Assign this request to a specific KV cache slot.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -44,6 +48,7 @@ impl MessagesRequest {
             messages: Vec::new(),
             tools: Vec::new(),
             stream: false,
+            reasoning_effort: None,
             id_slot: None,
             cache_prompt: None,
         }

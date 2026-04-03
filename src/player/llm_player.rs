@@ -286,13 +286,14 @@ impl LlmPlayer {
             let system_prompt = conversation.system_prompt.clone();
             drop(conversation);
 
-            let mut request = MessagesRequest::new(self.client.model(), 20_000);
+            let mut request = MessagesRequest::new(self.client.model(), 16_000);
             request.system = Some(system_prompt);
             request.messages = messages;
             request.tools = vec![tool.clone()];
             request.id_slot = self.slot_id;
             request.cache_prompt = Some(true);
             request.stream = self.reasoning_tx.is_some();
+            request.reasoning_effort = Some("low".into());
 
             // On retry, notify the UI that we're retrying.
             if attempt > 0 {

@@ -100,9 +100,11 @@ cargo insta review                      # Review snapshot diffs after UI changes
 The llamafile AI server can be downloaded and run inside the sandbox. **Always test AI/LLM player changes end-to-end** by running the game with llamafile, not just unit tests. Unit tests don't exercise the real API/streaming path and will miss issues like timeout mismatches, SSE parsing bugs, or broken channel wiring.
 
 ```bash
-cargo run -- --demo          # Run a headless game with llamafile AI players
-cargo run                    # Launch TUI and set up a game with AI opponents
+cargo run -- --headless --players 2   # Headless game with llamafile AI players
+cargo run                             # Launch TUI and set up a game with AI opponents
 ```
+
+The llamafile is a cosmopolitan (APE) binary. On aarch64 without binfmt_misc support, direct execution fails with "Exec format error". The code falls back to `sh <path>` which works because APE binaries embed a shell script header. If you see exec format errors, ensure the `sh` fallback path in `llamafile/process.rs` covers the error string.
 
 ## Commits & PRs
 
