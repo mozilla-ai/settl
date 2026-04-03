@@ -298,7 +298,7 @@ fn dfs_road(
 /// Update longest road tracking.  Called after a road is built or a
 /// settlement breaks a road chain.
 ///
-/// Per Catan rules:
+/// Rules for longest road updates:
 /// - If the current holder is beaten by another player, the other player takes it.
 /// - If the current holder's road is broken and they tie with someone, they keep it.
 /// - If no single player has a clear longest road of 5+, the card is set aside.
@@ -1014,7 +1014,7 @@ pub fn apply_discard(
 
 /// Check if the current player has won (10+ VP on their own turn).
 ///
-/// Per Catan rules, a player can only win during their own turn.
+/// A player can only win during their own turn.
 /// If you reach 10 VP during another player's turn (e.g. from Longest Road
 /// shifting), you must wait until your own turn to claim victory.
 pub fn check_victory(state: &GameState) -> Option<PlayerId> {

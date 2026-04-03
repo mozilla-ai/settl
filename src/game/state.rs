@@ -135,7 +135,7 @@ pub enum GamePhase {
     GameOver { winner: PlayerId },
 }
 
-/// The complete state of a Catan game in progress.
+/// The complete state of a game in progress.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameState {
     /// The board layout (hex tiles).
@@ -178,7 +178,7 @@ impl GameState {
     pub fn new(board: Board, num_players: usize) -> Self {
         assert!(
             (2..=4).contains(&num_players),
-            "Catan supports 2-4 players, got {}",
+            "settl supports 2-4 players, got {}",
             num_players
         );
 

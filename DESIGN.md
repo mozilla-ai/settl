@@ -1,14 +1,14 @@
-# Design System -- settl (Terminal Catan)
+# Design System -- settl
 
 ## Product Context
-- **What this is:** A terminal-based Settlers of Catan game where LLMs play via tool calling, with human player support
-- **Who it's for:** Developers, Catan enthusiasts, AI-curious players who live in the terminal
+- **What this is:** A terminal-based hex settlement game where LLMs play via tool calling, with human player support
+- **Who it's for:** Developers, board game enthusiasts, AI-curious players who live in the terminal
 - **Space:** Terminal games, TUI applications, AI demos
 - **Project type:** Interactive TUI game (ratatui + crossterm)
 
 ## Design Thesis
 
-**The board IS the interface.** Every game decision should happen visually on the board, not in a coordinate list or popup menu. The TUI should feel like looking down at a physical Catan board, not reading a spreadsheet.
+**The board IS the interface.** Every game decision should happen visually on the board, not in a coordinate list or popup menu. The TUI should feel like looking down at a physical game board, not reading a spreadsheet.
 
 ## Aesthetic Direction
 - **Direction:** Industrial/utilitarian with game-board warmth
@@ -169,7 +169,7 @@ Pointy-top hexes, interlocking. Each hex cell:
 ```
 
 ### Full Board Layout (3-4-5-4-3)
-The standard Catan board has 19 hexes arranged in 5 rows. The widest row (5 hexes) determines the overall width. Narrower rows are centered with indentation.
+The standard board has 19 hexes arranged in 5 rows. The widest row (5 hexes) determines the overall width. Narrower rows are centered with indentation.
 
 Row offsets (character indentation from left):
 - Row r=-2 (3 hexes): indent 16
@@ -255,7 +255,7 @@ When placing settlements, roads, or the robber:
 ## Keyboard Design Philosophy
 
 Shortcuts are optimized for **speed of play**, not discoverability. The most frequent
-actions in Catan (end turn, build, trade) should have the fewest keystrokes. Resource
+actions (end turn, build, trade) should have the fewest keystrokes. Resource
 keys are consistent everywhere so muscle memory transfers between contexts.
 
 ### Resource Keys (universal, same everywhere)
@@ -319,7 +319,7 @@ Arrow navigation uses nearest-neighbor in the pressed direction. `n`/`p` provide
 a linear cycle when arrow navigation is ambiguous on the hex grid.
 
 #### Quick Trade (the key innovation)
-Trade is the most keyboard-intensive action in Catan. The trade builder optimizes for
+Trade is the most keyboard-intensive action in the game. The trade builder optimizes for
 minimal keystrokes:
 
 ```

@@ -170,19 +170,28 @@ pub fn format_hex_options(hexes: &[HexCoord]) -> String {
         .join("\n")
 }
 
-/// Condensed Catan rules for LLM system prompts -- everything needed to play
-/// correctly, without component lists, geometry explanations, or tactical tips.
-/// The full rulebook lives in CATAN_RULES.md for human reference.
-const CATAN_RULES: &str = include_str!("../../CATAN_RULES_COMPACT.md");
-
 /// Build the system prompt for an LLM player (e.g. llamafile).
 ///
-/// Includes the condensed rulebook from CATAN_RULES_COMPACT.md.
+/// Includes a condensed rules summary inline.
 pub fn system_prompt_compact(player_name: &str, personality_prompt: &str) -> String {
     format!(
-        "You are playing Settlers of Catan. Your name is {player_name}.\n\n\
+        "You are playing settl, a hex-based resource trading and building game. Your name is {player_name}.\n\n\
          {personality_prompt}\n\n\
-         {CATAN_RULES}\n\n\
+         RULES:\n\
+         First to 10 victory points wins. You can only win on your own turn.\n\n\
+         Resources: Lumber (forest), Brick (hills), Ore (mountains), Grain (fields), Wool (pasture). Desert produces nothing.\n\n\
+         Setup (snake draft): Round 1 clockwise, Round 2 reverse. Each round: place 1 settlement + 1 adjacent road. Second settlement grants starting resources.\n\
+         Distance rule: no settlement if any of the 3 adjacent intersections is occupied.\n\n\
+         Turn phases:\n\
+         1. Roll dice -- matching hexes produce for adjacent settlements (1) and cities (2). Robber's hex produces nothing.\n\
+         2. If 7: players with >7 cards discard half (rounded down), roller moves robber and steals 1 card from adjacent opponent.\n\
+         3. Trade (optional) -- domestic with players, or maritime: 4:1 default, 3:1 generic harbor, 2:1 matching harbor.\n\
+         4. Build (optional, as many as affordable):\n\
+            Road = 1 Brick + 1 Lumber. Settlement = 1 Brick + 1 Lumber + 1 Wool + 1 Grain (1 VP). City upgrade = 3 Ore + 2 Grain (2 VP). Dev Card = 1 Ore + 1 Wool + 1 Grain.\n\
+            Supply limits: 15 roads, 5 settlements, 4 cities. Roads must connect to your network. Settlements must connect and obey distance rule. Cities replace a settlement.\n\n\
+         Dev cards: play at most 1 per turn, not on turn purchased.\n\
+         Knight (14): move robber + steal. Road Building (2): 2 free roads. Year of Plenty (2): take any 2 from bank. Monopoly (2): take all of 1 resource from opponents. VP cards (5): 1 VP each, reveal only when winning.\n\n\
+         Longest Road (2 VP): first with 5+ continuous segments. Largest Army (2 VP): first with 3+ knights played.\n\n\
          INSTRUCTIONS:\n\
          - Explain your reasoning, then call the tool to make your choice.\n\
          - Reference coordinates and resource counts.",

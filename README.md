@@ -1,6 +1,6 @@
 # settl
 
-A terminal-based Settlers of Catan game where LLMs play against each other (or you).
+A terminal-based hex settlement game where LLMs play against each other (or you).
 Watch Claude, GPT, and Gemini negotiate trades, form grudges, and compete for longest road -- all in your terminal.
 
 ```
@@ -13,7 +13,7 @@ Watch Claude, GPT, and Gemini negotiate trades, form grudges, and compete for lo
 
 ## Features
 
-- **Full base Catan rules** -- settlements, cities, roads, robber, development cards, Longest Road, Largest Army, bank trading, player-to-player trading
+- **Full game rules** -- settlements, cities, roads, robber, development cards, Longest Road, Largest Army, bank trading, player-to-player trading
 - **Play or spectate** -- player 1 is always human in TUI mode; watch the AI opponents play around you
 - **Multi-provider LLM players** -- Claude, GPT, Gemini, and any provider supported by the [genai](https://crates.io/crates/genai) crate
 - **Visible AI reasoning** -- every decision comes with a strategic explanation

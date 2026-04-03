@@ -31,7 +31,7 @@ fn total_in_circulation(state: &GameState, resource: Resource) -> u32 {
 ///     - Settlement: the owning player receives 1 of the hex's resource.
 ///     - City: the owning player receives 2 of the hex's resource.
 ///
-/// Per Catan rules, the bank has 19 cards of each resource. If the total
+/// The bank has 19 cards of each resource. If the total
 /// demand for a resource exceeds the bank's remaining supply:
 ///   - If only one player is owed that resource, they receive what's available.
 ///   - If multiple players are owed, NO ONE receives that resource.

@@ -25,7 +25,7 @@ Use `log::debug!()` / `log::info!()` etc. from any module.
 
 ## Architecture
 
-**settl** is a terminal Catan game where LLMs play via tool/function calling. The codebase has four modules:
+**settl** is a terminal hex settlement game where LLMs play via tool/function calling. The codebase has four modules:
 
 ### `game/` -- Core engine (stateless rules + stateful orchestrator)
 - **`board.rs`** -- Hex grid using axial coordinates `(q, r)`. Vertices and edges are expressed as `(HexCoord, Direction)` pairs. Only canonical edge directions (NE, E, SE) are stored; opposites resolve to the neighbor's canonical form.
@@ -105,8 +105,6 @@ All color choices, character vocabulary, layout constraints, keyboard shortcuts,
 Do not deviate without explicit user approval.
 In QA mode, flag any code that doesn't match DESIGN.md.
 
-## Catan Rules
-
-See [`CATAN_RULES.md`](CATAN_RULES.md) for the complete game rules reference (setup, turn structure, building, trading, robber, development cards, special cards, victory conditions).
+## Game Rules
 
 **Quick cost reference**: Road: 1 Wood + 1 Brick | Settlement: 1 Wood + 1 Brick + 1 Sheep + 1 Wheat | City: 2 Wheat + 3 Ore | Dev Card: 1 Wheat + 1 Sheep + 1 Ore

@@ -13,7 +13,7 @@ use crate::player::personality::Personality;
 use crate::player::prompt;
 use crate::player::{Player, PlayerChoice};
 
-/// An LLM-powered Catan player using genai for multi-provider support.
+/// An LLM-powered player using genai for multi-provider support.
 pub struct LlamafilePlayer {
     /// Display name (e.g. "Alice", "Bob").
     name: String,

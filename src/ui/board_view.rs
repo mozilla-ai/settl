@@ -1,4 +1,4 @@
-//! Renders the Catan hex board with shaped hex cells, buildings, roads, and cursor.
+//! Renders the hex board with shaped hex cells, buildings, roads, and cursor.
 
 use std::collections::HashMap;
 

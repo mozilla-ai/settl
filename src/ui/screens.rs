@@ -236,7 +236,7 @@ pub fn draw_main_menu(f: &mut Frame, state: &MainMenuState) {
     let sub_y = y_start + art_lines + 1;
     if sub_y < area.y + area.height {
         let sub_area = Rect::new(area.x, sub_y, area.width, 1);
-        let sub = Paragraph::new("terminal catan")
+        let sub = Paragraph::new("terminal settlers")
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::DarkGray));
         f.render_widget(sub, sub_area);
@@ -284,7 +284,7 @@ pub fn draw_about(f: &mut Frame) {
     let lines = vec![
         Line::from(""),
         Line::styled(
-            "A terminal Catan game powered by local AI.",
+            "A terminal hex settlement game powered by local AI.",
             Style::default().fg(Color::White),
         ),
         Line::from(""),
@@ -308,20 +308,8 @@ pub fn draw_about(f: &mut Frame) {
         Line::from(""),
         Line::styled("Game", Style::default().fg(Color::DarkGray)),
         Line::styled(
-            "  Based on Settlers of Catan by Klaus Teuber.",
+            "  A hex-based resource trading and building game.",
             Style::default().fg(Color::White),
-        ),
-        Line::styled(
-            "  Catan is a trademark of Catan Studio. This is an",
-            Style::default().fg(Color::DarkGray),
-        ),
-        Line::styled(
-            "  independent fan project, not affiliated with or",
-            Style::default().fg(Color::DarkGray),
-        ),
-        Line::styled(
-            "  endorsed by Catan Studio or Catan GmbH.",
-            Style::default().fg(Color::DarkGray),
         ),
     ];
 

@@ -39,7 +39,7 @@ impl std::fmt::Display for OrchestratorError {
 
 impl std::error::Error for OrchestratorError {}
 
-/// Drives a complete game of Catan from setup through victory.
+/// Drives a complete game from setup through victory.
 pub struct GameOrchestrator {
     pub state: GameState,
     pub players: Vec<Box<dyn Player>>,
@@ -248,7 +248,7 @@ impl GameOrchestrator {
             .await;
 
         // Step 0: Pre-roll Knight opportunity.
-        // Per Catan rules, a player may play a Knight before rolling the dice.
+        // A player may play a Knight before rolling the dice.
         if let Some(winner) = self.offer_pre_roll_knight(player_id).await? {
             return Ok(Some(winner));
         }
@@ -516,7 +516,7 @@ impl GameOrchestrator {
 
     /// Offer the player a chance to play a Knight before rolling dice.
     ///
-    /// Per Catan rules, a Knight may be played before rolling. We present the
+    /// A Knight may be played before rolling. We present the
     /// player with a choice: "Roll Dice" or "Play Knight". If they choose the
     /// Knight, we handle it and check victory.
     async fn offer_pre_roll_knight(

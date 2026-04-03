@@ -6,8 +6,8 @@ rust-version = "1.85"
 license = "MIT"
 repository = "https://github.com/Brake-Labs/settl"
 authors = ["Brake Labs"]
-description = "Terminal Settlers of Catan with LLM players"
-keywords = ["catan", "tui", "ai", "llm", "terminal"]
+description = "Terminal hex-based settlement game with LLM players"
+keywords = ["board-game", "tui", "ai", "llm", "terminal"]
 categories = ["command-line-utilities", "games"]
 
 [dependencies]
