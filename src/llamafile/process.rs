@@ -186,6 +186,7 @@ fn is_port_available(port: u16) -> bool {
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn drop_kills_child_process() {
         let child = Command::new("sleep")
