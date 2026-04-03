@@ -665,10 +665,7 @@ fn resource_picker_esc_defaults_to_wood() {
 
 #[test]
 fn steal_target_up_down_navigation() {
-    let targets = vec![
-        (1, "Player 2 (3 cards)".into()),
-        (2, "Player 3 (5 cards)".into()),
-    ];
+    let targets = vec![(1, "Bob (3 cards)".into()), (2, "Charlie (5 cards)".into())];
     let (ps, _rx) = make_test_playing_state(InputMode::StealTarget {
         targets,
         selected: 0,
@@ -687,8 +684,8 @@ fn steal_target_up_down_navigation() {
 #[test]
 fn steal_target_number_key_selects_player() {
     let targets = vec![
-        (0, "Player 1 (3 cards)".into()),
-        (2, "Player 3 (5 cards)".into()),
+        (0, "Alice (3 cards)".into()),
+        (2, "Charlie (5 cards)".into()),
     ];
     let (ps, mut rx) = make_test_playing_state(InputMode::StealTarget {
         targets,
@@ -705,7 +702,7 @@ fn steal_target_number_key_selects_player() {
 
 #[test]
 fn steal_target_enter_confirms_selection() {
-    let targets = vec![(1, "Player 2".into()), (2, "Player 3".into())];
+    let targets = vec![(1, "Bob".into()), (2, "Charlie".into())];
     let (ps, mut rx) = make_test_playing_state(InputMode::StealTarget {
         targets,
         selected: 1,

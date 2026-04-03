@@ -80,10 +80,7 @@ fn snapshot_playing_resource_picker() {
 #[test]
 fn snapshot_playing_steal_target() {
     let (ps, _rx) = make_test_playing_state(InputMode::StealTarget {
-        targets: vec![
-            (1, "Player 2 (3 cards)".into()),
-            (2, "Player 3 (5 cards)".into()),
-        ],
+        targets: vec![(1, "Bob (3 cards)".into()), (2, "Charlie (5 cards)".into())],
         selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));

@@ -280,7 +280,6 @@ pub fn turn_prompt_with_history(
 /// Build a prompt for settlement placement during setup.
 pub fn setup_settlement_prompt(
     state: &GameState,
-    _player_id: PlayerId,
     round: u8,
     legal_vertices: &[crate::game::board::VertexCoord],
     player_name: &str,
@@ -318,7 +317,6 @@ pub fn setup_settlement_prompt(
 /// Build a prompt for road placement during setup.
 pub fn setup_road_prompt(
     state: &GameState,
-    _player_id: PlayerId,
     legal_edges: &[crate::game::board::EdgeCoord],
     player_name: &str,
 ) -> String {
