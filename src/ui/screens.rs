@@ -74,6 +74,8 @@ pub enum NewGameFocus {
     FriendlyRobber,
     /// Board Layout toggle.
     BoardLayout,
+    /// AI Model Size toggle.
+    ModelSize,
     /// The "Start Game" button.
     StartButton,
 }
@@ -90,6 +92,8 @@ pub struct NewGameState {
     pub friendly_robber: bool,
     /// Whether to randomize the board layout.
     pub random_board: bool,
+    /// Which llamafile model to use for AI players.
+    pub llamafile_model: crate::llamafile::LlamafileModel,
 }
 
 impl NewGameState {
@@ -135,6 +139,7 @@ impl NewGameState {
             four_players: true,
             friendly_robber: false,
             random_board: false,
+            llamafile_model: crate::llamafile::LlamafileModel::default(),
         }
     }
 
@@ -440,8 +445,21 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
         bl_focused,
     );
 
+    // AI Model.
+    let ms_y = bl_y + 1;
+    let ms_focused = matches!(state.focus, NewGameFocus::ModelSize);
+    draw_toggle_row(
+        f,
+        x_start,
+        ms_y,
+        content_width,
+        "AI Model",
+        state.llamafile_model.display_name(),
+        ms_focused,
+    );
+
     // Start button.
-    let button_y = bl_y + 2;
+    let button_y = ms_y + 2;
     let button_focused = matches!(state.focus, NewGameFocus::StartButton);
     let button_style = if button_focused {
         Style::default().fg(Color::Black).bg(Color::Green).bold()

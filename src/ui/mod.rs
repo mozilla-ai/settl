@@ -539,7 +539,8 @@ async fn run_event_loop(
                                     } else {
                                         let (status_tx, status_rx) = mpsc::unbounded_channel();
                                         let saved_config = clone_new_game_state(ng);
-                                        let (handle, process_rx) = spawn_llamafile_setup(status_tx);
+                                        let (handle, process_rx) =
+                                            spawn_llamafile_setup(ng.llamafile_model, status_tx);
                                         let setup_state = LlamafileSetupState {
                                             status: crate::llamafile::LlamafileStatus::Checking,
                                             status_rx,
@@ -1102,6 +1103,7 @@ fn focusable_rows(state: &NewGameState) -> Vec<NewGameFocus> {
     }
     rows.push(NewGameFocus::FriendlyRobber);
     rows.push(NewGameFocus::BoardLayout);
+    rows.push(NewGameFocus::ModelSize);
     rows.push(NewGameFocus::StartButton);
     rows
 }
@@ -1145,6 +1147,13 @@ fn cycle_new_game_value(state: &mut NewGameState, forward: bool) {
         }
         NewGameFocus::BoardLayout => {
             state.random_board = !state.random_board;
+        }
+        NewGameFocus::ModelSize => {
+            use crate::llamafile::LlamafileModel;
+            state.llamafile_model = match state.llamafile_model {
+                LlamafileModel::Bonsai1B => LlamafileModel::Bonsai8B,
+                LlamafileModel::Bonsai8B => LlamafileModel::Bonsai1B,
+            };
         }
         NewGameFocus::StartButton => {}
     }
@@ -1306,6 +1315,7 @@ fn build_post_game(ps: &PlayingState) -> PostGameState {
 ///
 /// Returns the `JoinHandle` and a oneshot receiver for the process.
 fn spawn_llamafile_setup(
+    model: crate::llamafile::LlamafileModel,
     status_tx: mpsc::UnboundedSender<crate::llamafile::LlamafileStatus>,
 ) -> (
     tokio::task::JoinHandle<()>,
@@ -1314,7 +1324,7 @@ fn spawn_llamafile_setup(
     let (process_tx, process_rx) = tokio::sync::oneshot::channel();
 
     let handle = tokio::spawn(async move {
-        match crate::llamafile::ensure_llamafile(status_tx.clone()).await {
+        match crate::llamafile::ensure_llamafile(model, status_tx.clone()).await {
             Ok(path) => {
                 let _ = status_tx.send(crate::llamafile::LlamafileStatus::Starting);
                 let _ = status_tx.send(crate::llamafile::LlamafileStatus::WaitingForReady);
@@ -1349,6 +1359,7 @@ fn clone_new_game_state(ng: &NewGameState) -> NewGameState {
         four_players: ng.four_players,
         friendly_robber: ng.friendly_robber,
         random_board: ng.random_board,
+        llamafile_model: ng.llamafile_model,
     }
 }
 

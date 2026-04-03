@@ -120,6 +120,11 @@ fn new_game_focus_navigation() {
     if let Screen::NewGame(ref state) = app.screen {
         assert_eq!(state.focus, NewGameFocus::BoardLayout);
     }
+    // Down to ModelSize.
+    handle_input(&mut app, KeyCode::Down);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::ModelSize);
+    }
     // Down to StartButton.
     handle_input(&mut app, KeyCode::Down);
     if let Screen::NewGame(ref state) = app.screen {
@@ -231,6 +236,34 @@ fn new_game_board_layout_toggle() {
     handle_input(&mut app, KeyCode::Right);
     if let Screen::NewGame(ref state) = app.screen {
         assert!(state.random_board);
+    }
+}
+
+#[test]
+fn new_game_model_size_toggle() {
+    let mut app = new_game_app();
+    if let Screen::NewGame(ref mut state) = app.screen {
+        state.focus = NewGameFocus::ModelSize;
+    }
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(
+            state.llamafile_model,
+            crate::llamafile::LlamafileModel::Bonsai1B
+        );
+    }
+    handle_input(&mut app, KeyCode::Right);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(
+            state.llamafile_model,
+            crate::llamafile::LlamafileModel::Bonsai8B
+        );
+    }
+    handle_input(&mut app, KeyCode::Right);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(
+            state.llamafile_model,
+            crate::llamafile::LlamafileModel::Bonsai1B
+        );
     }
 }
 

@@ -116,9 +116,12 @@ async fn setup_llamafile_headless() -> (u16, crate::llamafile::LlamafileProcess)
     let (status_tx, mut status_rx) = tokio::sync::mpsc::unbounded_channel();
 
     let handle = tokio::spawn(async move {
-        let path = crate::llamafile::ensure_llamafile(status_tx.clone())
-            .await
-            .expect("Failed to download llamafile");
+        let path = crate::llamafile::ensure_llamafile(
+            crate::llamafile::LlamafileModel::Bonsai8B,
+            status_tx.clone(),
+        )
+        .await
+        .expect("Failed to download llamafile");
         let _ = status_tx.send(LlamafileStatus::Starting);
         let _ = status_tx.send(LlamafileStatus::WaitingForReady);
         let process = crate::llamafile::LlamafileProcess::start_with_port_scan(&path)

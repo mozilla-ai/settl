@@ -5,9 +5,38 @@ use tokio::sync::mpsc;
 
 use super::LlamafileStatus;
 
-const LLAMAFILE_NAME: &str = "Bonsai-8B.llamafile";
-const LLAMAFILE_URL: &str =
-    "https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Bonsai-8B.llamafile?download=true";
+/// Which Bonsai model to use for local AI.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum LlamafileModel {
+    /// Bonsai-1.7B: fast, small download (~267 MB), limited reasoning output.
+    #[default]
+    Bonsai1B,
+    /// Bonsai-8B: slower, larger download (~4.9 GB), produces text reasoning blocks.
+    Bonsai8B,
+}
+
+impl LlamafileModel {
+    pub fn filename(self) -> &'static str {
+        match self {
+            Self::Bonsai1B => "Bonsai-1.7B.llamafile",
+            Self::Bonsai8B => "Bonsai-8B.llamafile",
+        }
+    }
+
+    pub fn url(self) -> &'static str {
+        match self {
+            Self::Bonsai1B => "https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Bonsai-1.7B.llamafile?download=true",
+            Self::Bonsai8B => "https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Bonsai-8B.llamafile?download=true",
+        }
+    }
+
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Bonsai1B => "1.7B (fast)",
+            Self::Bonsai8B => "8B (smart)",
+        }
+    }
+}
 
 /// Minimum file size to consider a cached llamafile valid (100 MB).
 const MIN_VALID_SIZE: u64 = 100 * 1024 * 1024;
@@ -21,9 +50,9 @@ pub fn llamafile_dir() -> PathBuf {
     PathBuf::from(home).join(".settl").join("llamafiles")
 }
 
-/// Return the expected path to the Bonsai llamafile.
-pub fn llamafile_path() -> PathBuf {
-    llamafile_dir().join(LLAMAFILE_NAME)
+/// Return the expected path to a llamafile model.
+pub fn llamafile_path(model: LlamafileModel) -> PathBuf {
+    llamafile_dir().join(model.filename())
 }
 
 /// Ensure the llamafile exists on disk. Downloads it if missing or corrupted.
@@ -31,9 +60,10 @@ pub fn llamafile_path() -> PathBuf {
 /// Sends progress updates through `status_tx`. The file is downloaded to a
 /// `.tmp` file first and atomically renamed on completion.
 pub async fn ensure_llamafile(
+    model: LlamafileModel,
     status_tx: mpsc::UnboundedSender<LlamafileStatus>,
 ) -> Result<PathBuf, String> {
-    let path = llamafile_path();
+    let path = llamafile_path(model);
 
     let _ = status_tx.send(LlamafileStatus::Checking);
 
@@ -53,21 +83,23 @@ pub async fn ensure_llamafile(
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("Failed to create directory {}: {}", dir.display(), e))?;
 
-    let tmp_path = dir.join(format!("{}.tmp", LLAMAFILE_NAME));
+    let tmp_path = dir.join(format!("{}.tmp", model.filename()));
 
     let _ = status_tx.send(LlamafileStatus::Downloading { bytes: 0, total: 0 });
 
-    let response = reqwest::get(LLAMAFILE_URL)
+    let response = reqwest::get(model.url())
         .await
         .map_err(|e| format!("Download failed: {}", e))?;
 
     let status = response.status();
-    log::debug!("download response: status={status} url={LLAMAFILE_URL}");
+    let url = model.url();
+    log::debug!("download response: status={status} url={url}");
 
     if !status.is_success() {
         return Err(format!(
             "Download failed: server returned {} for {}",
-            status, LLAMAFILE_URL,
+            status,
+            model.url(),
         ));
     }
 
@@ -156,7 +188,14 @@ mod tests {
     #[test]
     fn llamafile_path_includes_filename() {
         std::env::set_var("HOME", "/tmp/test_home");
-        let path = llamafile_path();
+        let path = llamafile_path(LlamafileModel::Bonsai1B);
+        assert!(path.ends_with("Bonsai-1.7B.llamafile"));
+    }
+
+    #[test]
+    fn llamafile_path_8b() {
+        std::env::set_var("HOME", "/tmp/test_home");
+        let path = llamafile_path(LlamafileModel::Bonsai8B);
         assert!(path.ends_with("Bonsai-8B.llamafile"));
     }
 }
