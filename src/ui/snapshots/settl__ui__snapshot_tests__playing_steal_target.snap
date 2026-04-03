@@ -10,49 +10,49 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                          ││  W:0 B:0 S:0 H:0 O:0       │
 │                                                *                                       *                                                 ││                            │
 │                                                          *                                       *                                       ││ Charlie 0VP                │
-│                                                                                                                                          ││  W:0 B:0 S:0 H:0 O:0       │
-│                                                                                                                                          ││                            │
-│                                               Ore                Sheep               Wood                                                ││ Diana 0VP                  │
+│                                            ╱       ╲           ╱       ╲           ╱       ╲                                             ││  W:0 B:0 S:0 H:0 O:0       │
+│                                          ╱           ╲       ╱           ╲       ╱           ╲                                           ││                            │
+│                                         ╱     Ore     ╲     ╱    Sheep    ╲     ╱    Wood     ╲                                          ││ Diana 0VP                  │
 │                                               10                   2                   9                                                 ││  W:0 B:0 S:0 H:0 O:0       │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││Turn: 1                     │
-│                                                                                                                                          ││Phase: Setup { round:       │
+│                                         ╲             ╱     ╲             ╱     ╲             ╱                                          ││                            │
+│                                          ╲           ╱       ╲           ╱       ╲           ╱                                           ││Turn: 1                     │
+│                                            ╲       ╱           ╲       ╱           ╲       ╱                                             ││Phase: Setup { round:       │
 │                                      *                                                                                                   ││Deck: 25 cards              │
 │                            *                                                                               *                             ││                            │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
-│                                    Wheat               Brick               Sheep               Brick                                     │└────────────────────────────┘
+│                                  ╱       ╲           ╱       ╲           ╱       ╲           ╱       ╲                                   ││                            │
+│                                ╱           ╲       ╱           ╲       ╱           ╲       ╱           ╲                                 ││                            │
+│                               ╱    Wheat    ╲     ╱    Brick    ╲     ╱    Sheep    ╲     ╱    Brick    ╲                                │└────────────────────────────┘
 │                                     12                   6                   4                  10                                       │┌ Game Log (2) ──────────────┐
-│                                                                                                                                          ││   1| Game started -- your  │
-│                                                                                                                                          ││turn will show a prompt     │
-│                                                                                                                                          ││   2| q:quit  Space:pause   │
+│                               ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱                                ││   1| Game started -- your  │
+│                                ╲           ╱       ╲           ╱       ╲           ╱       ╲           ╱                                 ││turn will show a prompt     │
+│                                  ╲       ╱           ╲       ╱           ╲       ╱           ╲       ╱                                   ││   2| q:quit  Space:pause   │
 │                                                                                                                                          ││j/k:scroll  Tab:AI panel    │
 │                                                                                                                      *                   ││                            │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
-│                          Wood                Wheat            R Desert               Wood                 Ore                            ││                            │
+│                        ╱       ╲           ╱       ╲           ╱       ╲           ╱       ╲           ╱       ╲                         ││                            │
+│                      ╱           ╲       ╱           ╲       ╱           ╲       ╱           ╲       ╱           ╲                       ││                            │
+│                     ╱    Wood     ╲     ╱    Wheat    ╲     ╱ R Desert    ╲     ╱    Wood     ╲     ╱     Ore     ╲                      ││                            │
 │                            9                  11                   R                   3                   8                             ││                            │
+│                     ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱                      ││                            │
+│                      ╲           ╱       ╲           ╱       ╲           ╱       ╲           ╱       ╲           ╱                       ││                            │
+│                        ╲       ╱           ╲       ╱           ╲       ╱           ╲       ╱           ╲       ╱                         ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
-│                                    Wood                 Ore                Wheat               Sheep                                     ││                            │
+│                                  ╱       ╲           ╱       ╲           ╱       ╲           ╱       ╲                                   ││                            │
+│                                ╱           ╲       ╱           ╲       ╱           ╲       ╱           ╲                                 ││                            │
+│                               ╱    Wood     ╲     ╱     Ore     ╲     ╱    Wheat    ╲     ╱    Sheep    ╲                                ││                            │
 │                                      8                   3                   4                   5                                       ││                            │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
+│                               ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱                                ││                            │
+│                                ╲           ╱       ╲           ╱       ╲           ╱       ╲           ╱                                 ││                            │
+│                                  ╲       ╱           ╲       ╱           ╲       ╱           ╲       ╱                                   ││                            │
 │                            *                                                                               *                             ││                            │
 │                                                                                                  *                                       ││                            │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
-│                                              Brick               Wheat               Sheep                                               ││                            │
+│                                            ╱       ╲           ╱       ╲           ╱       ╲                                             ││                            │
+│                                          ╱           ╲       ╱           ╲       ╱           ╲                                           ││                            │
+│                                         ╱    Brick    ╲     ╱    Wheat    ╲     ╱    Sheep    ╲                                          ││                            │
 │                                                5                   6                  11                                                 ││                            │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
-│                                                                                                                                          ││                            │
+│                                         ╲             ╱     ╲             ╱     ╲             ╱                                          ││                            │
+│                                          ╲           ╱       ╲           ╱       ╲           ╱                                           ││                            │
+│                                            ╲       ╱           ╲       ╱           ╲       ╱                                             ││                            │
 │                                                          *                                       *                                       ││                            │
 │                                                *                                       *                                                 ││                            │
 │                                                                                                                                          ││                            │
