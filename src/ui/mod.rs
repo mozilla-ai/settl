@@ -412,7 +412,7 @@ impl PlayingState {
                     self.chat_messages
                         .drain(..self.chat_messages.len() - MAX_CHAT);
                 }
-                self.chat_scroll = self.chat_messages.len().saturating_sub(1) as u16;
+                self.chat_scroll = u16::MAX; // Auto-scroll to bottom.
             }
             UiEvent::AiReasoningChunk {
                 player_id,
@@ -437,7 +437,7 @@ impl PlayingState {
                         text: chunk,
                     });
                 }
-                self.chat_scroll = self.chat_messages.len().saturating_sub(1) as u16;
+                self.chat_scroll = u16::MAX; // Auto-scroll to bottom.
             }
             UiEvent::GameOver { winner, message } => {
                 let winner_name = self

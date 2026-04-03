@@ -54,13 +54,21 @@ pub fn render_chat(messages: &[ChatMessage], scroll: u16, area: Rect, buf: &mut 
         )));
     }
 
+    // Compute total visual lines after wrapping to scroll correctly.
+    let inner_width = area.width.saturating_sub(2).max(1) as usize;
+    let total_visual_lines: usize = lines
+        .iter()
+        .map(|line| {
+            let chars: usize = line.spans.iter().map(|s| s.content.chars().count()).sum();
+            chars.max(1).div_ceil(inner_width)
+        })
+        .sum();
     let visible_height = area.height.saturating_sub(2) as usize;
-    let total_lines = lines.len();
-    let max_scroll = total_lines.saturating_sub(visible_height) as u16;
+    let max_scroll = total_visual_lines.saturating_sub(visible_height) as u16;
     let effective_scroll = scroll.min(max_scroll);
 
     let block = Block::default()
-        .title(format!(" AI Reasoning ({}) ", total_lines))
+        .title(format!(" AI Reasoning ({}) ", lines.len()))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Magenta));
 
