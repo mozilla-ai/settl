@@ -41,6 +41,7 @@ impl Player for RandomPlayer {
         _state: &GameState,
         _player_id: PlayerId,
         legal_vertices: &[VertexCoord],
+        _round: u8,
     ) -> (usize, String) {
         let idx = rand::rng().random_range(0..legal_vertices.len());
         (idx, "[random settlement]".into())

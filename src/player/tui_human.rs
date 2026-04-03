@@ -153,6 +153,7 @@ impl Player for TuiHumanPlayer {
         _state: &GameState,
         player_id: PlayerId,
         legal_vertices: &[VertexCoord],
+        _round: u8,
     ) -> (usize, String) {
         let max = legal_vertices.len().saturating_sub(1);
         let idx = self

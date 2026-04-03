@@ -11,3 +11,7 @@ catchphrases = [
     "Every turn counts.",
     "I'll trade, but make it quick.",
 ]
+setup_strategy = """
+Maximize pip count above all else. Place on the highest-probability vertices available. \
+Wood+brick first for early roads and settlements, then pivot to ore for cities. Speed \
+is everything -- get producing early."""

@@ -100,6 +100,7 @@ impl Player for HumanPlayer {
         _state: &GameState,
         player_id: PlayerId,
         legal_vertices: &[VertexCoord],
+        _round: u8,
     ) -> (usize, String) {
         println!(
             "\n--- Place Settlement (Player {}: {}) ---",

@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use crate::game::actions::PlayerId;
-use crate::game::board::{Board, HexCoord, Resource, VertexDirection};
+use crate::game::board::{self, Board, HexCoord, PortType, Resource, VertexCoord, VertexDirection};
 use crate::game::event::{self, GameEvent};
 use crate::game::state::{Building, GameState};
 use crate::player::PlayerChoice;
@@ -258,33 +258,75 @@ pub fn turn_prompt_with_history(
     )
 }
 
+/// Annotate a single vertex with adjacent resources, pip total, and port info.
+///
+/// Format: `0. (0,-2,N) | Ore(10), Sheep(2), Wood(9) | pips=8`
+/// Or with port: `1. (2,-2,N) | Wheat(9), Brick(6) | pips=9 | 2:1 Wheat port`
+pub fn annotate_vertex(index: usize, v: &VertexCoord, board: &Board) -> String {
+    let dir = match v.dir {
+        VertexDirection::North => "N",
+        VertexDirection::South => "S",
+    };
+
+    let adj_hexes = board::vertex_neighbors(*v);
+    let mut resources = Vec::new();
+    let mut total_pips: u8 = 0;
+
+    for hex_coord in adj_hexes {
+        if let Some(hex) = board.get_hex(hex_coord) {
+            if let Some(resource) = hex.terrain.resource() {
+                let token = hex.number_token.unwrap_or(0);
+                let pips = board::pip_count(token);
+                resources.push(format!("{}({})", resource, token));
+                total_pips += pips;
+            }
+        }
+    }
+
+    let resources_str = if resources.is_empty() {
+        "Desert only".to_string()
+    } else {
+        resources.join(", ")
+    };
+
+    let port_str = if let Some(port) = board.port_at_vertex(*v) {
+        match port.port_type {
+            PortType::Generic => " | 3:1 port".to_string(),
+            PortType::Specific(r) => format!(" | 2:1 {} port", r),
+        }
+    } else {
+        String::new()
+    };
+
+    format!(
+        "  {index}. ({},{},{dir}) | {resources_str} | pips={total_pips}{port_str}",
+        v.hex.q, v.hex.r,
+    )
+}
+
 /// Build a prompt for settlement placement during setup.
 pub fn setup_settlement_prompt(
     state: &GameState,
     player_id: PlayerId,
     round: u8,
-    legal_vertices: &[crate::game::board::VertexCoord],
+    legal_vertices: &[VertexCoord],
 ) -> String {
     let board_ascii = ascii_board(&state.board);
 
     let vertex_list: String = legal_vertices
         .iter()
         .enumerate()
-        .map(|(i, v)| {
-            let dir = match v.dir {
-                VertexDirection::North => "N",
-                VertexDirection::South => "S",
-            };
-            format!("  {}. ({}, {}, {})", i, v.hex.q, v.hex.r, dir)
-        })
+        .map(|(i, v)| annotate_vertex(i, v, &state.board))
         .collect::<Vec<_>>()
         .join("\n");
 
     format!(
         "BOARD:\n{board_ascii}\n\n\
-         SETUP PHASE — Round {round}\n\
+         SETUP PHASE -- Round {round}\n\
          You are Player {player_id}. Place your settlement.\n\
          {round_hint}\n\n\
+         VERTEX FORMAT: index. (q,r,dir) | Resource(number_token), ... | pips=total_probability_dots | port_info\n\
+         Higher pips = more likely to produce. Max is 5 (for 6 and 8).\n\n\
          LEGAL SETTLEMENT LOCATIONS:\n{vertex_list}\n\n\
          Choose by calling the choose_index tool.",
         round_hint = if round == 2 {
@@ -360,5 +402,82 @@ mod tests {
         let formatted = format_choices(&choices);
         assert!(formatted.contains("0. End Turn"));
         assert!(formatted.contains("1. Play Knight"));
+    }
+
+    #[test]
+    fn annotate_vertex_shows_resources_and_pips() {
+        let board = Board::default_board();
+        // North vertex of (0,-2): adjacent to hexes (0,-2), (0,-3), (1,-3).
+        // Only (0,-2) is on the board (Mountains/10). The others are off-board.
+        let v = crate::game::board::VertexCoord::new(
+            crate::game::board::HexCoord::new(0, -2),
+            crate::game::board::VertexDirection::North,
+        );
+        let annotation = annotate_vertex(0, &v, &board);
+        assert!(
+            annotation.contains("Ore(10)"),
+            "should list Ore(10): {}",
+            annotation
+        );
+        assert!(
+            annotation.contains("pips="),
+            "should show pip count: {}",
+            annotation
+        );
+    }
+
+    #[test]
+    fn annotate_vertex_shows_port() {
+        let board = Board::default_board();
+        // North vertex of (2,-2) has a 2:1 Wheat port.
+        let v = crate::game::board::VertexCoord::new(
+            crate::game::board::HexCoord::new(2, -2),
+            crate::game::board::VertexDirection::North,
+        );
+        let annotation = annotate_vertex(0, &v, &board);
+        assert!(
+            annotation.contains("2:1 Wheat port"),
+            "should show wheat port: {}",
+            annotation
+        );
+    }
+
+    #[test]
+    fn annotate_vertex_interior_has_three_resources() {
+        let board = Board::default_board();
+        // South vertex of (0,-1): adjacent to (0,-1), (0,0), (-1,0).
+        // (0,-1) = Fields/12, (0,0) = Desert, (-1,0) = Fields/11
+        let v = crate::game::board::VertexCoord::new(
+            crate::game::board::HexCoord::new(0, -1),
+            crate::game::board::VertexDirection::South,
+        );
+        let annotation = annotate_vertex(0, &v, &board);
+        // Should have 2 resource entries (desert produces nothing).
+        assert!(
+            annotation.contains("Wheat"),
+            "should contain Wheat: {}",
+            annotation
+        );
+        // Should not mention port for interior vertex.
+        assert!(
+            !annotation.contains("port"),
+            "interior vertex should have no port: {}",
+            annotation
+        );
+    }
+
+    #[test]
+    fn setup_settlement_prompt_contains_annotation_legend() {
+        let state = GameState::new(Board::default_board(), 3);
+        let legal = crate::game::rules::legal_setup_vertices(&state);
+        let prompt = setup_settlement_prompt(&state, 0, 1, &legal);
+        assert!(
+            prompt.contains("pips="),
+            "prompt should contain pip annotations"
+        );
+        assert!(
+            prompt.contains("VERTEX FORMAT:"),
+            "prompt should contain legend"
+        );
     }
 }

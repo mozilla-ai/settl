@@ -164,7 +164,7 @@ impl GameOrchestrator {
         let total_placements = setup_order.len();
 
         for (idx, &player_id) in setup_order.iter().enumerate() {
-            let _round = if idx < total_placements / 2 { 1 } else { 2 };
+            let round: u8 = if idx < total_placements / 2 { 1 } else { 2 };
 
             // Step 1: Choose settlement location.
             let legal_vertices = rules::legal_setup_vertices(&self.state);
@@ -181,6 +181,7 @@ impl GameOrchestrator {
                         &self.state,
                         player_id,
                         &legal_vertices,
+                        round,
                     ),
                     (0, "timeout fallback".into()),
                 )

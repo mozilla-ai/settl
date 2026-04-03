@@ -378,9 +378,12 @@ impl Player for LlamafilePlayer {
         state: &GameState,
         player_id: PlayerId,
         legal_vertices: &[VertexCoord],
+        round: u8,
     ) -> (usize, String) {
         let system = self.system_prompt();
-        let user = prompt::setup_settlement_prompt(state, player_id, 1, legal_vertices);
+        let strategy = self.personality.setup_strategy_text();
+        let user = prompt::setup_settlement_prompt(state, player_id, round, legal_vertices);
+        let user = format!("SETUP STRATEGY:\n{strategy}\n\n{user}",);
         let tool = Self::index_tool(legal_vertices.len());
 
         match self.call_with_retry(&system, &user, tool).await {

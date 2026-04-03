@@ -19,6 +19,9 @@ pub struct Personality {
     /// Signature phrases the AI should occasionally use.
     #[serde(default)]
     pub catchphrases: Vec<String>,
+    /// Optional setup-phase placement strategy injected into the prompt.
+    #[serde(default)]
+    pub setup_strategy: Option<String>,
 }
 
 fn default_half() -> f32 {
@@ -36,6 +39,12 @@ impl Personality {
             aggression: 0.5,
             cooperation: 0.5,
             catchphrases: vec![],
+            setup_strategy: Some(
+                "Diversify resources across both settlements. Favor ore+wheat for city-building. \
+                 Aim for high pip totals (6, 8 are best). Spread across different numbers to \
+                 reduce variance."
+                    .into(),
+            ),
         }
     }
 
@@ -53,6 +62,12 @@ impl Personality {
                 "Everything has a price.".into(),
                 "That's not a fair trade and you know it.".into(),
             ],
+            setup_strategy: Some(
+                "Stack ore+wheat+sheep for a dev card rush. Prioritize vertices adjacent to \
+                 ore and wheat hexes with high pips. Sheep is your third priority for dev cards. \
+                 A 2:1 ore or wheat port is a strong bonus."
+                    .into(),
+            ),
         }
     }
 
@@ -71,6 +86,12 @@ impl Personality {
                 "You'll have to do better than that.".into(),
                 "Remember when you blocked my road? I do.".into(),
             ],
+            setup_strategy: Some(
+                "Block opponents' best intersections. Place settlements on the highest-pip \
+                 vertices that other players are likely to want. Deny the best ore+wheat spots \
+                 even if another vertex would be slightly better for you."
+                    .into(),
+            ),
         }
     }
 
@@ -88,6 +109,12 @@ impl Personality {
                 "Let's all grow together.".into(),
                 "I just need one more road...".into(),
             ],
+            setup_strategy: Some(
+                "Prioritize wood+brick for rapid road and settlement expansion. Place settlements \
+                 where you can build roads toward future settlement spots. A third resource \
+                 (wheat or sheep) helps round out your economy."
+                    .into(),
+            ),
         }
     }
 
@@ -107,7 +134,21 @@ impl Personality {
                 "I just think it's funny.".into(),
                 "Nobody expects the wild card.".into(),
             ],
+            setup_strategy: Some(
+                "Make unexpected placements. Consider 2:1 port strategies where you focus one \
+                 plentiful resource and trade it at a 2:1 port for everything else. Pick spots \
+                 others would overlook. Chaos starts at setup."
+                    .into(),
+            ),
         }
+    }
+
+    /// Returns the setup strategy text, falling back to a generic default.
+    pub fn setup_strategy_text(&self) -> &str {
+        self.setup_strategy.as_deref().unwrap_or(
+            "Diversify resources. Favor high-pip vertices (6 and 8 are the most probable). \
+             Balance your resource income across both settlements.",
+        )
     }
 
     /// Format the personality as system prompt instructions.
@@ -177,5 +218,41 @@ mod tests {
         let parsed: Personality = toml::from_str(&toml_str).unwrap();
         assert_eq!(parsed.name, p.name);
         assert_eq!(parsed.aggression, p.aggression);
+    }
+
+    #[test]
+    fn toml_round_trip_with_setup_strategy() {
+        let p = Personality::builder();
+        let toml_str = toml::to_string(&p).unwrap();
+        let parsed: Personality = toml::from_str(&toml_str).unwrap();
+        assert!(parsed.setup_strategy.is_some());
+        assert!(parsed.setup_strategy.unwrap().contains("wood+brick"));
+    }
+
+    #[test]
+    fn setup_strategy_text_returns_custom_when_set() {
+        let p = Personality::aggressive();
+        assert!(p.setup_strategy_text().contains("ore+wheat+sheep"));
+    }
+
+    #[test]
+    fn setup_strategy_text_returns_default_when_none() {
+        let p = Personality {
+            setup_strategy: None,
+            ..Personality::default()
+        };
+        assert!(p.setup_strategy_text().contains("Diversify"));
+    }
+
+    #[test]
+    fn toml_without_setup_strategy_still_parses() {
+        let toml_str = r#"
+name = "Minimal"
+style = "Just a test"
+aggression = 0.5
+cooperation = 0.5
+"#;
+        let parsed: Personality = toml::from_str(toml_str).unwrap();
+        assert!(parsed.setup_strategy.is_none());
     }
 }

@@ -119,12 +119,14 @@ pub trait Player: Send + Sync {
     ) -> (usize, String);
 
     /// Choose a vertex to place a settlement during setup or normal play.
+    /// `round` is the setup round (1 or 2); 0 during normal play.
     /// Returns `(index into legal_vertices, reasoning)`.
     async fn choose_settlement(
         &self,
         state: &GameState,
         player_id: PlayerId,
         legal_vertices: &[VertexCoord],
+        round: u8,
     ) -> (usize, String);
 
     /// Choose an edge to place a road.

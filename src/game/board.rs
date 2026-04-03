@@ -504,6 +504,21 @@ pub fn hex_edges(h: HexCoord) -> [EdgeCoord; 6] {
     ]
 }
 
+/// Number of probability dots (pips) for a given number token.
+///
+/// Reflects how many ways to roll that number with 2d6:
+/// 2/12=1, 3/11=2, 4/10=3, 5/9=4, 6/8=5, anything else=0.
+pub fn pip_count(n: u8) -> u8 {
+    match n {
+        2 | 12 => 1,
+        3 | 11 => 2,
+        4 | 10 => 3,
+        5 | 9 => 4,
+        6 | 8 => 5,
+        _ => 0,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Board generation
 // ---------------------------------------------------------------------------
@@ -641,6 +656,18 @@ impl Board {
     /// Whether a hex coordinate exists on this board.
     pub fn has_hex(&self, coord: HexCoord) -> bool {
         self.hexes.iter().any(|h| h.coord == coord)
+    }
+
+    /// Look up a hex tile by its coordinate.
+    pub fn get_hex(&self, coord: HexCoord) -> Option<&Hex> {
+        self.hexes.iter().find(|h| h.coord == coord)
+    }
+
+    /// Find the port accessible from a given vertex, if any.
+    pub fn port_at_vertex(&self, v: VertexCoord) -> Option<&Port> {
+        self.ports
+            .iter()
+            .find(|p| p.vertices.0 == v || p.vertices.1 == v)
     }
 
     /// Returns the set of all valid vertex coordinates on this board.
@@ -1212,5 +1239,47 @@ mod tests {
             !has_adjacent_red_numbers(&board.hexes),
             "default board must not have adjacent 6/8 tokens"
         );
+    }
+
+    #[test]
+    fn get_hex_returns_correct_tile() {
+        let board = Board::default_board();
+        let hex = board.get_hex(HexCoord::new(0, 0)).unwrap();
+        assert_eq!(hex.terrain, Terrain::Desert);
+        assert!(hex.number_token.is_none());
+
+        let hex2 = board.get_hex(HexCoord::new(0, -2)).unwrap();
+        assert_eq!(hex2.terrain, Terrain::Mountains);
+        assert_eq!(hex2.number_token, Some(10));
+
+        assert!(board.get_hex(HexCoord::new(99, 99)).is_none());
+    }
+
+    #[test]
+    fn port_at_vertex_finds_port() {
+        let board = Board::default_board();
+        // The wheat 2:1 port is at vertex North(2,-2).
+        let v = VertexCoord::new(HexCoord::new(2, -2), VertexDirection::North);
+        let port = board.port_at_vertex(v).unwrap();
+        assert_eq!(port.port_type, PortType::Specific(Resource::Wheat));
+
+        // An interior vertex should have no port.
+        let interior = VertexCoord::new(HexCoord::new(0, 0), VertexDirection::North);
+        assert!(board.port_at_vertex(interior).is_none());
+    }
+
+    #[test]
+    fn pip_count_values() {
+        assert_eq!(pip_count(2), 1);
+        assert_eq!(pip_count(3), 2);
+        assert_eq!(pip_count(4), 3);
+        assert_eq!(pip_count(5), 4);
+        assert_eq!(pip_count(6), 5);
+        assert_eq!(pip_count(7), 0);
+        assert_eq!(pip_count(8), 5);
+        assert_eq!(pip_count(9), 4);
+        assert_eq!(pip_count(10), 3);
+        assert_eq!(pip_count(11), 2);
+        assert_eq!(pip_count(12), 1);
     }
 }

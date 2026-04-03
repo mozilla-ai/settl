@@ -12,3 +12,7 @@ catchphrases = [
     "I think we can work something out.",
     "Have you noticed how many VPs Player 2 has?",
 ]
+setup_strategy = """
+Diversify resources for flexible trading. Place settlements where you'll produce \
+what others need so you can offer attractive trades. Favor high-pip vertices with \
+a mix of resources. Avoid confrontational placements early."""

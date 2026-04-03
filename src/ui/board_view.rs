@@ -353,7 +353,7 @@ fn draw_hex_cell(
     // Probability dots on row cy+1 (per DESIGN.md).
     if let Some(n) = hex.number_token {
         let is_hot = n == 6 || n == 8;
-        let dots = probability_dots(n);
+        let dots = board::pip_count(n);
         if dots > 0 {
             let dot_style = if is_hot {
                 Style::default().fg(Color::Red).bg(fill_bg).bold()
@@ -365,18 +365,6 @@ fn draw_hex_cell(
                 set_cell(start + d * 2, cy + 1, '\u{00b7}', dot_style, area, buf);
             }
         }
-    }
-}
-
-/// Number of probability dots for a given number token.
-fn probability_dots(n: u8) -> u8 {
-    match n {
-        2 | 12 => 1,
-        3 | 11 => 2,
-        4 | 10 => 3,
-        5 | 9 => 4,
-        6 | 8 => 5,
-        _ => 0,
     }
 }
 
