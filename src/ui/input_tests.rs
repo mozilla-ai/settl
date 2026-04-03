@@ -809,44 +809,6 @@ fn spectating_space_toggles_pause() {
 }
 
 #[test]
-fn spectating_plus_decreases_speed() {
-    let (ps, _rx) = make_test_playing_state(InputMode::Spectating);
-    let mut app = make_test_app(Screen::Playing(ps));
-
-    let initial_speed = match &app.screen {
-        Screen::Playing(ps) => ps.speed_ms,
-        _ => panic!(),
-    };
-
-    handle_input(&mut app, KeyCode::Char('+'));
-
-    let new_speed = match &app.screen {
-        Screen::Playing(ps) => ps.speed_ms,
-        _ => panic!(),
-    };
-    assert!(new_speed < initial_speed, "'+' should decrease speed_ms");
-}
-
-#[test]
-fn spectating_minus_increases_speed() {
-    let (ps, _rx) = make_test_playing_state(InputMode::Spectating);
-    let mut app = make_test_app(Screen::Playing(ps));
-
-    let initial_speed = match &app.screen {
-        Screen::Playing(ps) => ps.speed_ms,
-        _ => panic!(),
-    };
-
-    handle_input(&mut app, KeyCode::Char('-'));
-
-    let new_speed = match &app.screen {
-        Screen::Playing(ps) => ps.speed_ms,
-        _ => panic!(),
-    };
-    assert!(new_speed > initial_speed, "'-' should increase speed_ms");
-}
-
-#[test]
 fn spectating_tab_toggles_ai_panel() {
     let (ps, _rx) = make_test_playing_state(InputMode::Spectating);
     let mut app = make_test_app(Screen::Playing(ps));

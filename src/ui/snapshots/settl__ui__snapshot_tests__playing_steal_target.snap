@@ -26,8 +26,8 @@ expression: buffer_to_string(&buf)
 │                                      ·               · · · · ·             · · ·               · · ·                                     ││   1| Game started -- your  │
 │                                                                                                                                          ││turn will show a prompt     │
 │                                                                                                                                          ││   2| q:quit  Space:pause   │
-│                                                                                                                                          ││+/-:speed  j/k:scroll       │
-│                                                                                                                      *                   ││Tab:AI panel                │
+│                                                                                                                                          ││j/k:scroll  Tab:AI panel    │
+│                                                                                                                      *                   ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                          Wood                Wheat            R Desert               Wood                 Ore                            ││                            │
@@ -66,4 +66,4 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                                                        │
 │ [Up/Down] select  [Enter] confirm  [1-4] pick player                                                                                                                   │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- Speed: 100ms  STEAL  | q:quit  ?:help  Tab:AI  Space:pause  +/-:speed
+ STEAL  | q:quit  ?:help  Tab:AI  Space:pause

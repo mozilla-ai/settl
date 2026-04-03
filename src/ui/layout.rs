@@ -382,11 +382,19 @@ fn draw_status_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
         InputMode::StealTarget { .. } => " STEAL ",
         InputMode::TradeResponse { .. } => " TRADE OFFER ",
     };
+    let roll_span = if let Some((d1, d2, total)) = ps.last_roll {
+        let is_seven = total == 7;
+        let style = if is_seven {
+            Style::default().fg(Color::Black).bg(Color::Red).bold()
+        } else {
+            Style::default().fg(Color::White).bold()
+        };
+        Span::styled(format!(" Rolled: {} ({}+{}) ", total, d1, d2), style)
+    } else {
+        Span::raw("")
+    };
     let status = Line::from(vec![
-        Span::styled(
-            format!(" Speed: {}ms ", ps.speed_ms),
-            Style::default().fg(Color::Cyan),
-        ),
+        roll_span,
         Span::styled(
             pause_indicator,
             Style::default().fg(Color::Black).bg(Color::Yellow).bold(),
@@ -396,7 +404,7 @@ fn draw_status_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
             Style::default().fg(Color::Black).bg(Color::Cyan).bold(),
         ),
         Span::styled(
-            " | q:quit  ?:help  Tab:AI  Space:pause  +/-:speed ",
+            " | q:quit  ?:help  Tab:AI  Space:pause ",
             Style::default().fg(Color::DarkGray),
         ),
         Span::styled(
@@ -441,7 +449,6 @@ fn draw_help_overlay(f: &mut Frame, area: Rect) {
         Line::from("  ?        Toggle this help"),
         Line::from("  Tab      Toggle AI reasoning panel"),
         Line::from("  Space    Pause / unpause AI turns"),
-        Line::from("  + / -    Speed up / slow down AI play"),
         Line::from("  j / k    Scroll game log"),
         Line::from(""),
         Line::from(Span::styled(

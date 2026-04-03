@@ -26,8 +26,8 @@ expression: buffer_to_string(&buf)
 │                                      ·               · · · · ·             · · ·               · · ·                                     ││   1| Game started -- your  │
 │                                                                                                                                          ││turn will show a prompt     │
 │                                                                                                                                          ││   2| q:quit  Space:pause   │
-│                                                                                                                                          ││+/-:speed  j/k:scroll       │
-│                                                                                                                      *                   ││Tab:AI panel                │
+│                                                                                                                                          ││j/k:scroll  Tab:AI panel    │
+│                                                                                                                      *                   ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                          Wood                Wheat            R Desert               Wood                 Ore                            ││                            │
@@ -63,7 +63,7 @@ expression: buffer_to_string(&buf)
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘└────────────────────────────┘
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │Game started -- your turn will show a prompt                                                                                                                            │
-│q:quit  Space:pause  +/-:speed  j/k:scroll  Tab:AI panel                                                                                                                │
+│q:quit  Space:pause  j/k:scroll  Tab:AI panel                                                                                                                           │
 │                                                                                                                                                                        │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- Speed: 100ms  | q:quit  ?:help  Tab:AI  Space:pause  +/-:speed
+ | q:quit  ?:help  Tab:AI  Space:pause

@@ -183,7 +183,6 @@ pub struct PlayingState {
     pub game_over_winner: Option<(usize, String)>,
     pub log_scroll: u16,
     pub chat_scroll: u16,
-    pub speed_ms: u64,
     pub paused: bool,
     /// Whether to show AI reasoning panel (Tab toggle).
     pub show_ai_panel: bool,
@@ -197,6 +196,8 @@ pub struct PlayingState {
     pub human_response_tx: Option<mpsc::UnboundedSender<HumanResponse>>,
     /// Cached hex grid for board rendering (computed once on first state).
     pub hex_grid: Option<board_view::HexGrid>,
+    /// Last dice roll: (die1, die2, total). Displayed persistently in the status bar.
+    pub last_roll: Option<(u8, u8, u8)>,
 }
 
 impl PlayingState {
@@ -215,7 +216,7 @@ impl PlayingState {
             state: None,
             messages: vec![
                 start_msg,
-                "q:quit  Space:pause  +/-:speed  j/k:scroll  Tab:AI panel".into(),
+                "q:quit  Space:pause  j/k:scroll  Tab:AI panel".into(),
             ],
             chat_messages: Vec::new(),
             player_names,
@@ -223,7 +224,6 @@ impl PlayingState {
             game_over_winner: None,
             log_scroll: 0,
             chat_scroll: 0,
-            speed_ms: 100,
             paused: false,
             show_ai_panel: false,
             show_help: false,
@@ -231,6 +231,7 @@ impl PlayingState {
             human_prompt_rx: None,
             human_response_tx: None,
             hex_grid: None,
+            last_roll: None,
         }
     }
 
@@ -357,13 +358,21 @@ impl PlayingState {
         match ui_event {
             UiEvent::StateUpdate {
                 state,
-                event: _,
+                event,
                 message,
             } => {
                 if self.hex_grid.is_none() {
                     self.hex_grid = Some(board_view::HexGrid::new());
                 }
                 self.state = Some(state);
+                if let Some(GameEvent::DiceRolled {
+                    values: (d1, d2),
+                    total,
+                    ..
+                }) = event
+                {
+                    self.last_roll = Some((d1, d2, total));
+                }
                 if !message.is_empty() {
                     self.push_message(message);
                 }
@@ -458,9 +467,7 @@ async fn run_event_loop(
         // Poll timeout depends on screen type.
         let timeout = match &app.screen {
             Screen::LlamafileSetup(_) => Duration::from_millis(50), // Fast refresh for progress
-            Screen::Playing(ps) => {
-                Duration::from_millis(if ps.paused { 50 } else { ps.speed_ms.min(50) })
-            }
+            Screen::Playing(_) => Duration::from_millis(50),
             _ => Duration::from_millis(100),
         };
 
@@ -741,12 +748,6 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                             return Action::Transition(Screen::PostGame(post));
                         }
                         KeyCode::Char(' ') => ps.paused = !ps.paused,
-                        KeyCode::Char('+') | KeyCode::Char('=') => {
-                            ps.speed_ms = ps.speed_ms.saturating_sub(25).max(25);
-                        }
-                        KeyCode::Char('-') => {
-                            ps.speed_ms = (ps.speed_ms + 25).min(500);
-                        }
                         KeyCode::Up | KeyCode::Char('k') => {
                             ps.log_scroll = ps.log_scroll.saturating_sub(1);
                         }

@@ -31,4 +31,4 @@ expression: buffer_to_string(&buf)
 │                                                                              │
 │ [Arrow/Enter] select  [s]ettlement  [r]oad  [c]ity  [d]ev card  [t]rade  [e]n│
 └──────────────────────────────────────────────────────────────────────────────┘
- Speed: 100ms  YOUR TURN  | q:quit  ?:help  Tab:AI  Space:pause  +/-:speed
+ YOUR TURN  | q:quit  ?:help  Tab:AI  Space:pause

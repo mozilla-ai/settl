@@ -26,8 +26,8 @@ expression: buffer_to_string(&buf)
 │                                      ·               · · · · ·             · · ·               · · ·                                     ││   1| Game started -- your  │
 │                                                                                                                                          ││turn will show a prompt     │
 │                                                                                                                                          ││   2| q:quit  Space:pause   │
-│                                                                                                                                          ││+/-:speed  j/k:scroll       │
-│                                                                                                                      *                   ││Tab:AI panel                │
+│                                                                                                                                          ││j/k:scroll  Tab:AI panel    │
+│                                                                                                                      *                   ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                          Wood                Wheat            R Desert               Wood                 Ore                            ││                            │
@@ -66,4 +66,4 @@ expression: buffer_to_string(&buf)
 │ Have: W:3 B:2 S:1 H:4 O:2                                                                                                                                              │
 │ [w/b/s/h/o] add  [Tab] switch give/get  [Backspace] undo  [Enter] send  [Esc] cancel                                                                                   │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- Speed: 100ms  TRADING  | q:quit  ?:help  Tab:AI  Space:pause  +/-:speed
+ TRADING  | q:quit  ?:help  Tab:AI  Space:pause
