@@ -1123,7 +1123,8 @@ fn launch_game(
         Board::default_board()
     };
 
-    let state = GameState::new(board, ng.num_players());
+    let mut state = GameState::new(board, ng.num_players());
+    state.friendly_robber = ng.friendly_robber;
 
     // Build players.
     let built_in_personalities = [

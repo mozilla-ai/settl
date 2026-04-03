@@ -663,6 +663,9 @@ fn apply_play_dev_card(
             if !state.board.has_hex(*robber_to) {
                 return Err(RuleError::InvalidRobberPlacement);
             }
+            if friendly_robber_blocks(state, *robber_to, player) {
+                return Err(RuleError::InvalidRobberPlacement);
+            }
         }
         DevCardAction::YearOfPlenty(r1, r2) => {
             // Bank must have the requested resources available.
@@ -906,6 +909,32 @@ pub fn apply_setup_road(
 
 // -- Robber / discard --
 
+/// Check whether the friendly robber rule forbids placing on this hex.
+///
+/// Returns true if the hex is blocked: all adjacent players (other than the
+/// placing player) have 2 or fewer VP.  An empty hex is never blocked.
+fn friendly_robber_blocks(state: &GameState, hex: HexCoord, player: PlayerId) -> bool {
+    if !state.friendly_robber {
+        return false;
+    }
+    let mut found_any = false;
+    for v in hex.vertices() {
+        if let Some(b) = state.buildings.get(&v) {
+            let owner = match b {
+                Building::Settlement(p) | Building::City(p) => *p,
+            };
+            if owner == player {
+                continue;
+            }
+            found_any = true;
+            if state.victory_points(owner) > 2 {
+                return false;
+            }
+        }
+    }
+    found_any
+}
+
 /// Move the robber to a new hex.
 pub fn apply_move_robber(state: &mut GameState, hex: HexCoord) -> Result<(), RuleError> {
     let player = match &state.phase {
@@ -917,6 +946,9 @@ pub fn apply_move_robber(state: &mut GameState, hex: HexCoord) -> Result<(), Rul
         return Err(RuleError::InvalidRobberPlacement);
     }
     if !state.board.has_hex(hex) {
+        return Err(RuleError::InvalidRobberPlacement);
+    }
+    if friendly_robber_blocks(state, hex, player) {
         return Err(RuleError::InvalidRobberPlacement);
     }
 
@@ -1959,6 +1991,138 @@ mod tests {
             }
             p => panic!("Expected Playing, got {:?}", p),
         }
+    }
+
+    // -- Friendly Robber --
+
+    fn make_friendly_robber_state(num_players: usize) -> GameState {
+        let mut state = GameState::new(Board::default_board(), num_players);
+        state.friendly_robber = true;
+        state
+    }
+
+    #[test]
+    fn friendly_robber_blocks_hex_with_low_vp_player() {
+        let mut state = make_friendly_robber_state(4);
+        state.phase = GamePhase::PlacingRobber { current_player: 0 };
+
+        // Place a settlement for player 1 adjacent to hex (1,0).
+        let target_hex = HexCoord::new(1, 0);
+        let vertex = target_hex.vertices()[0];
+        state.buildings.insert(vertex, Building::Settlement(1));
+
+        // Player 1 has only 1 VP (the settlement), so friendly robber blocks.
+        assert_eq!(state.victory_points(1), 1);
+        assert_eq!(
+            apply_move_robber(&mut state, target_hex),
+            Err(RuleError::InvalidRobberPlacement)
+        );
+    }
+
+    #[test]
+    fn friendly_robber_allows_hex_with_high_vp_player() {
+        let mut state = make_friendly_robber_state(4);
+        state.phase = GamePhase::PlacingRobber { current_player: 0 };
+
+        let target_hex = HexCoord::new(1, 0);
+        let vertices = target_hex.vertices();
+
+        // Give player 1 three settlements (3 VP) adjacent to the target hex.
+        state.buildings.insert(vertices[0], Building::Settlement(1));
+        state.buildings.insert(vertices[1], Building::Settlement(1));
+        state.buildings.insert(vertices[2], Building::Settlement(1));
+
+        assert_eq!(state.victory_points(1), 3);
+        apply_move_robber(&mut state, target_hex).unwrap();
+        assert_eq!(state.robber_hex, target_hex);
+    }
+
+    #[test]
+    fn friendly_robber_allows_empty_hex() {
+        let mut state = make_friendly_robber_state(4);
+        state.phase = GamePhase::PlacingRobber { current_player: 0 };
+
+        // No buildings adjacent to this hex.
+        let target_hex = HexCoord::new(1, 0);
+        apply_move_robber(&mut state, target_hex).unwrap();
+        assert_eq!(state.robber_hex, target_hex);
+    }
+
+    #[test]
+    fn friendly_robber_ignores_own_buildings() {
+        let mut state = make_friendly_robber_state(4);
+        state.phase = GamePhase::PlacingRobber { current_player: 0 };
+
+        // Only the placing player's own building is adjacent.
+        let target_hex = HexCoord::new(1, 0);
+        let vertex = target_hex.vertices()[0];
+        state.buildings.insert(vertex, Building::Settlement(0));
+
+        // Own buildings with low VP don't trigger the block.
+        apply_move_robber(&mut state, target_hex).unwrap();
+        assert_eq!(state.robber_hex, target_hex);
+    }
+
+    #[test]
+    fn friendly_robber_off_allows_low_vp_target() {
+        let mut state = make_state(4);
+        state.phase = GamePhase::PlacingRobber { current_player: 0 };
+
+        let target_hex = HexCoord::new(1, 0);
+        let vertex = target_hex.vertices()[0];
+        state.buildings.insert(vertex, Building::Settlement(1));
+
+        // friendly_robber is false, so 1 VP player can be targeted.
+        assert!(!state.friendly_robber);
+        apply_move_robber(&mut state, target_hex).unwrap();
+    }
+
+    #[test]
+    fn friendly_robber_blocks_knight_against_low_vp() {
+        let mut state = make_friendly_robber_state(4);
+        set_playing(&mut state, 0);
+        state.players[0].dev_cards.push(DevCard::Knight);
+
+        let target_hex = HexCoord::new(1, 0);
+        let vertex = target_hex.vertices()[0];
+        state.buildings.insert(vertex, Building::Settlement(1));
+
+        // Player 1 has 1 VP, friendly robber should block knight placement.
+        let result = apply_play_dev_card(
+            &mut state,
+            DevCard::Knight,
+            DevCardAction::Knight {
+                robber_to: target_hex,
+                steal_from: None,
+            },
+        );
+        assert_eq!(result, Err(RuleError::InvalidRobberPlacement));
+    }
+
+    #[test]
+    fn friendly_robber_allows_knight_against_high_vp() {
+        let mut state = make_friendly_robber_state(4);
+        set_playing(&mut state, 0);
+        state.players[0].dev_cards.push(DevCard::Knight);
+
+        let target_hex = HexCoord::new(1, 0);
+        let vertices = target_hex.vertices();
+
+        // Give player 1 a city (2 VP) + a settlement (1 VP) = 3 VP.
+        state.buildings.insert(vertices[0], Building::City(1));
+        state.buildings.insert(vertices[1], Building::Settlement(1));
+
+        assert_eq!(state.victory_points(1), 3);
+        apply_play_dev_card(
+            &mut state,
+            DevCard::Knight,
+            DevCardAction::Knight {
+                robber_to: target_hex,
+                steal_from: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(state.robber_hex, target_hex);
     }
 
     // -- Legal actions --

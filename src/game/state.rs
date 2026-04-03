@@ -168,6 +168,9 @@ pub struct GameState {
     pub turn_number: u32,
     /// Snake-draft order for setup phase.
     pub setup_order: Vec<PlayerId>,
+    /// When true, the robber cannot target hexes where all adjacent players
+    /// have 2 or fewer victory points.
+    pub friendly_robber: bool,
 }
 
 impl GameState {
@@ -233,6 +236,7 @@ impl GameState {
             },
             turn_number: 0,
             setup_order,
+            friendly_robber: false,
         }
     }
 
