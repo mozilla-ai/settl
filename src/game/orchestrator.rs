@@ -16,8 +16,10 @@ use crate::player::{Player, PlayerChoice};
 use crate::trading;
 use crate::ui::UiEvent;
 
-/// Default timeout for LLM/player decisions (60 seconds).
-const PLAYER_DECISION_TIMEOUT: Duration = Duration::from_secs(60);
+/// Default timeout for player decisions. Set high (5 minutes) to accommodate
+/// streaming LLM responses with large max_tokens. The human can watch reasoning
+/// stream progressively, so long wait times feel productive rather than stuck.
+const PLAYER_DECISION_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Errors that can occur during game orchestration.
 #[derive(Debug)]
@@ -172,7 +174,7 @@ impl GameOrchestrator {
                 ));
             }
 
-            let (v_idx, _v_reasoning) = self
+            let (v_idx, v_reasoning) = self
                 .with_timeout(
                     self.players[player_id].choose_settlement(
                         &self.state,
@@ -185,6 +187,7 @@ impl GameOrchestrator {
                 )
                 .await;
             let vertex = legal_vertices[v_idx.min(legal_vertices.len() - 1)];
+            self.send_reasoning(player_id, &v_reasoning);
 
             // Apply setup settlement.
             rules::apply_setup_settlement(&mut self.state, vertex).map_err(|e| {
@@ -197,7 +200,7 @@ impl GameOrchestrator {
                 return Err(OrchestratorError::GameStuck("No legal setup roads".into()));
             }
 
-            let (e_idx, _e_reasoning) = self
+            let (e_idx, e_reasoning) = self
                 .with_timeout(
                     self.players[player_id].choose_road(
                         &self.state,
@@ -209,6 +212,7 @@ impl GameOrchestrator {
                 )
                 .await;
             let edge = legal_edges[e_idx.min(legal_edges.len() - 1)];
+            self.send_reasoning(player_id, &e_reasoning);
 
             // Apply setup road.
             rules::apply_setup_road(&mut self.state, vertex, edge)
@@ -480,12 +484,13 @@ impl GameOrchestrator {
             let total = self.state.players[p].total_resources();
             let discard_count = (total / 2) as usize;
 
-            let (cards, _reasoning) = self
+            let (cards, discard_reasoning) = self
                 .with_timeout(
                     self.players[p].choose_discard(&self.state, p, discard_count),
                     (Vec::new(), "timeout fallback".into()),
                 )
                 .await;
+            self.send_reasoning(p, &discard_reasoning);
 
             rules::apply_discard(&mut self.state, p, &cards)
                 .map_err(|e| OrchestratorError::RuleViolation(format!("Discard: {}", e)))?;
@@ -506,13 +511,14 @@ impl GameOrchestrator {
             .filter(|&h| h != self.state.robber_hex)
             .collect();
 
-        let (h_idx, _h_reasoning) = self
+        let (h_idx, robber_reasoning) = self
             .with_timeout(
                 self.players[roller].choose_robber_hex(&self.state, roller, &legal_hexes),
                 (0, "timeout fallback".into()),
             )
             .await;
         let hex = legal_hexes[h_idx.min(legal_hexes.len() - 1)];
+        self.send_reasoning(roller, &robber_reasoning);
 
         rules::apply_move_robber(&mut self.state, hex)
             .map_err(|e| OrchestratorError::RuleViolation(format!("Move robber: {}", e)))?;
@@ -521,7 +527,7 @@ impl GameOrchestrator {
         if let GamePhase::Stealing { target_hex, .. } = &self.state.phase {
             let targets = rules::steal_targets(&self.state, *target_hex, roller);
             if !targets.is_empty() {
-                let (t_idx, _t_reasoning) = self
+                let (t_idx, steal_reasoning) = self
                     .with_timeout(
                         self.players[roller].choose_steal_target(
                             &self.state,
@@ -532,6 +538,7 @@ impl GameOrchestrator {
                         (0, "timeout fallback".into()),
                     )
                     .await;
+                self.send_reasoning(roller, &steal_reasoning);
                 let target = targets[t_idx.min(targets.len() - 1)];
 
                 rules::apply_steal(&mut self.state, target)

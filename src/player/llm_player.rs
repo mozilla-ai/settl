@@ -20,7 +20,7 @@ use crate::player::{Player, PlayerChoice};
 /// Maximum conversation history pairs before trimming.
 const MAX_HISTORY_PAIRS: usize = 30;
 
-/// Default model name for llamafile (Bonsai-1.7B).
+/// Default model name for llamafile (Bonsai-8B).
 pub const LLAMAFILE_MODEL: &str = "bonsai";
 
 /// Per-player conversation state.
@@ -92,6 +92,8 @@ pub struct LlmPlayer {
     conversation: tokio::sync::Mutex<Conversation>,
     /// Extra game context (recent history) injected by the orchestrator.
     extra_context: tokio::sync::Mutex<String>,
+    /// Optional channel to stream reasoning text chunks to the UI in real-time.
+    reasoning_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 }
 
 impl LlmPlayer {
@@ -111,7 +113,13 @@ impl LlmPlayer {
             max_retries: 2,
             conversation: tokio::sync::Mutex::new(Conversation::new(system_prompt)),
             extra_context: tokio::sync::Mutex::new(String::new()),
+            reasoning_tx: None,
         }
+    }
+
+    /// Set the streaming reasoning sender. Called before the game starts.
+    pub fn set_reasoning_sender(&mut self, tx: tokio::sync::mpsc::UnboundedSender<String>) {
+        self.reasoning_tx = Some(tx);
     }
 
     // -- Tool definitions (same schemas as before, new ToolDef type) --
@@ -119,15 +127,10 @@ impl LlmPlayer {
     fn index_tool(max_index: usize) -> ToolDef {
         ToolDef {
             name: "choose_index".into(),
-            description: "Choose an option by its index number. Explain your reasoning first."
-                .into(),
+            description: "Choose an option by its index number.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "reasoning": {
-                        "type": "string",
-                        "description": "Your strategic reasoning for this choice (2-3 sentences)"
-                    },
                     "index": {
                         "type": "integer",
                         "description": format!("Index of your choice (0 to {})", max_index.saturating_sub(1)),
@@ -135,7 +138,7 @@ impl LlmPlayer {
                         "maximum": max_index.saturating_sub(1)
                     }
                 },
-                "required": ["reasoning", "index"]
+                "required": ["index"]
             }),
         }
     }
@@ -147,17 +150,13 @@ impl LlmPlayer {
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "reasoning": {
-                        "type": "string",
-                        "description": "Your reasoning for choosing this resource"
-                    },
                     "resource": {
                         "type": "string",
                         "enum": ["Wood", "Brick", "Sheep", "Wheat", "Ore"],
                         "description": "The resource to choose"
                     }
                 },
-                "required": ["reasoning", "resource"]
+                "required": ["resource"]
             }),
         }
     }
@@ -169,10 +168,6 @@ impl LlmPlayer {
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "reasoning": {
-                        "type": "string",
-                        "description": "Why you chose to discard these cards"
-                    },
                     "cards": {
                         "type": "array",
                         "items": {
@@ -184,7 +179,7 @@ impl LlmPlayer {
                         "description": format!("Exactly {} resource names to discard", count)
                     }
                 },
-                "required": ["reasoning", "cards"]
+                "required": ["cards"]
             }),
         }
     }
@@ -198,10 +193,6 @@ impl LlmPlayer {
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "reasoning": {
-                        "type": "string",
-                        "description": "Your strategic reasoning for this trade (2-3 sentences)"
-                    },
                     "give_resource": {
                         "type": "string",
                         "enum": ["Wood", "Brick", "Sheep", "Wheat", "Ore"],
@@ -229,7 +220,7 @@ impl LlmPlayer {
                         "description": "A short message to other players about this trade"
                     }
                 },
-                "required": ["reasoning", "give_resource", "give_count", "want_resource", "want_count"]
+                "required": ["give_resource", "give_count", "want_resource", "want_count"]
             }),
         }
     }
@@ -237,14 +228,10 @@ impl LlmPlayer {
     fn trade_response_tool() -> ToolDef {
         ToolDef {
             name: "respond_to_trade".into(),
-            description: "Respond to a trade offer: accept, reject, or counter.".into(),
+            description: "Respond to a trade offer: accept or reject.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "reasoning": {
-                        "type": "string",
-                        "description": "Why you chose this response"
-                    },
                     "response": {
                         "type": "string",
                         "enum": ["accept", "reject"],
@@ -255,7 +242,7 @@ impl LlmPlayer {
                         "description": "If rejecting, why (optional)"
                     }
                 },
-                "required": ["reasoning", "response"]
+                "required": ["response"]
             }),
         }
     }
@@ -299,14 +286,30 @@ impl LlmPlayer {
             let system_prompt = conversation.system_prompt.clone();
             drop(conversation);
 
-            let mut request = MessagesRequest::new(self.client.model(), 1024);
+            let mut request = MessagesRequest::new(self.client.model(), 4_096);
             request.system = Some(system_prompt);
             request.messages = messages;
             request.tools = vec![tool.clone()];
             request.id_slot = self.slot_id;
             request.cache_prompt = Some(true);
+            request.stream = self.reasoning_tx.is_some();
 
-            match self.client.send_message(&request).await {
+            // On retry, notify the UI that we're retrying.
+            if attempt > 0 {
+                if let Some(tx) = &self.reasoning_tx {
+                    let _ = tx.send("\n[Retrying...]\n".to_string());
+                }
+            }
+
+            let result = if request.stream {
+                self.client
+                    .send_message_streaming(&request, self.reasoning_tx.clone())
+                    .await
+            } else {
+                self.client.send_message(&request).await
+            };
+
+            match result {
                 Ok(response) => {
                     // Log raw response content.
                     for block in &response.content {

@@ -74,6 +74,8 @@ pub enum NewGameFocus {
     FriendlyRobber,
     /// Board Layout toggle.
     BoardLayout,
+    /// AI Model Size toggle.
+    ModelSize,
     /// The "Start Game" button.
     StartButton,
 }
@@ -90,6 +92,8 @@ pub struct NewGameState {
     pub friendly_robber: bool,
     /// Whether to randomize the board layout.
     pub random_board: bool,
+    /// Which llamafile model to use for AI players.
+    pub llamafile_model: crate::llamafile::LlamafileModel,
 }
 
 impl NewGameState {
@@ -135,6 +139,7 @@ impl NewGameState {
             four_players: true,
             friendly_robber: false,
             random_board: false,
+            llamafile_model: crate::llamafile::LlamafileModel::default(),
         }
     }
 
@@ -440,8 +445,21 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
         bl_focused,
     );
 
+    // AI Model.
+    let ms_y = bl_y + 1;
+    let ms_focused = matches!(state.focus, NewGameFocus::ModelSize);
+    draw_toggle_row(
+        f,
+        x_start,
+        ms_y,
+        content_width,
+        "AI Model",
+        state.llamafile_model.display_name(),
+        ms_focused,
+    );
+
     // Start button.
-    let button_y = bl_y + 2;
+    let button_y = ms_y + 2;
     let button_focused = matches!(state.focus, NewGameFocus::StartButton);
     let button_style = if button_focused {
         Style::default().fg(Color::Black).bg(Color::Green).bold()
@@ -556,18 +574,18 @@ pub fn draw_llamafile_setup(f: &mut Frame, state: &LlamafileSetupState) {
 
     // Status text.
     let status_text = match &state.status {
-        LlamafileStatus::Checking => "Checking for Bonsai-1.7B...".to_string(),
+        LlamafileStatus::Checking => "Checking for Bonsai-8B...".to_string(),
         LlamafileStatus::Downloading { bytes, total } => {
             if *total > 0 {
                 let pct = (*bytes as f64 / *total as f64 * 100.0) as u16;
                 format!(
-                    "Downloading Bonsai-1.7B... {} / {} ({}%)",
+                    "Downloading Bonsai-8B... {} / {} ({}%)",
                     format_bytes(*bytes),
                     format_bytes(*total),
                     pct
                 )
             } else {
-                format!("Downloading Bonsai-1.7B... {}", format_bytes(*bytes))
+                format!("Downloading Bonsai-8B... {}", format_bytes(*bytes))
             }
         }
         LlamafileStatus::Preparing => "Making executable...".to_string(),

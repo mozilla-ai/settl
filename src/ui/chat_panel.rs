@@ -36,8 +36,8 @@ pub fn render_chat(messages: &[ChatMessage], scroll: u16, area: Rect, buf: &mut 
         )];
 
         // Truncate long reasoning to keep the panel readable (char-safe).
-        let text = if msg.text.chars().count() > 200 {
-            let truncated: String = msg.text.chars().take(197).collect();
+        let text = if msg.text.chars().count() > 2000 {
+            let truncated: String = msg.text.chars().take(1997).collect();
             format!("{}...", truncated)
         } else {
             msg.text.clone()
@@ -54,13 +54,26 @@ pub fn render_chat(messages: &[ChatMessage], scroll: u16, area: Rect, buf: &mut 
         )));
     }
 
+    // Estimate total visual lines after wrapping for proper scroll behavior.
+    // Each Line wraps based on panel width; we approximate to keep the latest
+    // content visible during streaming.
+    let inner_width = area.width.saturating_sub(2).max(1) as usize;
+    let mut total_visual_lines: usize = 0;
+    for line in &lines {
+        let char_count: usize = line.spans.iter().map(|s| s.content.chars().count()).sum();
+        // A line with N chars wraps to ceil(N / width) visual lines, minimum 1.
+        total_visual_lines += if char_count == 0 {
+            1
+        } else {
+            char_count.div_ceil(inner_width)
+        };
+    }
     let visible_height = area.height.saturating_sub(2) as usize;
-    let total_lines = lines.len();
-    let max_scroll = total_lines.saturating_sub(visible_height) as u16;
+    let max_scroll = total_visual_lines.saturating_sub(visible_height) as u16;
     let effective_scroll = scroll.min(max_scroll);
 
     let block = Block::default()
-        .title(format!(" AI Reasoning ({}) ", total_lines))
+        .title(format!(" AI Reasoning ({}) ", lines.len()))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Magenta));
 

@@ -1,6 +1,5 @@
 ---
 source: src/ui/snapshot_tests.rs
-assertion_line: 173
 expression: buffer_to_string(&buf)
 ---
 
@@ -33,7 +32,7 @@ expression: buffer_to_string(&buf)
 
                                                                             Setting up local AI
 
-                                                            Downloading Bonsai-1.7B... 500.0 MB / 1.00 GB (48%)
+                                                             Downloading Bonsai-8B... 500.0 MB / 1.00 GB (48%)
 
                                                                  ███████████████████░░░░░░░░░░░░░░░░░░░░░
 

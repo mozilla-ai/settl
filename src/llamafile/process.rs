@@ -48,7 +48,14 @@ impl LlamafileProcess {
                 log::debug!("  direct execution succeeded");
                 Ok(process)
             }
-            Err(e) if e.contains("exit code 127") => {
+            Err(e)
+                if e.contains("exit code 127")
+                    || e.contains("Exec format error")
+                    || e.contains("os error 8") =>
+            {
+                // Exit code 127: macOS Gatekeeper quarantine.
+                // Exec format error / os error 8: cosmopolitan binary on aarch64 without binfmt_misc.
+                // Both are solved by running via `sh` since APE binaries embed a shell header.
                 log::debug!("  direct execution failed: {e}");
                 log::debug!("  retrying via sh");
                 let result = Self::spawn_and_wait(llamafile_path, &args, port, true).await;
