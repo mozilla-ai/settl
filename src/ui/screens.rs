@@ -63,31 +63,17 @@ pub struct PlayerConfig {
 
 const DEFAULT_NAMES: &[&str] = &["Marco", "Leif", "Vasco"];
 
-/// Which column is focused in the player table.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum NewGameCol {
-    Name,
-    Personality,
-}
-
-impl NewGameCol {
-    pub fn next(self) -> Self {
-        match self {
-            NewGameCol::Name => NewGameCol::Personality,
-            NewGameCol::Personality => NewGameCol::Name,
-        }
-    }
-
-    pub fn prev(self) -> Self {
-        self.next() // only two columns, so prev == next
-    }
-}
-
-/// Which section of the new game screen has focus.
+/// Which row has focus on the new game screen.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NewGameFocus {
-    /// Player table row + column.
-    Player { row: usize, col: NewGameCol },
+    /// Player count radio toggle (3 or 4).
+    PlayerCount,
+    /// An AI player row (indices 1-3 in the players vec).
+    Player { row: usize },
+    /// Friendly Robber toggle.
+    FriendlyRobber,
+    /// Board Layout toggle.
+    BoardLayout,
     /// The "Start Game" button.
     StartButton,
 }
@@ -98,8 +84,12 @@ pub struct NewGameState {
     pub focus: NewGameFocus,
     /// Personality names: built-ins + discovered from TOML.
     pub personality_names: Vec<String>,
-    /// Whether we are currently editing a text field.
-    pub editing: bool,
+    /// Whether the game uses 3 or 4 players.
+    pub four_players: bool,
+    /// Friendly robber rule: robber cannot target players with 2 or fewer VP.
+    pub friendly_robber: bool,
+    /// Whether to randomize the board layout.
+    pub random_board: bool,
 }
 
 impl NewGameState {
@@ -140,40 +130,19 @@ impl NewGameState {
 
         Self {
             players,
-            focus: NewGameFocus::Player {
-                row: 0,
-                col: NewGameCol::Name,
-            },
+            focus: NewGameFocus::PlayerCount,
             personality_names,
-            editing: false,
+            four_players: true,
+            friendly_robber: false,
+            random_board: false,
         }
     }
 
     pub fn num_players(&self) -> usize {
-        self.players.len()
-    }
-
-    pub fn add_player(&mut self) {
-        if self.players.len() < 4 {
-            let ai_index = self.players.len() - 1; // first player is human
-            let name = DEFAULT_NAMES.get(ai_index).copied().unwrap_or("AI");
-            self.players.push(PlayerConfig {
-                name: name.into(),
-                kind: PlayerKind::Llamafile,
-                personality_index: 0,
-            });
-        }
-    }
-
-    pub fn remove_player(&mut self) {
-        if self.players.len() > 2 {
-            self.players.pop();
-            // Adjust focus if it was on a removed row.
-            if let NewGameFocus::Player { row, .. } = &mut self.focus {
-                if *row >= self.players.len() {
-                    *row = self.players.len() - 1;
-                }
-            }
+        if self.four_players {
+            4
+        } else {
+            3
         }
     }
 }
@@ -344,81 +313,135 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
         .style(Style::default().fg(Color::Yellow).bold());
     f.render_widget(title, title_area);
 
-    // Player count.
-    let count_area = Rect::new(x_start, area.y + 3, content_width, 1);
-    let count_text = format!("Players: {}  (press +/- to change)", state.num_players());
-    let count = Paragraph::new(count_text).style(Style::default().fg(Color::Cyan));
-    f.render_widget(count, count_area);
+    // -- PLAYERS section --
+    let section_y = area.y + 3;
+    let section_area = Rect::new(x_start, section_y, content_width, 1);
+    let section = Paragraph::new("PLAYERS").style(Style::default().fg(Color::DarkGray).bold());
+    f.render_widget(section, section_area);
 
-    // Player table header.
-    let header_y = area.y + 5;
-    let header_area = Rect::new(x_start, header_y, content_width, 1);
-    let header = Paragraph::new(" #  Name              Role         Personality")
-        .style(Style::default().fg(Color::DarkGray).bold());
-    f.render_widget(header, header_area);
+    // Player count radio toggle.
+    let count_y = section_y + 2;
+    let count_focused = matches!(state.focus, NewGameFocus::PlayerCount);
+    let (three_marker, four_marker) = if state.four_players {
+        ("\u{25cb}", "\u{25cf}")
+    } else {
+        ("\u{25cf}", "\u{25cb}")
+    };
+    let count_line = Line::from(vec![
+        Span::styled("    Players:  ", Style::default().fg(Color::White)),
+        Span::styled(
+            format!("{} 3", three_marker),
+            toggle_style(count_focused && !state.four_players),
+        ),
+        Span::styled("   ", Style::default()),
+        Span::styled(
+            format!("{} 4", four_marker),
+            toggle_style(count_focused && state.four_players),
+        ),
+    ]);
+    let count_area = Rect::new(x_start, count_y, content_width, 1);
+    let count_style = if count_focused {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+    let count_widget = Paragraph::new(count_line).style(count_style);
+    f.render_widget(count_widget, count_area);
 
     // Player rows.
+    let first_row_y = count_y + 2;
     for (i, player) in state.players.iter().enumerate() {
-        let row_y = header_y + 1 + i as u16;
+        let row_y = first_row_y + i as u16;
         if row_y >= area.y + area.height - 6 {
             break;
         }
         let row_area = Rect::new(x_start, row_y, content_width, 1);
 
+        let is_human = player.kind == PlayerKind::Human;
+        let is_dimmed = !state.four_players && i == 3;
+        let is_focused = matches!(state.focus, NewGameFocus::Player { row } if row == i);
+
         let role_str = player.kind.label();
-        let personality_str = match player.kind {
-            PlayerKind::Llamafile => state
+        let personality_str = if is_human {
+            ""
+        } else {
+            state
                 .personality_names
                 .get(player.personality_index)
                 .map(|s| s.as_str())
-                .unwrap_or("?"),
-            PlayerKind::Human => "\u{2014}",
+                .unwrap_or("?")
         };
 
-        // Build columns with highlights.
-        let is_focused_row = matches!(state.focus, NewGameFocus::Player { row, .. } if row == i);
+        let marker = if is_focused { ">" } else { " " };
 
-        let name_style = cell_style(
-            is_focused_row
-                && matches!(
-                    state.focus,
-                    NewGameFocus::Player {
-                        col: NewGameCol::Name,
-                        ..
-                    }
-                ),
-        );
-        let pers_style = cell_style(
-            is_focused_row
-                && matches!(
-                    state.focus,
-                    NewGameFocus::Player {
-                        col: NewGameCol::Personality,
-                        ..
-                    }
-                ),
-        );
+        let base_fg = if is_dimmed {
+            Color::DarkGray
+        } else {
+            Color::White
+        };
 
-        let marker = if is_focused_row { ">" } else { " " };
+        let pers_style = if is_focused && !is_human {
+            Style::default().fg(Color::Black).bg(Color::Cyan).bold()
+        } else {
+            Style::default().fg(base_fg)
+        };
 
         let line = Line::from(vec![
             Span::styled(
-                format!("{} {}  ", marker, i + 1),
+                format!("  {} {}  ", marker, i + 1),
                 Style::default().fg(Color::DarkGray),
             ),
-            Span::styled(format!("{:<16} ", player.name), name_style),
+            Span::styled(format!("{:<14}", player.name), Style::default().fg(base_fg)),
             Span::styled(
-                format!("{:<12} ", role_str),
+                format!("{:<12}", role_str),
                 Style::default().fg(Color::DarkGray),
             ),
-            Span::styled(truncate_str(personality_str, 14).to_string(), pers_style),
+            Span::styled(truncate_str(personality_str, 16).to_string(), pers_style),
         ]);
         let row_widget = Paragraph::new(line);
         row_widget.render(row_area, f.buffer_mut());
     }
 
+    // -- RULES section --
+    let rules_y = first_row_y + 4 + 1;
+    let rules_area = Rect::new(x_start, rules_y, content_width, 1);
+    let rules = Paragraph::new("RULES").style(Style::default().fg(Color::DarkGray).bold());
+    f.render_widget(rules, rules_area);
+
+    // Friendly Robber.
+    let fr_y = rules_y + 2;
+    let fr_focused = matches!(state.focus, NewGameFocus::FriendlyRobber);
+    let fr_value = if state.friendly_robber { "On" } else { "Off" };
+    draw_toggle_row(
+        f,
+        x_start,
+        fr_y,
+        content_width,
+        "Friendly Robber",
+        fr_value,
+        fr_focused,
+    );
+
+    // Board Layout.
+    let bl_y = fr_y + 1;
+    let bl_focused = matches!(state.focus, NewGameFocus::BoardLayout);
+    let bl_value = if state.random_board {
+        "Random"
+    } else {
+        "Beginner"
+    };
+    draw_toggle_row(
+        f,
+        x_start,
+        bl_y,
+        content_width,
+        "Board Layout",
+        bl_value,
+        bl_focused,
+    );
+
     // Start button.
-    let button_y = header_y + 2 + state.num_players() as u16 + 1;
+    let button_y = bl_y + 2;
     let button_focused = matches!(state.focus, NewGameFocus::StartButton);
     let button_style = if button_focused {
         Style::default().fg(Color::Black).bg(Color::Green).bold()
@@ -432,14 +455,11 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
     // Hint bar at bottom.
     let hint_y = area.y + area.height - 1;
     let hint_area = Rect::new(area.x, hint_y, area.width, 1);
-    let hint_text = if state.editing {
-        "Type to edit  |  Enter: confirm  |  Esc: cancel"
-    } else {
-        "↑↓: move  |  ←→/Tab: change  |  Enter: start  |  +/-: players  |  Esc: back"
-    };
-    let hint = Paragraph::new(hint_text)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
+    let hint = Paragraph::new(
+        "\u{2191}\u{2193}: move  |  \u{2190}\u{2192}: change  |  Enter: select  |  Esc: back",
+    )
+    .alignment(Alignment::Center)
+    .style(Style::default().fg(Color::DarkGray));
     f.render_widget(hint, hint_area);
 }
 
@@ -631,12 +651,38 @@ fn render_title_art(f: &mut Frame, area: Rect, y_start: u16, art_lines: u16) {
     f.render_widget(art, art_area);
 }
 
-fn cell_style(focused: bool) -> Style {
-    if focused {
+fn toggle_style(active: bool) -> Style {
+    if active {
         Style::default().fg(Color::Black).bg(Color::Cyan).bold()
     } else {
         Style::default().fg(Color::White)
     }
+}
+
+fn draw_toggle_row(
+    f: &mut Frame,
+    x: u16,
+    y: u16,
+    width: u16,
+    label: &str,
+    value: &str,
+    focused: bool,
+) {
+    let marker = if focused { ">" } else { " " };
+    let value_style = if focused {
+        Style::default().fg(Color::Black).bg(Color::Cyan).bold()
+    } else {
+        Style::default().fg(Color::Cyan)
+    };
+    let line = Line::from(vec![
+        Span::styled(
+            format!("  {}  {:<20}", marker, label),
+            Style::default().fg(Color::White),
+        ),
+        Span::styled(value.to_string(), value_style),
+    ]);
+    let area = Rect::new(x, y, width, 1);
+    Paragraph::new(line).render(area, f.buffer_mut());
 }
 
 fn truncate_str(s: &str, max: usize) -> &str {

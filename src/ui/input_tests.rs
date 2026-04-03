@@ -70,54 +70,80 @@ fn new_game_esc_returns_to_main_menu() {
 }
 
 #[test]
-fn new_game_plus_adds_player() {
+fn new_game_player_count_toggle() {
     let mut app = new_game_app();
-    // Default is 4 players, which is the max, so remove one first.
-    handle_input(&mut app, KeyCode::Char('-'));
+    // Default is 4 players. Focus starts on PlayerCount.
     if let Screen::NewGame(ref state) = app.screen {
-        assert_eq!(state.num_players(), 3);
-    }
-    handle_input(&mut app, KeyCode::Char('+'));
-    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::PlayerCount);
+        assert!(state.four_players);
         assert_eq!(state.num_players(), 4);
     }
-}
-
-#[test]
-fn new_game_minus_removes_player() {
-    let mut app = new_game_app();
-    handle_input(&mut app, KeyCode::Char('-'));
+    // Toggle to 3 players.
+    handle_input(&mut app, KeyCode::Right);
     if let Screen::NewGame(ref state) = app.screen {
+        assert!(!state.four_players);
         assert_eq!(state.num_players(), 3);
-    } else {
-        panic!("should still be on NewGame");
     }
-}
-
-#[test]
-fn new_game_minimum_two_players() {
-    let mut app = new_game_app();
-    // Try to remove below minimum.
-    for _ in 0..10 {
-        handle_input(&mut app, KeyCode::Char('-'));
-    }
+    // Toggle back to 4.
+    handle_input(&mut app, KeyCode::Right);
     if let Screen::NewGame(ref state) = app.screen {
-        assert_eq!(state.num_players(), 2, "should not go below 2 players");
+        assert!(state.four_players);
+        assert_eq!(state.num_players(), 4);
     }
 }
 
 #[test]
 fn new_game_focus_navigation() {
     let mut app = new_game_app();
-    // Start on Player { row: 0, col: Name }. Down should go to row 1.
+    // Start on PlayerCount. Down should go to Player { row: 1 }.
+    handle_input(&mut app, KeyCode::Down);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::Player { row: 1 });
+    }
+    // Down again to Player { row: 2 }.
+    handle_input(&mut app, KeyCode::Down);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::Player { row: 2 });
+    }
+    // Down to Player { row: 3 } (4-player mode).
+    handle_input(&mut app, KeyCode::Down);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::Player { row: 3 });
+    }
+    // Down to FriendlyRobber.
+    handle_input(&mut app, KeyCode::Down);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::FriendlyRobber);
+    }
+    // Down to BoardLayout.
+    handle_input(&mut app, KeyCode::Down);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::BoardLayout);
+    }
+    // Down to StartButton.
+    handle_input(&mut app, KeyCode::Down);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::StartButton);
+    }
+}
+
+#[test]
+fn new_game_focus_skips_player_4_in_3_player_mode() {
+    let mut app = new_game_app();
+    // Toggle to 3-player mode.
+    handle_input(&mut app, KeyCode::Right);
+    // Navigate: PlayerCount -> Player 2 -> Player 3 -> FriendlyRobber (skip Player 4).
+    handle_input(&mut app, KeyCode::Down);
+    handle_input(&mut app, KeyCode::Down);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::Player { row: 2 });
+    }
     handle_input(&mut app, KeyCode::Down);
     if let Screen::NewGame(ref state) = app.screen {
         assert_eq!(
             state.focus,
-            NewGameFocus::Player {
-                row: 1,
-                col: NewGameCol::Name
-            }
+            NewGameFocus::FriendlyRobber,
+            "should skip Player 4 in 3-player mode"
         );
     }
 }
@@ -162,12 +188,9 @@ fn new_game_ai_players_are_llamafile() {
 #[test]
 fn new_game_llamafile_personality_cycles() {
     let mut app = new_game_llamafile_app();
-    // Focus on row 1 (a Llamafile player), Personality column.
+    // Focus on row 1 (a Llamafile player).
     if let Screen::NewGame(ref mut state) = app.screen {
-        state.focus = NewGameFocus::Player {
-            row: 1,
-            col: NewGameCol::Personality,
-        };
+        state.focus = NewGameFocus::Player { row: 1 };
     }
     let initial = if let Screen::NewGame(ref state) = app.screen {
         state.players[1].personality_index
@@ -182,19 +205,32 @@ fn new_game_llamafile_personality_cycles() {
 }
 
 #[test]
-fn new_game_personality_does_not_cycle_for_human() {
+fn new_game_friendly_robber_toggle() {
     let mut app = new_game_app();
-    // Focus on row 0 (Human player), Personality column.
     if let Screen::NewGame(ref mut state) = app.screen {
-        state.focus = NewGameFocus::Player {
-            row: 0,
-            col: NewGameCol::Personality,
-        };
+        state.focus = NewGameFocus::FriendlyRobber;
     }
-    // Cycling should not change personality for Human player.
+    if let Screen::NewGame(ref state) = app.screen {
+        assert!(!state.friendly_robber);
+    }
     handle_input(&mut app, KeyCode::Right);
     if let Screen::NewGame(ref state) = app.screen {
-        assert_eq!(state.players[0].personality_index, 0);
+        assert!(state.friendly_robber);
+    }
+}
+
+#[test]
+fn new_game_board_layout_toggle() {
+    let mut app = new_game_app();
+    if let Screen::NewGame(ref mut state) = app.screen {
+        state.focus = NewGameFocus::BoardLayout;
+    }
+    if let Screen::NewGame(ref state) = app.screen {
+        assert!(!state.random_board);
+    }
+    handle_input(&mut app, KeyCode::Right);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert!(state.random_board);
     }
 }
 

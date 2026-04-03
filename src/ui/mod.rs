@@ -619,64 +619,33 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
             _ => Action::None,
         },
 
-        Screen::NewGame(state) => {
-            if state.editing {
-                return handle_new_game_editing(state, key);
+        Screen::NewGame(state) => match key {
+            KeyCode::Esc => Action::Transition(Screen::MainMenu(MainMenuState::new())),
+            KeyCode::Up | KeyCode::Char('k') => {
+                move_new_game_focus_up(state);
+                Action::None
             }
-            match key {
-                KeyCode::Esc => Action::Transition(Screen::MainMenu(MainMenuState::new())),
-                KeyCode::Char('+') | KeyCode::Char('=') => {
-                    state.add_player();
-                    Action::None
-                }
-                KeyCode::Char('-') => {
-                    state.remove_player();
-                    Action::None
-                }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    move_new_game_focus_up(state);
-                    Action::None
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    move_new_game_focus_down(state);
-                    Action::None
-                }
-                KeyCode::Tab => {
-                    move_new_game_focus_next_col(state);
-                    Action::None
-                }
-                KeyCode::BackTab => {
-                    move_new_game_focus_prev_col(state);
-                    Action::None
-                }
-                KeyCode::Left => {
-                    cycle_new_game_value(state, false);
-                    Action::None
-                }
-                KeyCode::Right => {
+            KeyCode::Down | KeyCode::Char('j') => {
+                move_new_game_focus_down(state);
+                Action::None
+            }
+            KeyCode::Left => {
+                cycle_new_game_value(state, false);
+                Action::None
+            }
+            KeyCode::Right => {
+                cycle_new_game_value(state, true);
+                Action::None
+            }
+            KeyCode::Enter => match state.focus {
+                NewGameFocus::StartButton => Action::StartGame,
+                _ => {
                     cycle_new_game_value(state, true);
                     Action::None
                 }
-                KeyCode::Enter => {
-                    match state.focus {
-                        NewGameFocus::StartButton => Action::StartGame,
-                        NewGameFocus::Player {
-                            col: NewGameCol::Name,
-                            ..
-                        } => {
-                            state.editing = true;
-                            Action::None
-                        }
-                        _ => {
-                            // For Kind/Model/Personality columns, Enter cycles forward.
-                            cycle_new_game_value(state, true);
-                            Action::None
-                        }
-                    }
-                }
-                _ => Action::None,
-            }
-        }
+            },
+            _ => Action::None,
+        },
 
         Screen::LlamafileSetup(_) => match key {
             KeyCode::Esc => {
@@ -1077,108 +1046,63 @@ fn find_nearest_in_direction(
 
 // ── New Game Input Helpers ─────────────────────────────────────────────
 
-fn handle_new_game_editing(state: &mut NewGameState, key: KeyCode) -> Action {
-    match key {
-        KeyCode::Esc => {
-            state.editing = false;
-            Action::None
+/// Ordered list of focusable rows, skipping player 4 when in 3-player mode.
+fn focusable_rows(state: &NewGameState) -> Vec<NewGameFocus> {
+    let mut rows = vec![NewGameFocus::PlayerCount];
+    // AI player rows: indices 1, 2, 3 (skip index 3 in 3-player mode).
+    for i in 1..4 {
+        if i == 3 && !state.four_players {
+            continue;
         }
-        KeyCode::Enter => {
-            state.editing = false;
-            Action::None
-        }
-        KeyCode::Backspace => {
-            if let NewGameFocus::Player {
-                row,
-                col: NewGameCol::Name,
-            } = state.focus
-            {
-                state.players[row].name.pop();
-            }
-            Action::None
-        }
-        KeyCode::Char(c) => {
-            if let NewGameFocus::Player {
-                row,
-                col: NewGameCol::Name,
-            } = state.focus
-            {
-                if state.players[row].name.len() < 12 {
-                    state.players[row].name.push(c);
-                }
-            }
-            Action::None
-        }
-        _ => Action::None,
+        rows.push(NewGameFocus::Player { row: i });
     }
+    rows.push(NewGameFocus::FriendlyRobber);
+    rows.push(NewGameFocus::BoardLayout);
+    rows.push(NewGameFocus::StartButton);
+    rows
 }
 
 fn move_new_game_focus_up(state: &mut NewGameState) {
-    state.focus = match state.focus {
-        NewGameFocus::Player { row, col } => {
-            if row > 0 {
-                NewGameFocus::Player { row: row - 1, col }
-            } else {
-                NewGameFocus::Player { row: 0, col }
-            }
+    let rows = focusable_rows(state);
+    if let Some(pos) = rows.iter().position(|r| *r == state.focus) {
+        if pos > 0 {
+            state.focus = rows[pos - 1];
         }
-        NewGameFocus::StartButton => NewGameFocus::Player {
-            row: state.num_players() - 1,
-            col: NewGameCol::Name,
-        },
-    };
-}
-
-fn move_new_game_focus_down(state: &mut NewGameState) {
-    state.focus = match state.focus {
-        NewGameFocus::Player { row, col } => {
-            if row + 1 < state.num_players() {
-                NewGameFocus::Player { row: row + 1, col }
-            } else {
-                NewGameFocus::StartButton
-            }
-        }
-        NewGameFocus::StartButton => NewGameFocus::StartButton,
-    };
-}
-
-fn move_new_game_focus_next_col(state: &mut NewGameState) {
-    if let NewGameFocus::Player { row, col } = state.focus {
-        state.focus = NewGameFocus::Player {
-            row,
-            col: col.next(),
-        };
     }
 }
 
-fn move_new_game_focus_prev_col(state: &mut NewGameState) {
-    if let NewGameFocus::Player { row, col } = state.focus {
-        state.focus = NewGameFocus::Player {
-            row,
-            col: col.prev(),
-        };
+fn move_new_game_focus_down(state: &mut NewGameState) {
+    let rows = focusable_rows(state);
+    if let Some(pos) = rows.iter().position(|r| *r == state.focus) {
+        if pos + 1 < rows.len() {
+            state.focus = rows[pos + 1];
+        }
     }
 }
 
 fn cycle_new_game_value(state: &mut NewGameState, forward: bool) {
-    if let NewGameFocus::Player { row, col } = state.focus {
-        let player = &mut state.players[row];
-        match col {
-            NewGameCol::Personality => {
-                // Only AI players (Llamafile) have personalities.
-                if player.kind == PlayerKind::Llamafile {
-                    let n = state.personality_names.len();
-                    player.personality_index = if forward {
-                        (player.personality_index + 1) % n
-                    } else {
-                        player.personality_index.checked_sub(1).unwrap_or(n - 1)
-                    };
-                }
-            }
-            NewGameCol::Name => {
-                // Name doesn't cycle. Enter to edit instead.
+    match state.focus {
+        NewGameFocus::PlayerCount => {
+            state.four_players = !state.four_players;
+        }
+        NewGameFocus::Player { row } => {
+            let player = &mut state.players[row];
+            if player.kind == PlayerKind::Llamafile {
+                let n = state.personality_names.len();
+                player.personality_index = if forward {
+                    (player.personality_index + 1) % n
+                } else {
+                    player.personality_index.checked_sub(1).unwrap_or(n - 1)
+                };
             }
         }
+        NewGameFocus::FriendlyRobber => {
+            state.friendly_robber = !state.friendly_robber;
+        }
+        NewGameFocus::BoardLayout => {
+            state.random_board = !state.random_board;
+        }
+        NewGameFocus::StartButton => {}
     }
 }
 
@@ -1193,8 +1117,11 @@ fn launch_game(
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
-    // Use the fixed beginner board layout (randomization deferred to a future design).
-    let board = Board::default_board();
+    let board = if ng.random_board {
+        Board::generate(&mut rand::rng())
+    } else {
+        Board::default_board()
+    };
 
     let state = GameState::new(board, ng.num_players());
 
@@ -1208,7 +1135,8 @@ fn launch_game(
     ];
 
     // Create human input channels if any human players exist.
-    let has_human = ng.players.iter().any(|p| p.kind == PlayerKind::Human);
+    let active_players = &ng.players[..ng.num_players()];
+    let has_human = active_players.iter().any(|p| p.kind == PlayerKind::Human);
     let human_channels: Option<(
         Arc<HumanInputChannel>,
         mpsc::UnboundedReceiver<player::tui_human::HumanPrompt>,
@@ -1228,8 +1156,7 @@ fn launch_game(
     // Build a shared llamafile client if any player needs it.
     let llama_client = llamafile_port.map(player::llamafile_player::llamafile_client);
 
-    let players: Vec<Box<dyn player::Player>> = ng
-        .players
+    let players: Vec<Box<dyn player::Player>> = active_players
         .iter()
         .map(|pc| match pc.kind {
             PlayerKind::Llamafile => {
@@ -1259,7 +1186,7 @@ fn launch_game(
         })
         .collect();
 
-    let player_names: Vec<String> = ng.players.iter().map(|p| p.name.clone()).collect();
+    let player_names: Vec<String> = active_players.iter().map(|p| p.name.clone()).collect();
 
     // Create channel.
     let (tx, rx) = mpsc::unbounded_channel();
@@ -1350,7 +1277,9 @@ fn clone_new_game_state(ng: &NewGameState) -> NewGameState {
         players: ng.players.clone(),
         focus: ng.focus,
         personality_names: ng.personality_names.clone(),
-        editing: false,
+        four_players: ng.four_players,
+        friendly_robber: ng.friendly_robber,
+        random_board: ng.random_board,
     }
 }
 
