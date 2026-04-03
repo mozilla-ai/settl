@@ -3,7 +3,7 @@ source: src/ui/snapshot_tests.rs
 expression: buffer_to_string(&buf)
 ---
 ┌ Board ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐┌ Players ───────────────────┐
-│                                                                                                                                          ││>P0 Alice 0VP               │
+│                                                                                                                                          ││▸P0 Alice 0VP               │
 │                                                                                                                                          ││  W:0 B:0 S:0 H:0 O:0       │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││ P1 Bob 0VP                 │
@@ -14,7 +14,7 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                          ││                            │
 │                                               Ore                Sheep               Wood                                                ││ P3 Diana 0VP               │
 │                                               10                   2                   9                                                 ││  W:0 B:0 S:0 H:0 O:0       │
-│                                                                                                                                          ││                            │
+│                                              · · ·                 ·                · · · ·                                              ││                            │
 │                                                                                                                                          ││Turn: 1                     │
 │                                                                                                                                          ││Phase: Setup { round:       │
 │                                      *                                                                                                   ││Deck: 25 cards              │
@@ -22,8 +22,8 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                    Wheat               Brick               Sheep               Brick                                     │└────────────────────────────┘
-│                                     12                   6                   4                  10                                       │┌ Game Log (2/2) ────────────┐
-│                                                                                                                                          ││   1| Game started -- your  │
+│                                     12                   6                   4                  10                                       │┌ Game Log (2) ──────────────┐
+│                                      ·               · · · · ·             · · ·               · · ·                                     ││   1| Game started -- your  │
 │                                                                                                                                          ││turn will show a prompt     │
 │                                                                                                                                          ││   2| q:quit  Space:pause   │
 │                                                                                                                                          ││+/-:speed  j/k:scroll       │
@@ -32,7 +32,7 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                          ││                            │
 │                          Wood                Wheat            R Desert               Wood                 Ore                            ││                            │
 │                            9                  11                   R                   3                   8                             ││                            │
-│                                                                                                                                          ││                            │
+│                         · · · ·               · ·                                     · ·              · · · · ·                         ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
@@ -41,7 +41,7 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                          ││                            │
 │                                    Wood                 Ore                Wheat               Sheep                                     ││                            │
 │                                      8                   3                   4                   5                                       ││                            │
-│                                                                                                                                          ││                            │
+│                                  · · · · ·              · ·                · · ·              · · · ·                                    ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                            *                                                                               *                             ││                            │
@@ -50,7 +50,7 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                          ││                            │
 │                                              Brick               Wheat               Sheep                                               ││                            │
 │                                                5                   6                  11                                                 ││                            │
-│                                                                                                                                          ││                            │
+│                                             · · · ·            · · · · ·              · ·                                                ││                            │
 │                                                                                                                                          ││                            │
 │                                                                                                                                          ││                            │
 │                                                          *                                       *                                       ││                            │
@@ -64,6 +64,6 @@ expression: buffer_to_string(&buf)
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │▸ Build Settlement[s]  Build Road[r]  Buy Development Card[d]  Propose Trade[t]  End Turn[e]                                                                            │
 │                                                                                                                                                                        │
-│ [Arrow/Enter] select  [s]ettlement  [r]oad  [d]ev card  [t]rade  [e]nd turn                                                                                            │
+│ [Arrow/Enter] select  [s]ettlement  [r]oad  [c]ity  [d]ev card  [t]rade  [e]nd turn                                                                                    │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  Speed: 100ms  YOUR TURN  | q:quit  ?:help  Tab:AI  Space:pause  +/-:speed

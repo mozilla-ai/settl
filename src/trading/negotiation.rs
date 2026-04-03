@@ -7,7 +7,6 @@ use crate::trading::offers::{self, TradeError};
 
 /// The outcome of a trade negotiation round.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub enum NegotiationResult {
     /// Trade was accepted by a player and executed successfully.
     Executed { acceptor: PlayerId },
@@ -91,7 +90,6 @@ pub fn trade_value_heuristic(
 /// Determine the AI trade response based on heuristic evaluation.
 ///
 /// Returns Accept if the trade has positive value, Reject otherwise.
-#[allow(dead_code)]
 pub fn heuristic_response(
     offer: &TradeOffer,
     responder: &crate::game::state::PlayerState,

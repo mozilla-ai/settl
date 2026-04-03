@@ -202,13 +202,8 @@ fn new_game_personality_does_not_cycle_for_human() {
 
 #[test]
 fn action_bar_right_increments_selection() {
-    let choices = vec![
-        "Build Settlement".into(),
-        "Build Road".into(),
-        "End Turn".into(),
-    ];
     let (ps, _rx) = make_test_playing_state(InputMode::ActionBar {
-        choices,
+        choices: test_action_choices_minimal(),
         selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
@@ -225,9 +220,8 @@ fn action_bar_right_increments_selection() {
 
 #[test]
 fn action_bar_left_at_zero_stays() {
-    let choices = vec!["Build Road".into(), "End Turn".into()];
     let (ps, _rx) = make_test_playing_state(InputMode::ActionBar {
-        choices,
+        choices: test_action_choices_minimal(),
         selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
@@ -242,20 +236,17 @@ fn action_bar_left_at_zero_stays() {
 
 #[test]
 fn action_bar_enter_sends_index_and_returns_to_spectating() {
-    let choices = vec!["Build Road".into(), "End Turn".into()];
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
-        choices,
+        choices: test_action_choices_minimal(),
         selected: 1,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
     handle_input(&mut app, KeyCode::Enter);
 
-    // Should have sent the selected index.
     let resp = rx.try_recv().unwrap();
     assert!(matches!(resp, HumanResponse::Index(1)));
 
-    // Should be back to Spectating.
     if let Screen::Playing(ref ps) = app.screen {
         assert!(matches!(ps.input_mode, InputMode::Spectating));
     }
@@ -263,13 +254,9 @@ fn action_bar_enter_sends_index_and_returns_to_spectating() {
 
 #[test]
 fn action_bar_shortcut_e_selects_end_turn() {
-    let choices = vec![
-        "Build Settlement".into(),
-        "Build Road".into(),
-        "End Turn".into(),
-    ];
+    // [Settlement=0, Road=1, EndTurn=2]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
-        choices,
+        choices: test_action_choices_minimal(),
         selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
@@ -285,13 +272,9 @@ fn action_bar_shortcut_e_selects_end_turn() {
 
 #[test]
 fn action_bar_shortcut_s_selects_build_settlement() {
-    let choices = vec![
-        "Build Settlement".into(),
-        "Build Road".into(),
-        "End Turn".into(),
-    ];
+    // [Settlement=0, Road=1, EndTurn=2]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
-        choices,
+        choices: test_action_choices_minimal(),
         selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
@@ -304,13 +287,9 @@ fn action_bar_shortcut_s_selects_build_settlement() {
 
 #[test]
 fn action_bar_shortcut_r_selects_build_road() {
-    let choices = vec![
-        "Build Settlement".into(),
-        "Build Road".into(),
-        "End Turn".into(),
-    ];
+    // [Settlement=0, Road=1, EndTurn=2]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
-        choices,
+        choices: test_action_choices_minimal(),
         selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
@@ -323,13 +302,9 @@ fn action_bar_shortcut_r_selects_build_road() {
 
 #[test]
 fn action_bar_shortcut_t_selects_propose_trade() {
-    let choices = vec![
-        "Build Road".into(),
-        "Propose Trade".into(),
-        "End Turn".into(),
-    ];
+    // [Settlement=0, Road=1, DevCard=2, Trade=3, EndTurn=4]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
-        choices,
+        choices: test_action_choices(),
         selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
@@ -337,18 +312,14 @@ fn action_bar_shortcut_t_selects_propose_trade() {
     handle_input(&mut app, KeyCode::Char('t'));
 
     let resp = rx.try_recv().unwrap();
-    assert!(matches!(resp, HumanResponse::Index(1)));
+    assert!(matches!(resp, HumanResponse::Index(3)));
 }
 
 #[test]
 fn action_bar_shortcut_d_selects_buy_dev_card() {
-    let choices = vec![
-        "Build Road".into(),
-        "Buy Development Card".into(),
-        "End Turn".into(),
-    ];
+    // [Settlement=0, Road=1, DevCard=2, Trade=3, EndTurn=4]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
-        choices,
+        choices: test_action_choices(),
         selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
@@ -356,14 +327,14 @@ fn action_bar_shortcut_d_selects_buy_dev_card() {
     handle_input(&mut app, KeyCode::Char('d'));
 
     let resp = rx.try_recv().unwrap();
-    assert!(matches!(resp, HumanResponse::Index(1)));
+    assert!(matches!(resp, HumanResponse::Index(2)));
 }
 
 #[test]
 fn action_bar_esc_selects_end_turn() {
-    let choices = vec!["Build Road".into(), "End Turn".into()];
+    // [Settlement=0, Road=1, EndTurn=2]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
-        choices,
+        choices: test_action_choices_minimal(),
         selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
@@ -372,7 +343,7 @@ fn action_bar_esc_selects_end_turn() {
 
     let resp = rx.try_recv().unwrap();
     assert!(
-        matches!(resp, HumanResponse::Index(1)),
+        matches!(resp, HumanResponse::Index(2)),
         "Esc should select End Turn"
     );
 }
@@ -948,10 +919,7 @@ fn board_cursor_n_cycles_forward() {
         },
     ];
     let (ps, _rx) = make_test_playing_state(InputMode::BoardCursor {
-        kind: CursorKind::Settlement,
-        legal_vertices: Vec::new(),
-        legal_edges: Vec::new(),
-        legal_hexes: Vec::new(),
+        legal: CursorLegal::Settlements(Vec::new()),
         positions,
         selected: 0,
     });
@@ -979,10 +947,7 @@ fn board_cursor_n_wraps_around() {
         },
     ];
     let (ps, _rx) = make_test_playing_state(InputMode::BoardCursor {
-        kind: CursorKind::Settlement,
-        legal_vertices: Vec::new(),
-        legal_edges: Vec::new(),
-        legal_hexes: Vec::new(),
+        legal: CursorLegal::Settlements(Vec::new()),
         positions,
         selected: 1,
     });
@@ -1014,10 +979,7 @@ fn board_cursor_p_cycles_backward() {
         },
     ];
     let (ps, _rx) = make_test_playing_state(InputMode::BoardCursor {
-        kind: CursorKind::Settlement,
-        legal_vertices: Vec::new(),
-        legal_edges: Vec::new(),
-        legal_hexes: Vec::new(),
+        legal: CursorLegal::Settlements(Vec::new()),
         positions,
         selected: 0,
     });
@@ -1045,10 +1007,7 @@ fn board_cursor_enter_sends_selected_index() {
         },
     ];
     let (ps, mut rx) = make_test_playing_state(InputMode::BoardCursor {
-        kind: CursorKind::Settlement,
-        legal_vertices: Vec::new(),
-        legal_edges: Vec::new(),
-        legal_hexes: Vec::new(),
+        legal: CursorLegal::Settlements(Vec::new()),
         positions,
         selected: 1,
     });
@@ -1058,4 +1017,35 @@ fn board_cursor_enter_sends_selected_index() {
 
     let resp = rx.try_recv().unwrap();
     assert!(matches!(resp, HumanResponse::Index(1)));
+}
+
+#[test]
+fn board_cursor_esc_does_not_send_response() {
+    let positions = vec![
+        CursorTarget {
+            screen_col: 10,
+            screen_row: 5,
+        },
+        CursorTarget {
+            screen_col: 20,
+            screen_row: 5,
+        },
+    ];
+    let (ps, mut rx) = make_test_playing_state(InputMode::BoardCursor {
+        legal: CursorLegal::Settlements(Vec::new()),
+        positions,
+        selected: 0,
+    });
+    let mut app = make_test_app(Screen::Playing(ps));
+
+    handle_input(&mut app, KeyCode::Esc);
+
+    // Esc should NOT send a response -- placement is mandatory.
+    assert!(rx.try_recv().is_err(), "Esc should not confirm placement");
+    // Should remain in BoardCursor mode.
+    if let Screen::Playing(ps) = &app.screen {
+        assert!(matches!(ps.input_mode, InputMode::BoardCursor { .. }));
+    } else {
+        panic!("Expected Playing screen");
+    }
 }

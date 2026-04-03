@@ -32,6 +32,60 @@ pub enum PlayerChoice {
     ProposeTrade,
 }
 
+impl PlayerChoice {
+    /// Short human-readable label for the TUI action bar (no coordinates).
+    pub fn label(&self) -> &'static str {
+        match self {
+            PlayerChoice::GameAction(Action::BuildSettlement(_)) => "Build Settlement",
+            PlayerChoice::GameAction(Action::BuildCity(_)) => "Build City",
+            PlayerChoice::GameAction(Action::BuildRoad(_)) => "Build Road",
+            PlayerChoice::GameAction(Action::BuyDevCard) => "Buy Development Card",
+            PlayerChoice::GameAction(Action::EndTurn) => "End Turn",
+            PlayerChoice::GameAction(Action::ProposeTrade) => "Propose Trade",
+            PlayerChoice::GameAction(Action::BankTrade { .. }) => "Bank Trade",
+            PlayerChoice::GameAction(Action::PlayDevCard(_, _)) => "Play Dev Card",
+            PlayerChoice::PlayKnight => "Play Knight",
+            PlayerChoice::PlayMonopoly => "Play Monopoly",
+            PlayerChoice::PlayYearOfPlenty => "Play Year of Plenty",
+            PlayerChoice::PlayRoadBuilding => "Play Road Building",
+            PlayerChoice::ProposeTrade => "Propose Trade",
+        }
+    }
+
+    /// Keyboard shortcut for this choice in the TUI action bar.
+    pub fn shortcut_key(&self) -> Option<char> {
+        match self {
+            PlayerChoice::GameAction(Action::EndTurn) => Some('e'),
+            PlayerChoice::GameAction(Action::BuildSettlement(_)) => Some('s'),
+            PlayerChoice::GameAction(Action::BuildRoad(_)) => Some('r'),
+            PlayerChoice::GameAction(Action::BuildCity(_)) => Some('c'),
+            PlayerChoice::GameAction(Action::BuyDevCard) => Some('d'),
+            PlayerChoice::ProposeTrade => Some('t'),
+            PlayerChoice::PlayKnight
+            | PlayerChoice::PlayMonopoly
+            | PlayerChoice::PlayYearOfPlenty
+            | PlayerChoice::PlayRoadBuilding => Some('p'),
+            _ => None,
+        }
+    }
+
+    /// Whether this choice represents an "End Turn" action.
+    pub fn is_end_turn(&self) -> bool {
+        matches!(self, PlayerChoice::GameAction(Action::EndTurn))
+    }
+
+    /// Whether this is a "Play dev card" intent.
+    pub fn is_play_dev_card(&self) -> bool {
+        matches!(
+            self,
+            PlayerChoice::PlayKnight
+                | PlayerChoice::PlayMonopoly
+                | PlayerChoice::PlayYearOfPlenty
+                | PlayerChoice::PlayRoadBuilding
+        )
+    }
+}
+
 impl std::fmt::Display for PlayerChoice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

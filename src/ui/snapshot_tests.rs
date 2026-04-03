@@ -16,9 +16,8 @@ const HEIGHT: u16 = 65;
 #[test]
 fn snapshot_main_menu() {
     // Use explicit state to avoid filesystem-dependent menu items.
-    let state = MainMenuState { selected: 0 };
-    let screen = Screen::MainMenu(state);
-    let buf = render_to_buffer(&screen, WIDTH, HEIGHT);
+    let mut app = make_test_app(Screen::MainMenu(MainMenuState { selected: 0 }));
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("main_menu", buffer_to_string(&buf));
 }
 
@@ -26,15 +25,15 @@ fn snapshot_main_menu() {
 fn snapshot_new_game() {
     // Set USER env var for deterministic player name.
     std::env::set_var("USER", "Player");
-    let screen = Screen::NewGame(NewGameState::new(&[]));
-    let buf = render_to_buffer(&screen, WIDTH, HEIGHT);
+    let mut app = new_game_app();
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("new_game", buffer_to_string(&buf));
 }
 
 #[test]
 fn snapshot_post_game() {
-    let app = post_game_app();
-    let buf = render_to_buffer(&app.screen, WIDTH, HEIGHT);
+    let mut app = post_game_app();
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("post_game", buffer_to_string(&buf));
 }
 
@@ -42,29 +41,29 @@ fn snapshot_post_game() {
 
 #[test]
 fn snapshot_playing_spectating() {
-    let app = playing_spectating_app();
-    let buf = render_to_buffer(&app.screen, WIDTH, HEIGHT);
+    let mut app = playing_spectating_app();
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("playing_spectating", buffer_to_string(&buf));
 }
 
 #[test]
 fn snapshot_playing_action_bar() {
-    let app = playing_action_bar_app();
-    let buf = render_to_buffer(&app.screen, WIDTH, HEIGHT);
+    let mut app = playing_action_bar_app();
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("playing_action_bar", buffer_to_string(&buf));
 }
 
 #[test]
 fn snapshot_playing_trade_builder() {
-    let app = playing_trade_builder_app();
-    let buf = render_to_buffer(&app.screen, WIDTH, HEIGHT);
+    let mut app = playing_trade_builder_app();
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("playing_trade_builder", buffer_to_string(&buf));
 }
 
 #[test]
 fn snapshot_playing_discard() {
-    let app = playing_discard_app();
-    let buf = render_to_buffer(&app.screen, WIDTH, HEIGHT);
+    let mut app = playing_discard_app();
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("playing_discard", buffer_to_string(&buf));
 }
 
@@ -73,8 +72,8 @@ fn snapshot_playing_resource_picker() {
     let (ps, _rx) = make_test_playing_state(InputMode::ResourcePicker {
         context: "Choose a resource for Monopoly".into(),
     });
-    let screen = Screen::Playing(ps);
-    let buf = render_to_buffer(&screen, WIDTH, HEIGHT);
+    let mut app = make_test_app(Screen::Playing(ps));
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("playing_resource_picker", buffer_to_string(&buf));
 }
 
@@ -87,8 +86,8 @@ fn snapshot_playing_steal_target() {
         ],
         selected: 0,
     });
-    let screen = Screen::Playing(ps);
-    let buf = render_to_buffer(&screen, WIDTH, HEIGHT);
+    let mut app = make_test_app(Screen::Playing(ps));
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("playing_steal_target", buffer_to_string(&buf));
 }
 
@@ -104,8 +103,8 @@ fn snapshot_playing_trade_response() {
         message: String::new(),
     };
     let (ps, _rx) = make_test_playing_state(InputMode::TradeResponse { offer });
-    let screen = Screen::Playing(ps);
-    let buf = render_to_buffer(&screen, WIDTH, HEIGHT);
+    let mut app = make_test_app(Screen::Playing(ps));
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("playing_trade_response", buffer_to_string(&buf));
 }
 
@@ -133,15 +132,12 @@ fn snapshot_playing_board_cursor() {
         },
     ];
     let (ps, _rx) = make_test_playing_state(InputMode::BoardCursor {
-        kind: CursorKind::Settlement,
-        legal_vertices: legal,
-        legal_edges: Vec::new(),
-        legal_hexes: Vec::new(),
+        legal: CursorLegal::Settlements(legal),
         positions,
         selected: 0,
     });
-    let screen = Screen::Playing(ps);
-    let buf = render_to_buffer(&screen, WIDTH, HEIGHT);
+    let mut app = make_test_app(Screen::Playing(ps));
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("playing_board_cursor", buffer_to_string(&buf));
 }
 
@@ -149,16 +145,16 @@ fn snapshot_playing_board_cursor() {
 
 #[test]
 fn snapshot_llamafile_setup() {
-    let app = llamafile_setup_app();
-    let buf = render_to_buffer(&app.screen, WIDTH, HEIGHT);
+    let mut app = llamafile_setup_app();
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("llamafile_setup", buffer_to_string(&buf));
 }
 
 #[test]
 fn snapshot_new_game_with_llamafile() {
     std::env::set_var("USER", "Player");
-    let app = new_game_llamafile_app();
-    let buf = render_to_buffer(&app.screen, WIDTH, HEIGHT);
+    let mut app = new_game_llamafile_app();
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("new_game_llamafile", buffer_to_string(&buf));
 }
 
@@ -166,7 +162,7 @@ fn snapshot_new_game_with_llamafile() {
 
 #[test]
 fn snapshot_playing_small_terminal() {
-    let app = playing_action_bar_app();
-    let buf = render_to_buffer(&app.screen, 80, 30);
+    let mut app = playing_action_bar_app();
+    let buf = render_app_to_buffer(&mut app, 80, 30);
     insta::assert_snapshot!("playing_action_bar_small", buffer_to_string(&buf));
 }

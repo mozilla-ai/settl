@@ -8,7 +8,7 @@ use ratatui::widgets::{Block, Borders};
 use crate::game::board::{self, EdgeCoord, EdgeDirection, HexCoord, Terrain, VertexCoord};
 use crate::game::state::{Building, GameState};
 
-use super::{CursorKind, InputMode, PLAYER_COLORS};
+use super::{CursorLegal, InputMode, PLAYER_COLORS};
 
 // ── Layout constants ──────────────────────────────────────────────────
 
@@ -34,9 +34,8 @@ fn terrain_color(t: Terrain) -> Color {
     }
 }
 
-fn terrain_fg(_t: Terrain) -> Color {
-    Color::White
-}
+/// Foreground color for text rendered on terrain fill.
+const TERRAIN_FG: Color = Color::White;
 
 // ── HexGrid ─────────────────────────────────────────────────────────
 
@@ -66,10 +65,6 @@ impl HexGrid {
         let mut vertex_pos: HashMap<VertexCoord, (i16, i16)> = HashMap::new();
         let mut edge_pos: HashMap<EdgeCoord, (i16, i16)> = HashMap::new();
 
-        // Compute hex centers. The base offset ensures all coords are positive.
-        // Actual min col: q=-2, r=0 -> -40. Hex extends 10 left to -50.
-        // So base_col = 52 for 2 margin.
-        // Min row: r=-2 -> -18. N vertex at -18-5 = -23. So base_row = 25.
         let base_col: i16 = 52;
         let base_row: i16 = 25;
 
@@ -122,7 +117,6 @@ impl HexGrid {
                 .or_insert((cx - half_r, cy - edge_dy));
         }
 
-        // Bounding box: hex extends cx-10..cx+10 horizontally, cy-5..cy+5 vertically.
         let max_col = hex_centers
             .values()
             .map(|(c, _)| c + HEX_COL_R + 1)
@@ -158,11 +152,10 @@ impl HexGrid {
     }
 
     /// Get screen position of a hex center (board-local).
-    pub fn hex_center_pos(&self, h: &HexCoord) -> (u16, u16) {
+    pub fn hex_center_pos(&self, h: &HexCoord) -> Option<(u16, u16)> {
         self.hex_centers
             .get(h)
             .map(|&(c, r)| (c.max(0) as u16, r.max(0) as u16))
-            .unwrap_or((0, 0))
     }
 }
 
@@ -176,7 +169,6 @@ pub fn render_board(
     buf: &mut Buffer,
     input_mode: &InputMode,
 ) {
-    // Draw border.
     let block = Block::default()
         .title(" Board ")
         .borders(Borders::ALL)
@@ -194,7 +186,7 @@ pub fn render_board(
     let off_col = inner.x + inner.width.saturating_sub(board_w) / 2;
     let off_row = inner.y + inner.height.saturating_sub(board_h) / 2;
 
-    // Layer 1: Draw hex cells (terrain + number).
+    // Layer 1: Draw hex cells (terrain + number + probability dots).
     for hex in &state.board.hexes {
         if let Some(&(cx, cy)) = grid.hex_centers.get(&hex.coord) {
             let scr_col = off_col as i16 + cx;
@@ -216,8 +208,7 @@ pub fn render_board(
         }
     }
 
-    // Layer 3: Draw buildings (multi-row colored blocks).
-    // Settlements: 5w x 2h block with ▲. Cities: 5w x 3h block with ■.
+    // Layer 3: Draw buildings.
     for (vertex, building) in &state.buildings {
         if let Some(&(vx, vy)) = grid.vertex_pos.get(vertex) {
             let sx = off_col as i16 + vx;
@@ -233,21 +224,19 @@ pub fn render_board(
             let sym_style = Style::default().fg(Color::White).bg(color).bold();
             match building {
                 Building::Settlement(_) => {
-                    // 5w x 2h: top row has ▲, bottom row is solid
                     for dx in -2..=2i16 {
                         set_cell(sx + dx, sy - 1, ' ', bg_style, inner, buf);
                         set_cell(sx + dx, sy, ' ', bg_style, inner, buf);
                     }
-                    set_cell(sx, sy - 1, '\u{25b2}', sym_style, inner, buf); // ▲
+                    set_cell(sx, sy - 1, '\u{25b2}', sym_style, inner, buf);
                 }
                 Building::City(_) => {
-                    // 5w x 3h: center row has ■, top and bottom are solid
                     for dx in -2..=2i16 {
                         set_cell(sx + dx, sy - 1, ' ', bg_style, inner, buf);
                         set_cell(sx + dx, sy, ' ', bg_style, inner, buf);
                         set_cell(sx + dx, sy + 1, ' ', bg_style, inner, buf);
                     }
-                    set_cell(sx, sy, '\u{25a0}', sym_style, inner, buf); // ■
+                    set_cell(sx, sy, '\u{25a0}', sym_style, inner, buf);
                 }
             }
         }
@@ -259,7 +248,6 @@ pub fn render_board(
             if let Some(&(vx, vy)) = grid.vertex_pos.get(v) {
                 let scr_col = off_col as i16 + vx;
                 let scr_row = off_row as i16 + vy;
-                // Only draw port marker if no building is there.
                 if !state.buildings.contains_key(v) {
                     set_cell(
                         scr_col,
@@ -274,15 +262,11 @@ pub fn render_board(
         }
     }
 
-    // Layer 5: Draw cursor overlay (legal positions + selected).
+    // Layer 5: Draw cursor overlay.
     draw_cursor_overlay(grid, off_col, off_row, inner, buf, input_mode);
 }
 
-/// Draw a single hex cell with terrain fill (no border slashes) and probability dots.
-///
-/// The hex shape is defined purely by colored fill expanding from the vertex to
-/// the widest center row. No `╱`/`╲` border characters -- terrain color alone
-/// defines the hex boundary.
+/// Draw a single hex cell with terrain fill, label, number token, and probability dots.
 fn draw_hex_cell(
     hex: &crate::game::board::Hex,
     state: &GameState,
@@ -292,15 +276,12 @@ fn draw_hex_cell(
     buf: &mut Buffer,
 ) {
     let bg = terrain_color(hex.terrain);
-    let fg = terrain_fg(hex.terrain);
+    let fg = TERRAIN_FG;
     let is_robber = state.robber_hex == hex.coord;
     let fill_bg = if is_robber { Color::Red } else { bg };
     let fill = Style::default().bg(fill_bg);
 
-    // Row cy-5: N vertex (left empty for building/port/cursor layers)
-    // Row cy-4: left empty for gap between vertex and hex fill
-
-    // Rows cy-3 through cy-1: expanding fill (inset by 1 for gap between hexes)
+    // Rows cy-3 through cy-1: expanding fill.
     for dx in -3..=3i16 {
         set_cell(cx + dx, cy - 3, ' ', fill, area, buf);
     }
@@ -311,7 +292,7 @@ fn draw_hex_cell(
         set_cell(cx + dx, cy - 1, ' ', fill, area, buf);
     }
 
-    // Terrain label on row cy-1
+    // Terrain label on row cy-1.
     let label = hex.terrain.label();
     let text_style = if is_robber {
         Style::default().fg(Color::White).bg(Color::Red).bold()
@@ -332,14 +313,14 @@ fn draw_hex_cell(
         }
     }
 
-    // Row cy: widest row -- number token centered (inset by 1)
+    // Row cy: widest row with number token.
     for dx in -8..=8i16 {
         set_cell(cx + dx, cy, ' ', fill, area, buf);
     }
 
     if let Some(n) = hex.number_token {
-        let num_str = format!("{:>2}", n);
         let is_hot = n == 6 || n == 8;
+        let num_str = format!("{:>2}", n);
         let num_style = if is_hot && is_robber {
             Style::default().fg(Color::White).bg(fill_bg).bold()
         } else if is_hot {
@@ -358,11 +339,10 @@ fn draw_hex_cell(
         set_cell(cx, cy, '-', text_style, area, buf);
     }
 
-    // Rows cy+1 through cy+4: contracting fill (inset by 1)
+    // Rows cy+1 through cy+3: contracting fill.
     for dx in -7..=7i16 {
         set_cell(cx + dx, cy + 1, ' ', fill, area, buf);
     }
-
     for dx in -5..=5i16 {
         set_cell(cx + dx, cy + 2, ' ', fill, area, buf);
     }
@@ -370,8 +350,34 @@ fn draw_hex_cell(
         set_cell(cx + dx, cy + 3, ' ', fill, area, buf);
     }
 
-    // Row cy+4: left empty for gap between hex fill and vertex
-    // Row cy+5: S vertex (left empty for building/port/cursor layers)
+    // Probability dots on row cy+1 (per DESIGN.md).
+    if let Some(n) = hex.number_token {
+        let is_hot = n == 6 || n == 8;
+        let dots = probability_dots(n);
+        if dots > 0 {
+            let dot_style = if is_hot {
+                Style::default().fg(Color::Red).bg(fill_bg).bold()
+            } else {
+                Style::default().fg(Color::DarkGray).bg(fill_bg)
+            };
+            let start = cx - (dots as i16 - 1);
+            for d in 0..dots as i16 {
+                set_cell(start + d * 2, cy + 1, '\u{00b7}', dot_style, area, buf);
+            }
+        }
+    }
+}
+
+/// Number of probability dots for a given number token.
+fn probability_dots(n: u8) -> u8 {
+    match n {
+        2 | 12 => 1,
+        3 | 11 => 2,
+        4 | 10 => 3,
+        5 | 9 => 4,
+        6 | 8 => 5,
+        _ => 0,
+    }
 }
 
 /// Draw a road segment as a colored block between vertices.
@@ -386,7 +392,6 @@ fn draw_road_segment(
     let style = Style::default().bg(color);
     match dir {
         EdgeDirection::NorthEast => {
-            // Double-wide diagonal, 4 rows
             set_cell(mx - 3, my - 2, ' ', style, area, buf);
             set_cell(mx - 2, my - 2, ' ', style, area, buf);
             set_cell(mx - 2, my - 1, ' ', style, area, buf);
@@ -397,7 +402,6 @@ fn draw_road_segment(
             set_cell(mx + 2, my + 1, ' ', style, area, buf);
         }
         EdgeDirection::SouthEast => {
-            // Double-wide diagonal, 4 rows
             set_cell(mx - 3, my + 2, ' ', style, area, buf);
             set_cell(mx - 2, my + 2, ' ', style, area, buf);
             set_cell(mx - 2, my + 1, ' ', style, area, buf);
@@ -408,7 +412,6 @@ fn draw_road_segment(
             set_cell(mx + 2, my - 1, ' ', style, area, buf);
         }
         EdgeDirection::East => {
-            // Double-wide vertical block spanning 5 rows
             for dy in -2..=2i16 {
                 set_cell(mx - 1, my + dy, ' ', style, area, buf);
                 set_cell(mx, my + dy, ' ', style, area, buf);
@@ -426,71 +429,69 @@ fn draw_cursor_overlay(
     buf: &mut Buffer,
     input_mode: &InputMode,
 ) {
-    if let InputMode::BoardCursor {
-        kind,
-        legal_vertices,
-        legal_edges,
-        legal_hexes,
-        positions,
-        selected,
+    let InputMode::BoardCursor {
+        legal, selected, ..
     } = input_mode
-    {
-        let legal_style = Style::default().fg(Color::Yellow).bold();
-        let cursor_style = Style::default().fg(Color::Black).bg(Color::Yellow).bold();
+    else {
+        return;
+    };
 
-        match kind {
-            CursorKind::Settlement => {
-                for (i, v) in legal_vertices.iter().enumerate() {
-                    if let Some(&(vx, vy)) = grid.vertex_pos.get(v) {
-                        let sx = off_col as i16 + vx;
-                        let sy = off_row as i16 + vy;
-                        let style = if i == *selected {
-                            cursor_style
-                        } else {
-                            legal_style
-                        };
-                        let ch = if i == *selected {
-                            '\u{25c6}'
-                        } else {
-                            '\u{25c7}'
-                        }; // ◆ / ◇
-                        set_cell(sx, sy, ch, style, area, buf);
-                    }
+    let legal_style = Style::default().fg(Color::Yellow).bold();
+    let cursor_style = Style::default().fg(Color::Black).bg(Color::Yellow).bold();
+
+    match legal {
+        CursorLegal::Settlements(verts) => {
+            for (i, v) in verts.iter().enumerate() {
+                if let Some(&(vx, vy)) = grid.vertex_pos.get(v) {
+                    let sx = off_col as i16 + vx;
+                    let sy = off_row as i16 + vy;
+                    let style = if i == *selected {
+                        cursor_style
+                    } else {
+                        legal_style
+                    };
+                    let ch = if i == *selected {
+                        '\u{25c6}'
+                    } else {
+                        '\u{25c7}'
+                    };
+                    set_cell(sx, sy, ch, style, area, buf);
                 }
             }
-            CursorKind::Road => {
-                for (i, e) in legal_edges.iter().enumerate() {
-                    if let Some(&(ex, ey)) = grid.edge_pos.get(e) {
-                        let sx = off_col as i16 + ex;
-                        let sy = off_row as i16 + ey;
-                        let style = if i == *selected {
-                            cursor_style
-                        } else {
-                            legal_style
-                        };
-                        match e.dir {
-                            EdgeDirection::NorthEast => {
-                                set_cell(sx - 1, sy - 1, '=', style, area, buf);
-                                set_cell(sx, sy, '=', style, area, buf);
-                                set_cell(sx + 1, sy + 1, '=', style, area, buf);
-                            }
-                            EdgeDirection::SouthEast => {
-                                set_cell(sx - 1, sy + 1, '=', style, area, buf);
-                                set_cell(sx, sy, '=', style, area, buf);
-                                set_cell(sx + 1, sy - 1, '=', style, area, buf);
-                            }
-                            EdgeDirection::East => {
-                                for dy in -2..=2i16 {
-                                    set_cell(sx, sy + dy, '=', style, area, buf);
-                                }
+        }
+        CursorLegal::Roads(edges) => {
+            for (i, e) in edges.iter().enumerate() {
+                if let Some(&(ex, ey)) = grid.edge_pos.get(e) {
+                    let sx = off_col as i16 + ex;
+                    let sy = off_row as i16 + ey;
+                    let style = if i == *selected {
+                        cursor_style
+                    } else {
+                        legal_style
+                    };
+                    match e.dir {
+                        EdgeDirection::NorthEast => {
+                            set_cell(sx - 1, sy - 1, '=', style, area, buf);
+                            set_cell(sx, sy, '=', style, area, buf);
+                            set_cell(sx + 1, sy + 1, '=', style, area, buf);
+                        }
+                        EdgeDirection::SouthEast => {
+                            set_cell(sx - 1, sy + 1, '=', style, area, buf);
+                            set_cell(sx, sy, '=', style, area, buf);
+                            set_cell(sx + 1, sy - 1, '=', style, area, buf);
+                        }
+                        EdgeDirection::East => {
+                            for dy in -2..=2i16 {
+                                set_cell(sx, sy + dy, '=', style, area, buf);
                             }
                         }
                     }
                 }
             }
-            CursorKind::Robber => {
-                for (i, h) in legal_hexes.iter().enumerate() {
-                    let (hx, hy) = grid.hex_center_pos(h);
+        }
+        CursorLegal::Hexes(hexes) => {
+            for (i, h) in hexes.iter().enumerate() {
+                if let Some((hx, hy)) = grid.hex_center_pos(h) {
                     let sx = off_col as i16 + hx as i16;
                     let sy = off_row as i16 + hy as i16;
                     let style = if i == *selected {
@@ -498,13 +499,13 @@ fn draw_cursor_overlay(
                     } else {
                         legal_style
                     };
+                    // 3-wide marker for hex cursor to match settlement/road visual weight.
+                    set_cell(sx - 1, sy, '[', style, area, buf);
                     set_cell(sx, sy, 'R', style, area, buf);
+                    set_cell(sx + 1, sy, ']', style, area, buf);
                 }
             }
         }
-
-        // Draw position description for the selected cursor position.
-        let _ = (positions, selected); // used for screen positions in navigation
     }
 }
 

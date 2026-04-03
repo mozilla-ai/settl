@@ -9,7 +9,6 @@ use crate::game::state::{Building, GamePhase, GameState, VP_TO_WIN};
 
 /// Errors returned by `apply_action` when a rule is violated.
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 pub enum RuleError {
     NotYourTurn,
     MustRollFirst,
@@ -210,8 +209,8 @@ pub fn legal_city_vertices(state: &GameState, player: PlayerId) -> Vec<VertexCoo
 
 /// The exchange rate for a given resource, considering port access.
 ///
-/// Returns 4 (default) or 3 (generic port).
-pub fn trade_rate(state: &GameState, player: PlayerId, _resource: Resource) -> u32 {
+/// Returns 4 (default), 3 (generic port), or 2 (specific 2:1 port).
+pub fn trade_rate(state: &GameState, player: PlayerId, resource: Resource) -> u32 {
     let mut rate = 4u32;
 
     for port in &state.board.ports {
@@ -224,6 +223,10 @@ pub fn trade_rate(state: &GameState, player: PlayerId, _resource: Resource) -> u
                 PortType::Generic => {
                     rate = rate.min(3);
                 }
+                PortType::Specific(r) if r == resource => {
+                    rate = rate.min(2);
+                }
+                PortType::Specific(_) => {}
             }
         }
     }
@@ -294,30 +297,47 @@ fn dfs_road(
 
 /// Update longest road tracking.  Called after a road is built or a
 /// settlement breaks a road chain.
+///
+/// Per Catan rules:
+/// - If the current holder is beaten by another player, the other player takes it.
+/// - If the current holder's road is broken and they tie with someone, they keep it.
+/// - If no single player has a clear longest road of 5+, the card is set aside.
 pub fn update_longest_road(state: &mut GameState) {
-    let mut best_player: Option<PlayerId> = None;
-    let mut best_length = 4u8; // Must be at least 5 to claim.
+    // Compute all road lengths.
+    let lengths: Vec<u8> = (0..state.num_players)
+        .map(|p| longest_road_length(state, p))
+        .collect();
 
-    for p in 0..state.num_players {
-        let len = longest_road_length(state, p);
-        if len > best_length {
-            best_length = len;
-            best_player = Some(p);
-        }
+    // Find the maximum length (must be >= 5).
+    let max_len = *lengths.iter().max().unwrap_or(&0);
+    if max_len < 5 {
+        state.longest_road_player = None;
+        state.longest_road_length = 0;
+        return;
     }
 
-    // Only update if someone beats the current holder, or the holder lost it.
-    if let Some(bp) = best_player {
-        if state.longest_road_player != Some(bp) {
-            state.longest_road_player = Some(bp);
-            state.longest_road_length = best_length;
+    // Count how many players share the maximum length.
+    let players_at_max: Vec<PlayerId> = (0..state.num_players)
+        .filter(|&p| lengths[p] == max_len)
+        .collect();
+
+    if players_at_max.len() == 1 {
+        // Clear winner.
+        let winner = players_at_max[0];
+        state.longest_road_player = Some(winner);
+        state.longest_road_length = max_len;
+    } else {
+        // Tie: current holder keeps it if they're among the tied players.
+        // Otherwise nobody holds it.
+        if let Some(current) = state.longest_road_player {
+            if players_at_max.contains(&current) {
+                state.longest_road_length = max_len;
+            } else {
+                state.longest_road_player = None;
+                state.longest_road_length = 0;
+            }
         } else {
-            state.longest_road_length = best_length;
-        }
-    } else if let Some(current) = state.longest_road_player {
-        // Check if the current holder still has >= 5.
-        let len = longest_road_length(state, current);
-        if len < 5 {
+            // No current holder and a tie: nobody gets it.
             state.longest_road_player = None;
             state.longest_road_length = 0;
         }
@@ -399,20 +419,8 @@ pub fn legal_actions(state: &GameState) -> Vec<Action> {
         actions.push(Action::BuyDevCard);
     }
 
-    // -- Play dev card (post-roll) --
-    if !ps.has_played_dev_card_this_turn {
-        for card in &ps.dev_cards {
-            match card {
-                DevCard::Knight
-                | DevCard::RoadBuilding
-                | DevCard::YearOfPlenty
-                | DevCard::Monopoly => {}
-                DevCard::VictoryPoint => {
-                    // VP cards are never explicitly played.
-                }
-            }
-        }
-    }
+    // Dev card plays are handled by the orchestrator's build_choices() method,
+    // which adds PlayerChoice variants that trigger multi-step interactions.
 
     // -- Bank trade --
     for &give_res in Resource::all() {
@@ -608,6 +616,7 @@ fn apply_buy_dev_card(state: &mut GameState) -> Result<(), RuleError> {
     }
     let card = state.dev_card_deck.pop().unwrap();
     state.players[player].dev_cards.push(card);
+    state.players[player].dev_cards_bought_this_turn += 1;
 
     // VP cards auto-reveal; check victory.
     check_victory_inline(state);
@@ -629,9 +638,13 @@ fn apply_play_dev_card(
         return Err(RuleError::AlreadyPlayedDevCard);
     }
 
-    // Find and remove the card from hand.
-    let idx = ps
+    // Find the card in hand, but not one bought this turn.
+    // Cards bought this turn are the last N entries in dev_cards.
+    let playable_count = ps
         .dev_cards
+        .len()
+        .saturating_sub(ps.dev_cards_bought_this_turn);
+    let idx = ps.dev_cards[..playable_count]
         .iter()
         .position(|c| *c == card)
         .ok_or(RuleError::NoDevCards)?;
@@ -719,6 +732,7 @@ fn apply_bank_trade(state: &mut GameState, give: Resource, get: Resource) -> Res
 fn apply_end_turn(state: &mut GameState) -> Result<(), RuleError> {
     let player = current_player_playing(state)?;
     state.players[player].has_played_dev_card_this_turn = false;
+    state.players[player].dev_cards_bought_this_turn = 0;
 
     let next_player = (player + 1) % state.num_players;
     state.phase = GamePhase::Playing {
@@ -998,9 +1012,21 @@ pub fn apply_discard(
 
 // -- Victory check --
 
-/// Check if any player has won (10+ VP).
+/// Check if the current player has won (10+ VP on their own turn).
+///
+/// Per Catan rules, a player can only win during their own turn.
+/// If you reach 10 VP during another player's turn (e.g. from Longest Road
+/// shifting), you must wait until your own turn to claim victory.
 pub fn check_victory(state: &GameState) -> Option<PlayerId> {
-    (0..state.num_players).find(|&p| state.victory_points(p) >= VP_TO_WIN)
+    let current = match &state.phase {
+        GamePhase::Playing { current_player, .. } => *current_player,
+        _ => return None,
+    };
+    if state.victory_points(current) >= VP_TO_WIN {
+        Some(current)
+    } else {
+        None
+    }
 }
 
 /// Check victory and update the phase if someone won.
@@ -1360,6 +1386,44 @@ mod tests {
         assert_eq!(result, Err(RuleError::AlreadyPlayedDevCard));
     }
 
+    #[test]
+    fn cannot_play_dev_card_bought_this_turn() {
+        let mut state = make_state(4);
+        set_playing(&mut state, 0);
+
+        // Buy a dev card (push a known card and mark it as bought this turn).
+        state.players[0].dev_cards.push(DevCard::YearOfPlenty);
+        state.players[0].dev_cards_bought_this_turn = 1;
+
+        // Try to play it -- should fail because it was bought this turn.
+        let result = apply_play_dev_card(
+            &mut state,
+            DevCard::YearOfPlenty,
+            DevCardAction::YearOfPlenty(Resource::Ore, Resource::Ore),
+        );
+        assert_eq!(result, Err(RuleError::NoDevCards));
+    }
+
+    #[test]
+    fn can_play_dev_card_from_previous_turn() {
+        let mut state = make_state(4);
+        set_playing(&mut state, 0);
+
+        // Card from a previous turn (not counted in bought_this_turn).
+        state.players[0].dev_cards.push(DevCard::YearOfPlenty);
+        // Buy a new card this turn (it goes at the end).
+        state.players[0].dev_cards.push(DevCard::Monopoly);
+        state.players[0].dev_cards_bought_this_turn = 1;
+
+        // Playing the old card (index 0) should succeed.
+        apply_play_dev_card(
+            &mut state,
+            DevCard::YearOfPlenty,
+            DevCardAction::YearOfPlenty(Resource::Ore, Resource::Ore),
+        )
+        .unwrap();
+    }
+
     // -- Bank trade --
 
     #[test]
@@ -1503,6 +1567,146 @@ mod tests {
         assert!(longest_road_length(&state, 0) < 3);
     }
 
+    #[test]
+    fn longest_road_tie_nobody_holds() {
+        let mut state = make_state(4);
+
+        // Player 0: 5-road chain NE(0,0)->E(0,0)->NE(0,1)->SE(1,0)->NE(1,1)
+        // NE(0,0): N(0,0)-S(1,-1) -> E(0,0): S(1,-1)-N(0,1) -> NE(0,1): N(0,1)-S(1,0)
+        // -> SE(1,0): S(1,0)-N(1,1) -> NE(1,1): N(1,1)-S(2,0)
+        place_road(
+            &mut state,
+            0,
+            EdgeCoord::new(HexCoord::new(0, 0), EdgeDirection::NorthEast),
+        );
+        place_road(
+            &mut state,
+            0,
+            EdgeCoord::new(HexCoord::new(0, 0), EdgeDirection::East),
+        );
+        place_road(
+            &mut state,
+            0,
+            EdgeCoord::new(HexCoord::new(0, 1), EdgeDirection::NorthEast),
+        );
+        place_road(
+            &mut state,
+            0,
+            EdgeCoord::new(HexCoord::new(1, 0), EdgeDirection::SouthEast),
+        );
+        place_road(
+            &mut state,
+            0,
+            EdgeCoord::new(HexCoord::new(1, 1), EdgeDirection::NorthEast),
+        );
+        assert_eq!(longest_road_length(&state, 0), 5);
+
+        // Player 1: 5-road chain on the opposite side of the board.
+        // NE(-2,1)->E(-2,1)->NE(-2,2)->SE(-1,1)->NE(-1,2)
+        place_road(
+            &mut state,
+            1,
+            EdgeCoord::new(HexCoord::new(-2, 1), EdgeDirection::NorthEast),
+        );
+        place_road(
+            &mut state,
+            1,
+            EdgeCoord::new(HexCoord::new(-2, 1), EdgeDirection::East),
+        );
+        place_road(
+            &mut state,
+            1,
+            EdgeCoord::new(HexCoord::new(-2, 2), EdgeDirection::NorthEast),
+        );
+        place_road(
+            &mut state,
+            1,
+            EdgeCoord::new(HexCoord::new(-1, 1), EdgeDirection::SouthEast),
+        );
+        place_road(
+            &mut state,
+            1,
+            EdgeCoord::new(HexCoord::new(-1, 2), EdgeDirection::NorthEast),
+        );
+        assert_eq!(longest_road_length(&state, 1), 5);
+
+        // With no current holder and a tie, nobody gets it.
+        update_longest_road(&mut state);
+        assert_eq!(
+            state.longest_road_player, None,
+            "Tie with no holder means nobody gets it"
+        );
+    }
+
+    #[test]
+    fn longest_road_holder_keeps_on_tie() {
+        let mut state = make_state(4);
+        // Player 0 is the current holder.
+        state.longest_road_player = Some(0);
+        state.longest_road_length = 5;
+
+        // Same road layout as above.
+        place_road(
+            &mut state,
+            0,
+            EdgeCoord::new(HexCoord::new(0, 0), EdgeDirection::NorthEast),
+        );
+        place_road(
+            &mut state,
+            0,
+            EdgeCoord::new(HexCoord::new(0, 0), EdgeDirection::East),
+        );
+        place_road(
+            &mut state,
+            0,
+            EdgeCoord::new(HexCoord::new(0, 1), EdgeDirection::NorthEast),
+        );
+        place_road(
+            &mut state,
+            0,
+            EdgeCoord::new(HexCoord::new(1, 0), EdgeDirection::SouthEast),
+        );
+        place_road(
+            &mut state,
+            0,
+            EdgeCoord::new(HexCoord::new(1, 1), EdgeDirection::NorthEast),
+        );
+
+        place_road(
+            &mut state,
+            1,
+            EdgeCoord::new(HexCoord::new(-2, 1), EdgeDirection::NorthEast),
+        );
+        place_road(
+            &mut state,
+            1,
+            EdgeCoord::new(HexCoord::new(-2, 1), EdgeDirection::East),
+        );
+        place_road(
+            &mut state,
+            1,
+            EdgeCoord::new(HexCoord::new(-2, 2), EdgeDirection::NorthEast),
+        );
+        place_road(
+            &mut state,
+            1,
+            EdgeCoord::new(HexCoord::new(-1, 1), EdgeDirection::SouthEast),
+        );
+        place_road(
+            &mut state,
+            1,
+            EdgeCoord::new(HexCoord::new(-1, 2), EdgeDirection::NorthEast),
+        );
+
+        // Current holder keeps it in a tie.
+        update_longest_road(&mut state);
+        assert_eq!(
+            state.longest_road_player,
+            Some(0),
+            "Current holder keeps it in a tie"
+        );
+    }
+
     // -- Largest army --
 
     #[test]
@@ -1539,6 +1743,7 @@ mod tests {
     #[test]
     fn victory_at_ten_points() {
         let mut state = make_state(4);
+        set_playing(&mut state, 0);
 
         // Give player 0: 5 settlements (5 VP) + longest road (2) + largest army (2) + 1 VP card = 10
         for i in 0..5 {
@@ -1554,8 +1759,28 @@ mod tests {
     }
 
     #[test]
+    fn victory_not_on_other_players_turn() {
+        let mut state = make_state(4);
+        // It's player 1's turn, but player 0 has 10 VP.
+        set_playing(&mut state, 1);
+
+        for i in 0..5 {
+            let v = VertexCoord::new(HexCoord::new(i * 3, 0), VertexDirection::North);
+            place_settlement(&mut state, 0, v);
+        }
+        state.longest_road_player = Some(0);
+        state.largest_army_player = Some(0);
+        state.players[0].dev_cards.push(DevCard::VictoryPoint);
+
+        assert_eq!(state.victory_points(0), 10);
+        // Player 0 has 10 VP but it's player 1's turn -- no winner yet.
+        assert_eq!(check_victory(&state), None);
+    }
+
+    #[test]
     fn no_victory_at_nine_points() {
         let mut state = make_state(4);
+        set_playing(&mut state, 0);
 
         for i in 0..5 {
             let v = VertexCoord::new(HexCoord::new(i * 3, 0), VertexDirection::North);
@@ -1730,18 +1955,42 @@ mod tests {
     }
 
     #[test]
-    fn port_reduces_trade_rate() {
+    fn generic_port_reduces_trade_rate_to_3() {
         let mut state = make_state(4);
 
-        // Place a settlement at a port vertex.
-        if let Some(port) = state.board.ports.first() {
-            let v = port.vertices.0;
-            place_settlement(&mut state, 0, v);
+        // Find a generic port and place a settlement on it.
+        let generic_port = state
+            .board
+            .ports
+            .iter()
+            .find(|p| p.port_type == PortType::Generic)
+            .expect("Should have a generic port");
+        let v = generic_port.vertices.0;
+        place_settlement(&mut state, 0, v);
 
-            // All ports are Generic (3:1) in our default board.
-            for &r in Resource::all() {
-                assert_eq!(trade_rate(&state, 0, r), 3);
-            }
+        // Generic port gives 3:1 for all resources.
+        for &r in Resource::all() {
+            assert_eq!(trade_rate(&state, 0, r), 3);
         }
+    }
+
+    #[test]
+    fn specific_port_reduces_trade_rate_to_2() {
+        let mut state = make_state(4);
+
+        // Find the Wheat 2:1 port and place a settlement on it.
+        let wheat_port = state
+            .board
+            .ports
+            .iter()
+            .find(|p| p.port_type == PortType::Specific(Resource::Wheat))
+            .expect("Should have a wheat port");
+        let v = wheat_port.vertices.0;
+        place_settlement(&mut state, 0, v);
+
+        // 2:1 rate for the matching resource.
+        assert_eq!(trade_rate(&state, 0, Resource::Wheat), 2);
+        // Other resources still at 4:1 (no generic port here).
+        assert_eq!(trade_rate(&state, 0, Resource::Brick), 4);
     }
 }

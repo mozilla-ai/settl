@@ -138,7 +138,7 @@ The bottom panel is context-sensitive -- it shows different content based on gam
 | Mode | Content | When Active |
 |------|---------|-------------|
 | **Action bar** | Horizontal menu: Build Settlement, Road, Dev Card, Trade, End Turn | Human player's turn, choosing action |
-| **Placement mode** | "Select position with arrow keys, Enter to confirm, Esc to cancel" + description of highlighted position | Placing settlement, road, or robber |
+| **Placement mode** | "Select position with arrow keys, Enter to confirm" + description of highlighted position | Placing settlement, road, or robber (mandatory) |
 | **Trade interface** | Two-column give/get with resource selectors | Proposing or responding to trade |
 | **Discard interface** | Multi-select resource checklist with counter | Discarding on 7 roll |
 | **Game log** | Scrollable event history | AI players' turns, spectating |
@@ -204,7 +204,7 @@ When placing settlements, roads, or the robber:
 2. Current cursor position shown in **reverse video** (distinct from just "legal")
 3. Arrow keys move cursor to nearest legal position in that direction
 4. Context bar shows description of current position: "Forest/Hills/Pasture junction" or "Edge between Forest and Hills"
-5. Enter to confirm, Esc to cancel back to action menu
+5. Enter to confirm (placement is mandatory -- no cancel)
 
 ### 3. Trade Builder (resource-key driven)
 ```
@@ -313,7 +313,6 @@ resources and actions in the same prompt.
 |-----|--------|
 | `←` `→` `↑` `↓` | Move cursor between legal positions |
 | `Enter` | Confirm placement |
-| `Esc` | Cancel, return to action menu |
 | `n` / `p` | Next/previous legal position (cycles through list) |
 
 Arrow navigation uses nearest-neighbor in the pressed direction. `n`/`p` provide

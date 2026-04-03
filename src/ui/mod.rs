@@ -36,12 +36,6 @@ use crate::player::personality::Personality;
 
 use screens::*;
 
-/// Receiver for the llamafile process from the background setup task.
-/// Set when the setup screen is active; taken when setup completes.
-static LLAMAFILE_RESULT: std::sync::Mutex<
-    Option<tokio::sync::oneshot::Receiver<crate::llamafile::LlamafileProcess>>,
-> = std::sync::Mutex::new(None);
-
 /// Bright player colors for buildings and roads on the board.
 pub const PLAYER_COLORS: [Color; 4] = [
     Color::LightRed,
@@ -55,7 +49,6 @@ pub const PLAYER_TEXT_COLORS: [Color; 4] = [Color::Red, Color::Blue, Color::Gree
 
 /// Events sent from the game orchestrator to the TUI.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub enum UiEvent {
     /// A game state update with the latest event and a human-readable message.
     StateUpdate {
@@ -89,15 +82,39 @@ pub enum Screen {
 use crate::game::actions::TradeOffer;
 use crate::game::board::{EdgeCoord, HexCoord, Resource, VertexCoord};
 use crate::player::tui_human::{HumanResponse, PromptKind};
+use crate::player::PlayerChoice;
+
+/// Map a resource key character (w/b/s/h/o) to its index in `Resource::all()`.
+fn resource_key_index(key: KeyCode) -> Option<usize> {
+    match key {
+        KeyCode::Char('w') => Some(0),
+        KeyCode::Char('b') => Some(1),
+        KeyCode::Char('s') => Some(2),
+        KeyCode::Char('h') => Some(3),
+        KeyCode::Char('o') => Some(4),
+        _ => None,
+    }
+}
 
 // ── Input Mode State Machine ──────────────────────────────────────────
 
-/// What kind of board cursor is active.
+/// Legal game-coordinate positions for the board cursor, tagged by type.
+/// Replaces the previous `CursorKind` + three mutually-exclusive Vecs.
 #[derive(Debug, Clone)]
-pub enum CursorKind {
-    Settlement,
-    Road,
-    Robber,
+pub enum CursorLegal {
+    Settlements(Vec<VertexCoord>),
+    Roads(Vec<EdgeCoord>),
+    Hexes(Vec<HexCoord>),
+}
+
+impl CursorLegal {
+    pub fn kind_name(&self) -> &'static str {
+        match self {
+            CursorLegal::Settlements(_) => "settlement",
+            CursorLegal::Roads(_) => "road",
+            CursorLegal::Hexes(_) => "robber",
+        }
+    }
 }
 
 /// A cursor target with its screen position for navigation.
@@ -121,15 +138,12 @@ pub enum InputMode {
     Spectating,
     /// Choosing a game action from a horizontal bar.
     ActionBar {
-        choices: Vec<String>,
+        choices: Vec<PlayerChoice>,
         selected: usize,
     },
     /// Navigating legal positions on the board with arrow keys.
     BoardCursor {
-        kind: CursorKind,
-        legal_vertices: Vec<VertexCoord>,
-        legal_edges: Vec<EdgeCoord>,
-        legal_hexes: Vec<HexCoord>,
+        legal: CursorLegal,
         positions: Vec<CursorTarget>,
         selected: usize,
     },
@@ -227,6 +241,12 @@ impl PlayingState {
         }
     }
 
+    /// Send an index response and return to spectating mode.
+    fn respond_index(&mut self, idx: usize) {
+        self.send_response(HumanResponse::Index(idx));
+        self.input_mode = InputMode::Spectating;
+    }
+
     /// Push a message to the game log, capping at MAX_MESSAGES to prevent
     /// unbounded growth. Auto-scrolls to the latest message.
     fn push_message(&mut self, msg: String) {
@@ -246,34 +266,37 @@ impl PlayingState {
                 selected: 0,
             },
             PromptKind::PlaceSettlement { legal } => {
-                let positions = self.compute_vertex_cursor_positions(&legal);
+                let positions = self.compute_cursor_positions(
+                    &legal,
+                    |g, v| g.vertex_screen_pos(v).unwrap_or((0, 0)),
+                    4,
+                );
                 InputMode::BoardCursor {
-                    kind: CursorKind::Settlement,
-                    legal_vertices: legal,
-                    legal_edges: Vec::new(),
-                    legal_hexes: Vec::new(),
+                    legal: CursorLegal::Settlements(legal),
                     positions,
                     selected: 0,
                 }
             }
             PromptKind::PlaceRoad { legal } => {
-                let positions = self.compute_edge_cursor_positions(&legal);
+                let positions = self.compute_cursor_positions(
+                    &legal,
+                    |g, e| g.edge_screen_pos(e).unwrap_or((0, 0)),
+                    4,
+                );
                 InputMode::BoardCursor {
-                    kind: CursorKind::Road,
-                    legal_vertices: Vec::new(),
-                    legal_edges: legal,
-                    legal_hexes: Vec::new(),
+                    legal: CursorLegal::Roads(legal),
                     positions,
                     selected: 0,
                 }
             }
             PromptKind::PlaceRobber { legal } => {
-                let positions = self.compute_hex_cursor_positions(&legal);
+                let positions = self.compute_cursor_positions(
+                    &legal,
+                    |g, h| g.hex_center_pos(h).unwrap_or((0, 0)),
+                    8,
+                );
                 InputMode::BoardCursor {
-                    kind: CursorKind::Robber,
-                    legal_vertices: Vec::new(),
-                    legal_edges: Vec::new(),
-                    legal_hexes: legal,
+                    legal: CursorLegal::Hexes(legal),
                     positions,
                     selected: 0,
                 }
@@ -299,13 +322,18 @@ impl PlayingState {
         };
     }
 
-    /// Compute screen positions for vertex cursor targets.
-    fn compute_vertex_cursor_positions(&self, vertices: &[VertexCoord]) -> Vec<CursorTarget> {
+    /// Compute screen positions for cursor targets from a position-lookup closure.
+    fn compute_cursor_positions<T>(
+        &self,
+        items: &[T],
+        lookup: impl Fn(&board_view::HexGrid, &T) -> (u16, u16),
+        fallback_spacing: u16,
+    ) -> Vec<CursorTarget> {
         if let Some(ref grid) = self.hex_grid {
-            vertices
+            items
                 .iter()
-                .map(|v| {
-                    let (col, row) = grid.vertex_screen_pos(v).unwrap_or((0, 0));
+                .map(|item| {
+                    let (col, row) = lookup(grid, item);
                     CursorTarget {
                         screen_col: col,
                         screen_row: row,
@@ -313,61 +341,11 @@ impl PlayingState {
                 })
                 .collect()
         } else {
-            vertices
+            items
                 .iter()
                 .enumerate()
                 .map(|(i, _)| CursorTarget {
-                    screen_col: i as u16 * 4,
-                    screen_row: 0,
-                })
-                .collect()
-        }
-    }
-
-    /// Compute screen positions for edge cursor targets.
-    fn compute_edge_cursor_positions(&self, edges: &[EdgeCoord]) -> Vec<CursorTarget> {
-        if let Some(ref grid) = self.hex_grid {
-            edges
-                .iter()
-                .map(|e| {
-                    let (col, row) = grid.edge_screen_pos(e).unwrap_or((0, 0));
-                    CursorTarget {
-                        screen_col: col,
-                        screen_row: row,
-                    }
-                })
-                .collect()
-        } else {
-            edges
-                .iter()
-                .enumerate()
-                .map(|(i, _)| CursorTarget {
-                    screen_col: i as u16 * 4,
-                    screen_row: 0,
-                })
-                .collect()
-        }
-    }
-
-    /// Compute screen positions for hex cursor targets.
-    fn compute_hex_cursor_positions(&self, hexes: &[HexCoord]) -> Vec<CursorTarget> {
-        if let Some(ref grid) = self.hex_grid {
-            hexes
-                .iter()
-                .map(|h| {
-                    let (col, row) = grid.hex_center_pos(h);
-                    CursorTarget {
-                        screen_col: col,
-                        screen_row: row,
-                    }
-                })
-                .collect()
-        } else {
-            hexes
-                .iter()
-                .enumerate()
-                .map(|(i, _)| CursorTarget {
-                    screen_col: i as u16 * 8,
+                    screen_col: i as u16 * fallback_spacing,
                     screen_row: 0,
                 })
                 .collect()
@@ -382,7 +360,6 @@ impl PlayingState {
                 event: _,
                 message,
             } => {
-                // Initialize hex grid on first state.
                 if self.hex_grid.is_none() {
                     self.hex_grid = Some(board_view::HexGrid::new());
                 }
@@ -427,7 +404,7 @@ impl PlayingState {
     }
 }
 
-/// Top-level app — just holds the current screen and shared config.
+/// Top-level app -- holds the current screen and shared config.
 pub struct App {
     pub screen: Screen,
     pub personalities: Vec<Personality>,
@@ -439,10 +416,8 @@ pub struct App {
 
 /// Run the full TUI application (title → menu → game → post-game loop).
 pub async fn run_app() -> io::Result<()> {
-    // Discover personalities from ./personalities/*.toml.
     let personalities = discover_personalities();
 
-    // Setup terminal.
     enable_raw_mode()?;
     io::stdout().execute(EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(io::stdout());
@@ -489,42 +464,50 @@ async fn run_event_loop(
             _ => Duration::from_millis(100),
         };
 
+        // Wait for the first event, then drain ALL pending events before
+        // the next draw. This prevents keyboard backlog: if 10 arrow keys
+        // arrived during a slow protocol rebuild, we process them all and
+        // only rebuild once.
         if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    // Ctrl+C exits from any screen.
-                    if key.modifiers.contains(KeyModifiers::CONTROL)
-                        && key.code == KeyCode::Char('c')
-                    {
-                        return Ok(());
-                    }
-                    let action = handle_input(app, key.code);
-                    match action {
-                        Action::None => {}
-                        Action::Quit => return Ok(()),
-                        Action::Transition(screen) => app.screen = screen,
-                        Action::StartGame => {
-                            if let Screen::NewGame(ref ng) = app.screen {
-                                if let Some(ref process) = app.llamafile_process {
-                                    let screen =
-                                        launch_game(ng, &app.personalities, Some(process.port));
-                                    app.screen = screen;
-                                } else {
-                                    // Transition to LlamafileSetup to download + start.
-                                    let (status_tx, status_rx) = mpsc::unbounded_channel();
-                                    let saved_config = clone_new_game_state(ng);
-                                    let handle = spawn_llamafile_setup(status_tx);
-                                    let setup_state = LlamafileSetupState {
-                                        status: crate::llamafile::LlamafileStatus::Checking,
-                                        status_rx,
-                                        saved_config,
-                                        task_handle: Some(handle),
-                                    };
-                                    app.screen = Screen::LlamafileSetup(setup_state);
+            loop {
+                if let Event::Key(key) = event::read()? {
+                    if key.kind == KeyEventKind::Press {
+                        if key.modifiers.contains(KeyModifiers::CONTROL)
+                            && key.code == KeyCode::Char('c')
+                        {
+                            return Ok(());
+                        }
+                        let action = handle_input(app, key.code);
+                        match action {
+                            Action::None => {}
+                            Action::Quit => return Ok(()),
+                            Action::Transition(screen) => app.screen = screen,
+                            Action::StartGame => {
+                                if let Screen::NewGame(ref ng) = app.screen {
+                                    if let Some(ref process) = app.llamafile_process {
+                                        let screen =
+                                            launch_game(ng, &app.personalities, Some(process.port));
+                                        app.screen = screen;
+                                    } else {
+                                        let (status_tx, status_rx) = mpsc::unbounded_channel();
+                                        let saved_config = clone_new_game_state(ng);
+                                        let (handle, process_rx) = spawn_llamafile_setup(status_tx);
+                                        let setup_state = LlamafileSetupState {
+                                            status: crate::llamafile::LlamafileStatus::Checking,
+                                            status_rx,
+                                            saved_config,
+                                            task_handle: Some(handle),
+                                            process_rx: Some(process_rx),
+                                        };
+                                        app.screen = Screen::LlamafileSetup(setup_state);
+                                    }
                                 }
                             }
                         }
                     }
+                }
+                if !event::poll(Duration::ZERO)? {
+                    break;
                 }
             }
         }
@@ -538,11 +521,9 @@ async fn run_event_loop(
             if let crate::llamafile::LlamafileStatus::Ready(port) = &setup.status {
                 let port = *port;
                 // Take the process from the oneshot receiver.
-                if let Ok(mut guard) = LLAMAFILE_RESULT.lock() {
-                    if let Some(mut rx) = guard.take() {
-                        if let Ok(process) = rx.try_recv() {
-                            app.llamafile_process = Some(process);
-                        }
+                if let Some(mut rx) = setup.process_rx.take() {
+                    if let Ok(process) = rx.try_recv() {
+                        app.llamafile_process = Some(process);
                     }
                 }
                 // Move saved_config out of the setup state.
@@ -702,10 +683,7 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                     if let Some(handle) = setup.task_handle.take() {
                         handle.abort();
                     }
-                    // Clear any pending oneshot receiver.
-                    if let Ok(mut guard) = LLAMAFILE_RESULT.lock() {
-                        guard.take();
-                    }
+                    // Drop the oneshot receiver (cleaned up with the setup state).
                     Action::Transition(Screen::NewGame(setup.saved_config))
                 } else {
                     Action::Transition(Screen::NewGame(NewGameState::new(&app.personalities)))
@@ -782,86 +760,28 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
 
                 InputMode::ActionBar { choices, selected } => {
                     match key {
-                        KeyCode::Left => {
+                        KeyCode::Left | KeyCode::Up | KeyCode::Char('k') => {
                             *selected = selected.saturating_sub(1);
                         }
-                        KeyCode::Right => {
-                            if *selected + 1 < choices.len() {
-                                *selected += 1;
-                            }
-                        }
-                        KeyCode::Up | KeyCode::Char('k') => {
-                            *selected = selected.saturating_sub(1);
-                        }
-                        KeyCode::Down | KeyCode::Char('j') => {
+                        KeyCode::Right | KeyCode::Down | KeyCode::Char('j') => {
                             if *selected + 1 < choices.len() {
                                 *selected += 1;
                             }
                         }
                         KeyCode::Enter => {
                             let idx = *selected;
-                            ps.send_response(HumanResponse::Index(idx));
-                            ps.input_mode = InputMode::Spectating;
+                            ps.respond_index(idx);
                         }
-                        // Keyboard shortcuts for actions
-                        KeyCode::Char('e') => {
-                            // Find "End Turn" action
-                            if let Some(idx) = choices.iter().position(|c| c.contains("End Turn")) {
-                                ps.send_response(HumanResponse::Index(idx));
-                                ps.input_mode = InputMode::Spectating;
-                            }
-                        }
-                        KeyCode::Char('s') => {
+                        KeyCode::Char(ch) => {
                             if let Some(idx) =
-                                choices.iter().position(|c| c.contains("Build Settlement"))
+                                choices.iter().position(|c| c.shortcut_key() == Some(ch))
                             {
-                                ps.send_response(HumanResponse::Index(idx));
-                                ps.input_mode = InputMode::Spectating;
-                            }
-                        }
-                        KeyCode::Char('r') => {
-                            if let Some(idx) = choices.iter().position(|c| c.contains("Build Road"))
-                            {
-                                ps.send_response(HumanResponse::Index(idx));
-                                ps.input_mode = InputMode::Spectating;
-                            }
-                        }
-                        KeyCode::Char('c') => {
-                            if let Some(idx) = choices.iter().position(|c| c.contains("Build City"))
-                            {
-                                ps.send_response(HumanResponse::Index(idx));
-                                ps.input_mode = InputMode::Spectating;
-                            }
-                        }
-                        KeyCode::Char('d') => {
-                            if let Some(idx) = choices
-                                .iter()
-                                .position(|c| c.contains("Buy Development Card"))
-                            {
-                                ps.send_response(HumanResponse::Index(idx));
-                                ps.input_mode = InputMode::Spectating;
-                            }
-                        }
-                        KeyCode::Char('t') => {
-                            if let Some(idx) =
-                                choices.iter().position(|c| c.contains("Propose Trade"))
-                            {
-                                ps.send_response(HumanResponse::Index(idx));
-                                ps.input_mode = InputMode::Spectating;
-                            }
-                        }
-                        KeyCode::Char('p') => {
-                            // Play dev card (any variant)
-                            if let Some(idx) = choices.iter().position(|c| c.starts_with("Play ")) {
-                                ps.send_response(HumanResponse::Index(idx));
-                                ps.input_mode = InputMode::Spectating;
+                                ps.respond_index(idx);
                             }
                         }
                         KeyCode::Esc => {
-                            // Select "End Turn" on Esc if available
-                            if let Some(idx) = choices.iter().position(|c| c.contains("End Turn")) {
-                                ps.send_response(HumanResponse::Index(idx));
-                                ps.input_mode = InputMode::Spectating;
+                            if let Some(idx) = choices.iter().position(|c| c.is_end_turn()) {
+                                ps.respond_index(idx);
                             }
                         }
                         _ => {}
@@ -898,13 +818,14 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                                 *selected = selected.checked_sub(1).unwrap_or(len - 1);
                             }
                         }
-                        KeyCode::Enter | KeyCode::Esc => {
+                        KeyCode::Enter => {
                             if len > 0 {
                                 let idx = *selected;
-                                ps.send_response(HumanResponse::Index(idx));
-                                ps.input_mode = InputMode::Spectating;
+                                ps.respond_index(idx);
                             }
                         }
+                        // Esc does nothing in BoardCursor -- placement is mandatory
+                        // (setup settlements, robber, Road Building). Only Enter confirms.
                         _ => {}
                     }
                     Action::None
@@ -917,15 +838,7 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                     available,
                     player_id,
                 } => {
-                    let res_key = match key {
-                        KeyCode::Char('w') => Some(0usize),
-                        KeyCode::Char('b') => Some(1),
-                        KeyCode::Char('s') => Some(2),
-                        KeyCode::Char('h') => Some(3),
-                        KeyCode::Char('o') => Some(4),
-                        _ => None,
-                    };
-                    if let Some(idx) = res_key {
+                    if let Some(idx) = resource_key_index(key) {
                         match side {
                             TradeSide::Give => {
                                 if give[idx] < available[idx] {
@@ -961,13 +874,7 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                             let has_give = give.iter().any(|&g| g > 0);
                             let has_get = get.iter().any(|&g| g > 0);
                             if has_give && has_get {
-                                let resources = [
-                                    Resource::Wood,
-                                    Resource::Brick,
-                                    Resource::Sheep,
-                                    Resource::Wheat,
-                                    Resource::Ore,
-                                ];
+                                let resources = Resource::all();
                                 let offering: Vec<(Resource, u32)> = give
                                     .iter()
                                     .enumerate()
@@ -1005,22 +912,8 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                     remaining,
                     ..
                 } => {
-                    let res_key = match key {
-                        KeyCode::Char('w') => Some(0usize),
-                        KeyCode::Char('b') => Some(1),
-                        KeyCode::Char('s') => Some(2),
-                        KeyCode::Char('h') => Some(3),
-                        KeyCode::Char('o') => Some(4),
-                        _ => None,
-                    };
-                    let resources = [
-                        Resource::Wood,
-                        Resource::Brick,
-                        Resource::Sheep,
-                        Resource::Wheat,
-                        Resource::Ore,
-                    ];
-                    if let Some(idx) = res_key {
+                    let resources = Resource::all();
+                    if let Some(idx) = resource_key_index(key) {
                         if sel_resources.len() < *count && remaining[idx] > 0 {
                             remaining[idx] -= 1;
                             sel_resources.push(resources[idx]);
@@ -1066,18 +959,12 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 }
 
                 InputMode::ResourcePicker { .. } => {
-                    let idx = match key {
-                        KeyCode::Char('w') => Some(0usize),
-                        KeyCode::Char('b') => Some(1),
-                        KeyCode::Char('s') => Some(2),
-                        KeyCode::Char('h') => Some(3),
-                        KeyCode::Char('o') => Some(4),
+                    let idx = resource_key_index(key).or(match key {
                         KeyCode::Esc => Some(0), // Default to Wood on Esc
                         _ => None,
-                    };
+                    });
                     if let Some(i) = idx {
-                        ps.send_response(HumanResponse::Index(i));
-                        ps.input_mode = InputMode::Spectating;
+                        ps.respond_index(i);
                     }
                     Action::None
                 }
@@ -1093,19 +980,16 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                             }
                         }
                         KeyCode::Char(c) if c.is_ascii_digit() => {
-                            // Match player by 1-indexed number: key '1' = player 0, etc.
                             let num = c.to_digit(10).unwrap_or(0) as usize;
                             let player_id = num.saturating_sub(1);
                             if let Some(idx) = targets.iter().position(|(id, _)| *id == player_id) {
-                                ps.send_response(HumanResponse::Index(idx));
-                                ps.input_mode = InputMode::Spectating;
+                                ps.respond_index(idx);
                             }
                         }
                         KeyCode::Enter | KeyCode::Esc => {
                             if !targets.is_empty() {
                                 let idx = *selected;
-                                ps.send_response(HumanResponse::Index(idx));
-                                ps.input_mode = InputMode::Spectating;
+                                ps.respond_index(idx);
                             }
                         }
                         _ => {}
@@ -1185,7 +1069,7 @@ fn find_nearest_in_direction(
 
         if in_direction {
             let dist = (dx as i64) * (dx as i64) + (dy as i64) * (dy as i64);
-            if best.is_none() || dist < best.unwrap().1 {
+            if best.is_none_or(|(_, d)| dist < d) {
                 best = Some((i, dist));
             }
         }
@@ -1426,17 +1310,16 @@ fn build_post_game(ps: &PlayingState) -> PostGameState {
 
 /// Spawn a background task that downloads (if needed) and starts the llamafile.
 ///
-/// Returns the `JoinHandle` so the caller can abort on cancel.
-/// The process is sent back via a oneshot channel stored in `LLAMAFILE_RESULT`.
+/// Returns the `JoinHandle` and a oneshot receiver for the process.
 fn spawn_llamafile_setup(
     status_tx: mpsc::UnboundedSender<crate::llamafile::LlamafileStatus>,
-) -> tokio::task::JoinHandle<()> {
+) -> (
+    tokio::task::JoinHandle<()>,
+    tokio::sync::oneshot::Receiver<crate::llamafile::LlamafileProcess>,
+) {
     let (process_tx, process_rx) = tokio::sync::oneshot::channel();
-    if let Ok(mut guard) = LLAMAFILE_RESULT.lock() {
-        *guard = Some(process_rx);
-    }
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         match crate::llamafile::ensure_llamafile(status_tx.clone()).await {
             Ok(path) => {
                 let _ = status_tx.send(crate::llamafile::LlamafileStatus::Starting);
@@ -1458,7 +1341,9 @@ fn spawn_llamafile_setup(
                 let _ = status_tx.send(crate::llamafile::LlamafileStatus::Error(e));
             }
         }
-    })
+    });
+
+    (handle, process_rx)
 }
 
 /// Clone a `NewGameState` for saving across screen transitions.

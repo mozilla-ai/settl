@@ -6,7 +6,7 @@
 //!
 //! The key pattern: create an orchestrator with 1 TuiHumanPlayer (channel-based)
 //! + 3 RandomPlayers, spawn it as an async task, then act as the "TUI" by
-//! receiving HumanPrompts and sending HumanResponses back.
+//!   receiving HumanPrompts and sending HumanResponses back.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,6 +26,15 @@ use crate::player::Player;
 use super::screens::*;
 use super::testing::*;
 use super::*;
+
+// ── Types ───────────────────────────────────────────────────────────
+
+type HumanGameSetup = (
+    mpsc::UnboundedReceiver<HumanPrompt>,
+    mpsc::UnboundedSender<HumanResponse>,
+    Option<mpsc::UnboundedReceiver<UiEvent>>,
+    tokio::task::JoinHandle<Result<usize, OrchestratorError>>,
+);
 
 // ── Shared Helpers ───────────────────────────────────────────────────
 
@@ -109,15 +118,7 @@ async fn auto_respond(
 /// Returns the channel endpoints and a join handle for the spawned game task.
 /// If `with_ui_tx` is true, wires up a UiEvent channel (note: this adds a
 /// 50ms sleep per turn in the orchestrator).
-fn setup_human_game(
-    max_turns: u32,
-    with_ui_tx: bool,
-) -> (
-    mpsc::UnboundedReceiver<HumanPrompt>,
-    mpsc::UnboundedSender<HumanResponse>,
-    Option<mpsc::UnboundedReceiver<UiEvent>>,
-    tokio::task::JoinHandle<Result<usize, OrchestratorError>>,
-) {
+fn setup_human_game(max_turns: u32, with_ui_tx: bool) -> HumanGameSetup {
     let board = Board::default_board();
     let state = GameState::new(board, 4);
 
@@ -394,7 +395,7 @@ async fn human_receives_choose_action_during_turn() {
     // Custom response loop that records prompt details.
     let respond_handle = tokio::spawn(async move {
         let mut log: Vec<String> = Vec::new();
-        let mut first_action_choices: Option<Vec<String>> = None;
+        let mut first_action_choices: Option<Vec<crate::player::PlayerChoice>> = None;
 
         while let Some(prompt) = prompt_rx.recv().await {
             let name = prompt_kind_name(&prompt.kind).to_string();
@@ -450,7 +451,7 @@ async fn human_receives_choose_action_during_turn() {
 
     // EndTurn should always be one of the choices.
     assert!(
-        choices.iter().any(|c| c.contains("End Turn")),
+        choices.iter().any(|c| c.is_end_turn()),
         "ChooseAction should include End Turn, got: {:?}",
         choices
     );

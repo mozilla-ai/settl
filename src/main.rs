@@ -1,14 +1,7 @@
-mod game;
-mod headless;
-mod llamafile;
-mod logging;
-mod player;
-mod trading;
-mod ui;
-
 use clap::Parser;
 
-use headless::HeadlessCli;
+use settl::headless::{self, HeadlessCli};
+use settl::{logging, ui};
 
 #[tokio::main]
 async fn main() {

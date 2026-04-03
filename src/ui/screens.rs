@@ -197,7 +197,6 @@ pub struct AboutState;
 // ── Llamafile Setup ───────────────────────────────────────────────────
 
 /// Status for the llamafile download/start screen.
-#[derive(Debug)]
 pub struct LlamafileSetupState {
     pub status: crate::llamafile::LlamafileStatus,
     pub status_rx: tokio::sync::mpsc::UnboundedReceiver<crate::llamafile::LlamafileStatus>,
@@ -205,6 +204,16 @@ pub struct LlamafileSetupState {
     pub saved_config: NewGameState,
     /// Handle to the background setup task so we can abort it on cancel.
     pub task_handle: Option<tokio::task::JoinHandle<()>>,
+    /// Oneshot receiver for the llamafile process once it's ready.
+    pub process_rx: Option<tokio::sync::oneshot::Receiver<crate::llamafile::LlamafileProcess>>,
+}
+
+impl std::fmt::Debug for LlamafileSetupState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LlamafileSetupState")
+            .field("status", &self.status)
+            .finish_non_exhaustive()
+    }
 }
 
 // ── Drawing Functions ──────────────────────────────────────────────────
@@ -643,8 +652,14 @@ fn cell_style(focused: bool) -> Style {
 
 fn truncate_str(s: &str, max: usize) -> &str {
     if s.len() <= max {
-        s
-    } else {
-        &s[..max.saturating_sub(1)]
+        return s;
     }
+    // Find the last char boundary at or before `max` to avoid panicking on multi-byte strings.
+    let end = s
+        .char_indices()
+        .map(|(i, _)| i)
+        .take_while(|&i| i <= max)
+        .last()
+        .unwrap_or(0);
+    &s[..end]
 }
