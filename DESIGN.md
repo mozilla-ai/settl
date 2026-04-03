@@ -33,8 +33,7 @@
 | Hex boundary | colored fill only | No border characters, terrain color defines shape |
 | Road (diagonal) | colored block | Player-colored background, 3 cells diagonal |
 | Road (vertical) | colored block | Player-colored background, 5 cells tall |
-| Hex interior | Terrain + number + dots | Each on dedicated row (see template) |
-| Hot numbers (6, 8) | bold + bright white | High probability, must stand out |
+| Hex interior | Terrain + number | Each on dedicated row (see template) |
 
 ### Terrain Labels
 Full resource names displayed on hex tiles (what the terrain produces, not terrain name):
@@ -46,16 +45,6 @@ Full resource names displayed on hex tiles (what the terrain produces, not terra
 | Fields | `Wheat` | Wheat |
 | Mountains | `Ore` | Ore |
 | Desert | `Desert` | Nothing |
-
-### Number Probability Dots
-Display below the number token inside each hex to show roll probability:
-| Numbers | Dots | Probability |
-|---------|------|-------------|
-| 2, 12 | `·` | 1/36 |
-| 3, 11 | `··` | 2/36 |
-| 4, 10 | `···` | 3/36 |
-| 5, 9 | `····` | 4/36 |
-| 6, 8 | `·····` | 5/36 (bold red) |
 
 ## Color System
 
@@ -161,7 +150,7 @@ Pointy-top hexes, interlocking. Each hex cell:
         ╱           ╲         <- cy-2: even wider
       ╱   Wood         ╲      <- cy-1: TERRAIN label (dedicated row)
      ·       6          ·     <- cy:   NUMBER token (dedicated row)
-      ╲    ·····      ╱      <- cy+1: PROBABILITY DOTS (dedicated row)
+      ╲             ╱      <- cy+1: lower fill
         ╲           ╱         <- cy+2: lower diagonals
           ╲       ╱           <- cy+3: narrower diagonals
             ╲   ╱             <- cy+4: closing diagonals

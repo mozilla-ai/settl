@@ -11,7 +11,7 @@ expression: buffer_to_string(&buf)
 │                                                                              │
 │                               Ore                Sheep               Wood    │
 │                               10                   2                   9     │
-│                              · · ·                 ·                · · · ·  │
+│                                                                              │
 │                                                                              │
 │                                                                              │
 │                      *                                                       │
@@ -20,7 +20,7 @@ expression: buffer_to_string(&buf)
 │                                                                              │
 │                    Wheat               Brick               Sheep             │
 │                     12                   6                   4               │
-│                      ·               · · · · ·             · · ·             │
+│                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
