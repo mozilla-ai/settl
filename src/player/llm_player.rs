@@ -1,65 +1,127 @@
-//! Llamafile player implementation using the `genai` crate with a local llamafile backend.
+//! LLM player implementation using the Anthropic Messages API.
 //!
-//! Uses tool/function calling for structured responses.
+//! Maintains per-player conversation history for KV cache efficiency and
+//! uses tool/function calling for structured responses.
+
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use genai::chat::{ChatMessage, ChatRequest, Tool};
-use genai::Client;
 
 use crate::game::actions::{PlayerId, TradeOffer, TradeResponse};
 use crate::game::board::{EdgeCoord, HexCoord, Resource, VertexCoord};
 use crate::game::state::GameState;
+use crate::player::anthropic_client::{
+    AnthropicClient, ContentBlock, Message, MessagesRequest, ToolDef,
+};
 use crate::player::personality::Personality;
 use crate::player::prompt;
 use crate::player::{Player, PlayerChoice};
 
-/// An LLM-powered player using genai for multi-provider support.
-pub struct LlamafilePlayer {
+/// Maximum conversation history pairs before trimming.
+const MAX_HISTORY_PAIRS: usize = 30;
+
+/// Default model name for llamafile (Bonsai-1.7B).
+pub const LLAMAFILE_MODEL: &str = "bonsai";
+
+/// Per-player conversation state.
+struct Conversation {
+    /// System prompt -- set once at construction, never changes.
+    system_prompt: String,
+    /// Growing message history (user/assistant pairs).
+    messages: Vec<Message>,
+    /// Maximum user/assistant pairs to retain.
+    max_history_pairs: usize,
+}
+
+impl Conversation {
+    fn new(system_prompt: String) -> Self {
+        Self {
+            system_prompt,
+            messages: Vec::new(),
+            max_history_pairs: MAX_HISTORY_PAIRS,
+        }
+    }
+
+    /// Append a user message and assistant response to history.
+    fn record_exchange(&mut self, user_msg: Message, assistant_msg: Message) {
+        self.messages.push(user_msg);
+        self.messages.push(assistant_msg);
+        self.trim();
+    }
+
+    /// Trim oldest pairs if we exceed the cap. Keep the first pair for context.
+    fn trim(&mut self) {
+        let pair_count = self.messages.len() / 2;
+        if pair_count > self.max_history_pairs {
+            let to_remove = (pair_count - self.max_history_pairs) * 2;
+            // Keep the first 2 messages (first exchange), remove from index 2.
+            if self.messages.len() > 2 + to_remove {
+                self.messages.drain(2..2 + to_remove);
+            } else {
+                // If somehow tiny, just keep last max pairs.
+                let keep = self.max_history_pairs * 2;
+                if self.messages.len() > keep {
+                    let start = self.messages.len() - keep;
+                    self.messages = self.messages.split_off(start);
+                }
+            }
+        }
+    }
+
+    /// Build the full message list for a new request: history + current user message.
+    fn build_messages(&self, current_user: &Message) -> Vec<Message> {
+        let mut msgs = self.messages.clone();
+        msgs.push(current_user.clone());
+        msgs
+    }
+}
+
+/// An LLM-powered player using the Anthropic Messages API.
+pub struct LlmPlayer {
     /// Display name (e.g. "Alice", "Bob").
     name: String,
-    /// Model identifier for genai (e.g. "openai::bonsai").
-    model: String,
-    /// genai client.
-    client: Client,
+    /// Shared Anthropic client.
+    client: Arc<AnthropicClient>,
     /// Personality for system prompt injection.
     personality: Personality,
+    /// KV cache slot ID for llamafile (None for cloud API).
+    slot_id: Option<usize>,
     /// Maximum retries on parse failure before falling back to random.
     max_retries: usize,
+    /// Per-player conversation history.
+    conversation: tokio::sync::Mutex<Conversation>,
     /// Extra game context (recent history) injected by the orchestrator.
     extra_context: tokio::sync::Mutex<String>,
 }
 
-impl LlamafilePlayer {
-    /// Create an LLM player backed by a pre-configured genai Client.
-    pub fn with_client(
+impl LlmPlayer {
+    /// Create an LLM player backed by an Anthropic client.
+    pub fn new(
         name: String,
-        model: String,
+        client: Arc<AnthropicClient>,
         personality: Personality,
-        client: Client,
+        slot_id: Option<usize>,
     ) -> Self {
+        let system_prompt = prompt::system_prompt_compact(&name, &personality.to_system_prompt());
         Self {
             name,
-            model,
             client,
             personality,
+            slot_id,
             max_retries: 2,
+            conversation: tokio::sync::Mutex::new(Conversation::new(system_prompt)),
             extra_context: tokio::sync::Mutex::new(String::new()),
         }
     }
 
-    /// Build the compact system prompt for local models.
-    fn system_prompt(&self) -> String {
-        let personality = self.personality.to_system_prompt();
-        prompt::system_prompt_compact(&self.name, &personality)
-    }
+    // -- Tool definitions (same schemas as before, new ToolDef type) --
 
-    /// Build the choose_index tool definition (used for most selection prompts).
-    fn index_tool(max_index: usize) -> Tool {
-        Tool::new("choose_index")
-            .with_description(
-                "Choose an option by its index number. Explain your reasoning first.",
-            )
-            .with_schema(serde_json::json!({
+    fn index_tool(max_index: usize) -> ToolDef {
+        ToolDef {
+            name: "choose_index".into(),
+            description: "Choose an option by its index number. Explain your reasoning first."
+                .into(),
+            input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "reasoning": {
@@ -74,14 +136,15 @@ impl LlamafilePlayer {
                     }
                 },
                 "required": ["reasoning", "index"]
-            }))
+            }),
+        }
     }
 
-    /// Build the choose_resource tool definition.
-    fn resource_tool() -> Tool {
-        Tool::new("choose_resource")
-            .with_description("Choose a resource type.")
-            .with_schema(serde_json::json!({
+    fn resource_tool() -> ToolDef {
+        ToolDef {
+            name: "choose_resource".into(),
+            description: "Choose a resource type.".into(),
+            input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "reasoning": {
@@ -95,17 +158,15 @@ impl LlamafilePlayer {
                     }
                 },
                 "required": ["reasoning", "resource"]
-            }))
+            }),
+        }
     }
 
-    /// Build the discard tool definition.
-    fn discard_tool(count: usize) -> Tool {
-        Tool::new("choose_discard")
-            .with_description(format!(
-                "Choose exactly {} resource cards to discard.",
-                count
-            ))
-            .with_schema(serde_json::json!({
+    fn discard_tool(count: usize) -> ToolDef {
+        ToolDef {
+            name: "choose_discard".into(),
+            description: format!("Choose exactly {} resource cards to discard.", count),
+            input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "reasoning": {
@@ -124,16 +185,17 @@ impl LlamafilePlayer {
                     }
                 },
                 "required": ["reasoning", "cards"]
-            }))
+            }),
+        }
     }
 
-    /// Build the propose_trade tool definition.
-    fn propose_trade_tool() -> Tool {
-        Tool::new("propose_trade")
-            .with_description(
-                "Propose a trade to other players. Specify what you want to give and receive.",
-            )
-            .with_schema(serde_json::json!({
+    fn propose_trade_tool() -> ToolDef {
+        ToolDef {
+            name: "propose_trade".into(),
+            description:
+                "Propose a trade to other players. Specify what you want to give and receive."
+                    .into(),
+            input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "reasoning": {
@@ -168,14 +230,15 @@ impl LlamafilePlayer {
                     }
                 },
                 "required": ["reasoning", "give_resource", "give_count", "want_resource", "want_count"]
-            }))
+            }),
+        }
     }
 
-    /// Build the trade_response tool definition.
-    fn trade_response_tool() -> Tool {
-        Tool::new("respond_to_trade")
-            .with_description("Respond to a trade offer: accept, reject, or counter.")
-            .with_schema(serde_json::json!({
+    fn trade_response_tool() -> ToolDef {
+        ToolDef {
+            name: "respond_to_trade".into(),
+            description: "Respond to a trade offer: accept, reject, or counter.".into(),
+            input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "reasoning": {
@@ -193,35 +256,25 @@ impl LlamafilePlayer {
                     }
                 },
                 "required": ["reasoning", "response"]
-            }))
+            }),
+        }
     }
 
-    /// Make an LLM call with retry logic.
+    /// Make an LLM call with retry logic and conversation history.
     ///
     /// Returns `(tool_call_arguments, reasoning)` on success.
-    /// Falls back to a default on repeated failure.
     async fn call_with_retry(
         &self,
-        system_msg: &str,
         user_msg: &str,
-        tool: Tool,
+        tool: ToolDef,
     ) -> Result<(serde_json::Value, String), String> {
-        let tool_name = match &tool.name {
-            genai::chat::ToolName::Custom(s) => s.clone(),
-            _ => "unknown".to_string(),
-        };
+        let tool_name = tool.name.clone();
 
         log::debug!(
             "[{}] LLM call: tool={} model={}",
             self.name,
             tool_name,
-            self.model,
-        );
-        log::debug!(
-            "[{}] system prompt ({} chars):\n{}",
-            self.name,
-            system_msg.len(),
-            system_msg
+            self.client.model(),
         );
         log::debug!(
             "[{}] user prompt ({} chars):\n{}",
@@ -231,53 +284,63 @@ impl LlamafilePlayer {
         );
 
         for attempt in 0..=self.max_retries {
-            let mut messages = vec![ChatMessage::user(user_msg)];
-            if attempt > 0 {
-                messages.push(ChatMessage::user(
-                    "Your previous response didn't use the tool correctly. \
-                     Please call the tool with valid arguments.",
-                ));
-            }
+            let current_user = if attempt == 0 {
+                Message::user(user_msg)
+            } else {
+                Message::user(format!(
+                    "{}\n\nYour previous response didn't use the tool correctly. \
+                     Please call the {} tool with valid arguments.",
+                    user_msg, tool_name,
+                ))
+            };
 
-            let chat_req = ChatRequest::new(messages)
-                .with_system(system_msg)
-                .with_tools(vec![tool.clone()]);
+            let conversation = self.conversation.lock().await;
+            let messages = conversation.build_messages(&current_user);
+            let system_prompt = conversation.system_prompt.clone();
+            drop(conversation);
 
-            match self.client.exec_chat(&self.model, chat_req, None).await {
-                Ok(res) => {
+            let mut request = MessagesRequest::new(self.client.model(), 1024);
+            request.system = Some(system_prompt);
+            request.messages = messages;
+            request.tools = vec![tool.clone()];
+            request.id_slot = self.slot_id;
+            request.cache_prompt = Some(true);
+
+            match self.client.send_message(&request).await {
+                Ok(response) => {
                     // Log raw response content.
-                    if let Some(content) = res.first_text() {
-                        log::debug!("[{}] response text: {}", self.name, content);
+                    for block in &response.content {
+                        if let ContentBlock::Text { text } = block {
+                            log::debug!("[{}] response text: {}", self.name, text);
+                        }
                     }
 
-                    let tool_calls = res.into_tool_calls();
-                    log::debug!(
-                        "[{}] tool calls received: {}",
-                        self.name,
-                        tool_calls
-                            .iter()
-                            .map(|tc| format!("{}({})", tc.fn_name, tc.fn_arguments))
-                            .collect::<Vec<_>>()
-                            .join(", "),
-                    );
-
-                    if let Some(tc) = tool_calls.into_iter().find(|tc| tc.fn_name == tool_name) {
-                        let reasoning = tc
-                            .fn_arguments
-                            .get("reasoning")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string();
+                    if let Some((args, reasoning)) =
+                        AnthropicClient::extract_tool_call(&response, &tool_name)
+                    {
                         log::debug!(
                             "[{}] success: tool={} args={} reasoning={}",
                             self.name,
                             tool_name,
-                            tc.fn_arguments,
+                            args,
                             reasoning,
                         );
-                        return Ok((tc.fn_arguments, reasoning));
+
+                        // Record this exchange in conversation history.
+                        // Store a compact assistant message with just the tool call.
+                        let assistant_msg = Message::assistant_tool_use(
+                            format!("call-{}", attempt),
+                            &tool_name,
+                            args.clone(),
+                        );
+                        self.conversation
+                            .lock()
+                            .await
+                            .record_exchange(current_user, assistant_msg);
+
+                        return Ok((args, reasoning));
                     }
-                    // No matching tool call -- retry.
+
                     log::warn!(
                         "[{}] attempt {}: no {} tool call in response",
                         self.name,
@@ -286,9 +349,8 @@ impl LlamafilePlayer {
                     );
                 }
                 Err(e) => {
-                    log::warn!("[{}] attempt {}: API error: {}", self.name, attempt + 1, e,);
+                    log::warn!("[{}] attempt {}: API error: {}", self.name, attempt + 1, e);
                     if attempt < self.max_retries {
-                        // Exponential backoff.
                         let delay = std::time::Duration::from_secs(1 << attempt);
                         tokio::time::sleep(delay).await;
                     }
@@ -305,27 +367,36 @@ impl LlamafilePlayer {
 
     /// Extract an index from tool call arguments, clamped to valid range.
     fn extract_index(args: &serde_json::Value, max: usize) -> usize {
-        args.get("index")
-            .and_then(|v| v.as_u64())
-            .map(|i| (i as usize).min(max.saturating_sub(1)))
-            .unwrap_or(0)
+        match args.get("index").and_then(|v| v.as_u64()) {
+            Some(i) => (i as usize).min(max.saturating_sub(1)),
+            None => {
+                log::warn!(
+                    "LLM returned non-integer index: {:?}, defaulting to 0",
+                    args.get("index")
+                );
+                0
+            }
+        }
     }
 
     /// Parse a resource name string into a Resource enum.
     fn parse_resource(s: &str) -> Resource {
         match s.to_lowercase().as_str() {
-            "wood" => Resource::Wood,
+            "wood" | "lumber" => Resource::Wood,
             "brick" => Resource::Brick,
-            "sheep" => Resource::Sheep,
-            "wheat" => Resource::Wheat,
+            "sheep" | "wool" => Resource::Sheep,
+            "wheat" | "grain" => Resource::Wheat,
             "ore" => Resource::Ore,
-            _ => Resource::Wood, // fallback
+            _ => {
+                log::warn!("LLM returned unknown resource '{}', defaulting to Wood", s);
+                Resource::Wood
+            }
         }
     }
 }
 
 #[async_trait]
-impl Player for LlamafilePlayer {
+impl Player for LlmPlayer {
     fn name(&self) -> &str {
         &self.name
     }
@@ -340,7 +411,6 @@ impl Player for LlamafilePlayer {
         player_id: PlayerId,
         choices: &[PlayerChoice],
     ) -> (usize, String) {
-        let system = self.system_prompt();
         let extra = self.extra_context.lock().await;
         let user = if extra.is_empty() {
             prompt::turn_prompt(state, player_id, choices)
@@ -353,19 +423,18 @@ impl Player for LlamafilePlayer {
                  {extra}\n\n\
                  You are Player {player_id}.\n\n\
                  LEGAL ACTIONS:\n{choices}\n\n\
-                 Choose your action by calling the choose_action tool.",
+                 Choose your action by calling the choose_index tool.",
                 choices = prompt::format_choices(choices),
             )
         };
         let tool = Self::index_tool(choices.len());
 
-        match self.call_with_retry(&system, &user, tool).await {
+        match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
                 let idx = Self::extract_index(&args, choices.len());
                 (idx, reasoning)
             }
             Err(_) => {
-                // Random fallback.
                 use rand::Rng;
                 let idx = rand::rng().random_range(0..choices.len());
                 (idx, "[AI was confused and acted randomly]".into())
@@ -380,14 +449,13 @@ impl Player for LlamafilePlayer {
         legal_vertices: &[VertexCoord],
         round: u8,
     ) -> (usize, String) {
-        let system = self.system_prompt();
         let strategy = self.personality.setup_strategy_text();
         let names: Vec<String> = (0..state.num_players).map(|i| format!("P{}", i)).collect();
         let user = prompt::setup_settlement_prompt(state, player_id, round, legal_vertices, &names);
-        let user = format!("SETUP STRATEGY:\n{strategy}\n\n{user}",);
+        let user = format!("SETUP STRATEGY:\n{strategy}\n\n{user}");
         let tool = Self::index_tool(legal_vertices.len());
 
-        match self.call_with_retry(&system, &user, tool).await {
+        match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
                 let idx = Self::extract_index(&args, legal_vertices.len());
                 (idx, reasoning)
@@ -406,11 +474,10 @@ impl Player for LlamafilePlayer {
         player_id: PlayerId,
         legal_edges: &[EdgeCoord],
     ) -> (usize, String) {
-        let system = self.system_prompt();
         let user = prompt::setup_road_prompt(state, player_id, legal_edges);
         let tool = Self::index_tool(legal_edges.len());
 
-        match self.call_with_retry(&system, &user, tool).await {
+        match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
                 let idx = Self::extract_index(&args, legal_edges.len());
                 (idx, reasoning)
@@ -429,7 +496,6 @@ impl Player for LlamafilePlayer {
         player_id: PlayerId,
         legal_hexes: &[HexCoord],
     ) -> (usize, String) {
-        let system = self.system_prompt();
         let state_json = prompt::game_state_json(state, player_id);
         let hex_list = prompt::format_hex_options(legal_hexes);
         let user = format!(
@@ -439,7 +505,7 @@ impl Player for LlamafilePlayer {
         );
         let tool = Self::index_tool(legal_hexes.len());
 
-        match self.call_with_retry(&system, &user, tool).await {
+        match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
                 let idx = Self::extract_index(&args, legal_hexes.len());
                 (idx, reasoning)
@@ -458,7 +524,6 @@ impl Player for LlamafilePlayer {
         _player_id: PlayerId,
         targets: &[PlayerId],
     ) -> (usize, String) {
-        let system = self.system_prompt();
         let target_list: String = targets
             .iter()
             .enumerate()
@@ -478,7 +543,7 @@ impl Player for LlamafilePlayer {
         );
         let tool = Self::index_tool(targets.len());
 
-        match self.call_with_retry(&system, &user, tool).await {
+        match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
                 let idx = Self::extract_index(&args, targets.len());
                 (idx, reasoning)
@@ -497,7 +562,6 @@ impl Player for LlamafilePlayer {
         player_id: PlayerId,
         count: usize,
     ) -> (Vec<Resource>, String) {
-        let system = self.system_prompt();
         let ps = &state.players[player_id];
         let hand: String = Resource::all()
             .iter()
@@ -514,7 +578,7 @@ impl Player for LlamafilePlayer {
         );
         let tool = Self::discard_tool(count);
 
-        match self.call_with_retry(&system, &user, tool).await {
+        match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
                 if let Some(cards) = args.get("cards").and_then(|v| v.as_array()) {
                     let resources: Vec<Resource> = cards
@@ -522,11 +586,10 @@ impl Player for LlamafilePlayer {
                         .filter_map(|v| v.as_str())
                         .map(Self::parse_resource)
                         .collect();
-                    if resources.len() == count {
+                    if resources.len() == count && validate_discard(ps, &resources) {
                         return (resources, reasoning);
                     }
                 }
-                // Fallback: discard the first `count` resources available.
                 let fallback = fallback_discard(ps, count);
                 (fallback, "[AI discard was invalid, using fallback]".into())
             }
@@ -543,7 +606,6 @@ impl Player for LlamafilePlayer {
         player_id: PlayerId,
         context: &str,
     ) -> (Resource, String) {
-        let system = self.system_prompt();
         let state_json = prompt::game_state_json(state, player_id);
         let user = format!(
             "GAME STATE:\n{state_json}\n\n\
@@ -552,7 +614,7 @@ impl Player for LlamafilePlayer {
         );
         let tool = Self::resource_tool();
 
-        match self.call_with_retry(&system, &user, tool).await {
+        match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
                 let resource = args
                     .get("resource")
@@ -573,7 +635,6 @@ impl Player for LlamafilePlayer {
         state: &GameState,
         player_id: PlayerId,
     ) -> Option<(TradeOffer, String)> {
-        let system = self.system_prompt();
         let state_json = prompt::game_state_json(state, player_id);
         let ps = &state.players[player_id];
         let hand: String = Resource::all()
@@ -592,7 +653,7 @@ impl Player for LlamafilePlayer {
         );
         let tool = Self::propose_trade_tool();
 
-        match self.call_with_retry(&system, &user, tool).await {
+        match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
                 let give_resource = args
                     .get("give_resource")
@@ -639,7 +700,6 @@ impl Player for LlamafilePlayer {
         player_id: PlayerId,
         offer: &TradeOffer,
     ) -> (TradeResponse, String) {
-        let system = self.system_prompt();
         let state_json = prompt::game_state_json(state, player_id);
         let offering: String = offer
             .offering
@@ -664,7 +724,7 @@ impl Player for LlamafilePlayer {
         );
         let tool = Self::trade_response_tool();
 
-        match self.call_with_retry(&system, &user, tool).await {
+        match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
                 let response = match args.get("response").and_then(|v| v.as_str()) {
                     Some("accept") => TradeResponse::Accept,
@@ -688,31 +748,15 @@ impl Player for LlamafilePlayer {
     }
 }
 
-/// The model name used for llamafile players. The `openai::` prefix forces
-/// genai's OpenAI adapter, which speaks the right protocol for llamafile's
-/// OpenAI-compatible API.
-pub const LLAMAFILE_MODEL: &str = "openai::bonsai";
-
-/// Build a genai `Client` that routes all requests to a local llamafile server.
-pub fn llamafile_client(port: u16) -> Client {
-    use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
-    use genai::ServiceTarget;
-
-    let endpoint_url: String = format!("http://127.0.0.1:{}/v1/", port);
-
-    let target_resolver =
-        ServiceTargetResolver::from_resolver_fn(move |service_target: ServiceTarget| {
-            let ServiceTarget { model, .. } = service_target;
-            Ok(ServiceTarget {
-                endpoint: Endpoint::from_owned(endpoint_url.clone()),
-                auth: AuthData::from_single("no-key"),
-                model,
-            })
-        });
-
-    Client::builder()
-        .with_service_target_resolver(target_resolver)
-        .build()
+/// Validate that the player actually holds the resources being discarded.
+fn validate_discard(ps: &crate::game::state::PlayerState, resources: &[Resource]) -> bool {
+    let mut counts = std::collections::HashMap::new();
+    for &r in resources {
+        *counts.entry(r).or_insert(0u32) += 1;
+    }
+    counts
+        .iter()
+        .all(|(r, &needed)| ps.resource_count(*r) >= needed)
 }
 
 /// Fallback discard: drop the most abundant resources first.
@@ -750,33 +794,68 @@ mod tests {
     #[test]
     fn extract_index_valid() {
         let args = json!({"index": 3});
-        assert_eq!(LlamafilePlayer::extract_index(&args, 5), 3);
+        assert_eq!(LlmPlayer::extract_index(&args, 5), 3);
     }
 
     #[test]
     fn extract_index_clamps_to_max() {
         let args = json!({"index": 10});
-        assert_eq!(LlamafilePlayer::extract_index(&args, 5), 4);
+        assert_eq!(LlmPlayer::extract_index(&args, 5), 4);
     }
 
     #[test]
     fn extract_index_missing_defaults_to_zero() {
         let args = json!({"reasoning": "test"});
-        assert_eq!(LlamafilePlayer::extract_index(&args, 5), 0);
+        assert_eq!(LlmPlayer::extract_index(&args, 5), 0);
     }
 
     #[test]
     fn parse_resource_valid() {
-        assert_eq!(LlamafilePlayer::parse_resource("Wood"), Resource::Wood);
-        assert_eq!(LlamafilePlayer::parse_resource("brick"), Resource::Brick);
-        assert_eq!(LlamafilePlayer::parse_resource("SHEEP"), Resource::Sheep);
-        assert_eq!(LlamafilePlayer::parse_resource("Wheat"), Resource::Wheat);
-        assert_eq!(LlamafilePlayer::parse_resource("ore"), Resource::Ore);
+        assert_eq!(LlmPlayer::parse_resource("Wood"), Resource::Wood);
+        assert_eq!(LlmPlayer::parse_resource("brick"), Resource::Brick);
+        assert_eq!(LlmPlayer::parse_resource("SHEEP"), Resource::Sheep);
+        assert_eq!(LlmPlayer::parse_resource("Wheat"), Resource::Wheat);
+        assert_eq!(LlmPlayer::parse_resource("ore"), Resource::Ore);
+    }
+
+    #[test]
+    fn parse_resource_synonyms() {
+        assert_eq!(LlmPlayer::parse_resource("lumber"), Resource::Wood);
+        assert_eq!(LlmPlayer::parse_resource("Wool"), Resource::Sheep);
+        assert_eq!(LlmPlayer::parse_resource("grain"), Resource::Wheat);
     }
 
     #[test]
     fn parse_resource_fallback() {
-        assert_eq!(LlamafilePlayer::parse_resource("invalid"), Resource::Wood);
+        assert_eq!(LlmPlayer::parse_resource("invalid"), Resource::Wood);
+    }
+
+    #[test]
+    fn validate_discard_accepts_valid() {
+        let mut ps = PlayerState::new();
+        ps.add_resource(Resource::Wood, 2);
+        ps.add_resource(Resource::Brick, 3);
+        assert!(validate_discard(
+            &ps,
+            &[Resource::Wood, Resource::Brick, Resource::Brick]
+        ));
+    }
+
+    #[test]
+    fn validate_discard_rejects_insufficient() {
+        let mut ps = PlayerState::new();
+        ps.add_resource(Resource::Wood, 1);
+        ps.add_resource(Resource::Ore, 1);
+        // Trying to discard 2 Wood when we only have 1.
+        assert!(!validate_discard(&ps, &[Resource::Wood, Resource::Wood]));
+    }
+
+    #[test]
+    fn validate_discard_rejects_missing_resource() {
+        let mut ps = PlayerState::new();
+        ps.add_resource(Resource::Wood, 3);
+        // Trying to discard Ore when we have none.
+        assert!(!validate_discard(&ps, &[Resource::Wood, Resource::Ore]));
     }
 
     #[test]
@@ -788,7 +867,6 @@ mod tests {
 
         let discards = fallback_discard(&ps, 3);
         assert_eq!(discards.len(), 3);
-        // Should start with Brick (most abundant).
         assert_eq!(discards[0], Resource::Brick);
     }
 
@@ -812,65 +890,76 @@ mod tests {
     }
 
     #[test]
-    fn index_tool_has_correct_schema() {
-        let tool = LlamafilePlayer::index_tool(5);
-        match &tool.name {
-            genai::chat::ToolName::Custom(s) => assert_eq!(s, "choose_index"),
-            _ => panic!("Expected custom tool name"),
+    fn conversation_trimming() {
+        let mut conv = Conversation::new("system".into());
+        conv.max_history_pairs = 3;
+
+        // Add 5 exchanges (10 messages).
+        for i in 0..5 {
+            conv.record_exchange(
+                Message::user(format!("turn {}", i)),
+                Message::assistant_tool_use(
+                    format!("call-{}", i),
+                    "choose_index",
+                    json!({"index": i}),
+                ),
+            );
+        }
+
+        // Should retain first pair + last 2 pairs = 3 pairs = 6 messages.
+        assert_eq!(conv.messages.len(), 6);
+
+        // First message should be from turn 0.
+        if let ContentBlock::Text { text } = &conv.messages[0].content[0] {
+            assert_eq!(text, "turn 0");
+        }
+
+        // Last user message should be from turn 4.
+        if let ContentBlock::Text { text } = &conv.messages[4].content[0] {
+            assert_eq!(text, "turn 4");
         }
     }
 
     #[test]
-    fn resource_tool_has_correct_schema() {
-        let tool = LlamafilePlayer::resource_tool();
-        match &tool.name {
-            genai::chat::ToolName::Custom(s) => assert_eq!(s, "choose_resource"),
-            _ => panic!("Expected custom tool name"),
-        }
-    }
-
-    #[test]
-    fn discard_tool_has_correct_schema() {
-        let tool = LlamafilePlayer::discard_tool(3);
-        match &tool.name {
-            genai::chat::ToolName::Custom(s) => assert_eq!(s, "choose_discard"),
-            _ => panic!("Expected custom tool name"),
-        }
-    }
-
-    #[test]
-    fn trade_response_tool_has_correct_schema() {
-        let tool = LlamafilePlayer::trade_response_tool();
-        match &tool.name {
-            genai::chat::ToolName::Custom(s) => assert_eq!(s, "respond_to_trade"),
-            _ => panic!("Expected custom tool name"),
-        }
-    }
-
-    #[test]
-    fn propose_trade_tool_has_correct_schema() {
-        let tool = LlamafilePlayer::propose_trade_tool();
-        match &tool.name {
-            genai::chat::ToolName::Custom(s) => assert_eq!(s, "propose_trade"),
-            _ => panic!("Expected custom tool name"),
-        }
-    }
-
-    #[test]
-    fn llamafile_client_builds_without_panic() {
-        let _client = llamafile_client(8080);
-    }
-
-    #[test]
-    fn with_client_constructor_sets_fields() {
-        let client = llamafile_client(8080);
-        let player = LlamafilePlayer::with_client(
-            "Test".into(),
-            LLAMAFILE_MODEL.into(),
-            Personality::default(),
-            client,
+    fn conversation_build_messages_appends_current() {
+        let mut conv = Conversation::new("system".into());
+        conv.record_exchange(
+            Message::user("past"),
+            Message::assistant_tool_use("id", "tool", json!({})),
         );
-        assert_eq!(player.name, "Test");
-        assert_eq!(player.model, LLAMAFILE_MODEL);
+        let current = Message::user("now");
+        let msgs = conv.build_messages(&current);
+        assert_eq!(msgs.len(), 3); // 2 history + 1 current
+    }
+
+    #[test]
+    fn index_tool_schema_valid() {
+        let tool = LlmPlayer::index_tool(5);
+        assert_eq!(tool.name, "choose_index");
+        assert!(tool.input_schema["properties"]["index"].is_object());
+    }
+
+    #[test]
+    fn resource_tool_schema_valid() {
+        let tool = LlmPlayer::resource_tool();
+        assert_eq!(tool.name, "choose_resource");
+    }
+
+    #[test]
+    fn discard_tool_schema_valid() {
+        let tool = LlmPlayer::discard_tool(3);
+        assert_eq!(tool.name, "choose_discard");
+    }
+
+    #[test]
+    fn trade_response_tool_schema_valid() {
+        let tool = LlmPlayer::trade_response_tool();
+        assert_eq!(tool.name, "respond_to_trade");
+    }
+
+    #[test]
+    fn propose_trade_tool_schema_valid() {
+        let tool = LlmPlayer::propose_trade_tool();
+        assert_eq!(tool.name, "propose_trade");
     }
 }

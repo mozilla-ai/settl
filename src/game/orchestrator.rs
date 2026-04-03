@@ -240,12 +240,30 @@ impl GameOrchestrator {
     async fn run_turn(&mut self) -> Result<Option<PlayerId>, OrchestratorError> {
         let player_id = self.state.current_player();
 
-        // Inject recent game history for LLM context (last 20 events).
-        let recent_events = &self.events;
+        // Inject enriched game context for LLM decisions.
+        let strategic =
+            crate::player::prompt::strategic_context(&self.state, player_id, &self.player_names);
+        let trading =
+            crate::player::prompt::trading_summary(&self.events, player_id, &self.player_names);
+        let threat =
+            crate::player::prompt::threat_assessment(&self.state, player_id, &self.player_names);
         let history =
-            crate::player::prompt::format_recent_history(recent_events, &self.player_names, 20);
+            crate::player::prompt::format_recent_history(&self.events, &self.player_names, 20);
+        let mut context = strategic;
+        if !threat.is_empty() {
+            context.push_str("\n\n");
+            context.push_str(&threat);
+        }
+        if !trading.is_empty() {
+            context.push_str("\n\n");
+            context.push_str(&trading);
+        }
+        if !history.is_empty() {
+            context.push_str("\n\n");
+            context.push_str(&history);
+        }
         let _ = self
-            .with_timeout(self.players[player_id].set_game_context(&history), ())
+            .with_timeout(self.players[player_id].set_game_context(&context), ())
             .await;
 
         // Step 0: Pre-roll Knight opportunity.

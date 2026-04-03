@@ -37,7 +37,8 @@ Use `log::debug!()` / `log::info!()` etc. from any module.
 
 ### `player/` -- Player abstraction (async trait)
 - **`mod.rs`** -- `Player` trait with async methods: `choose_action`, `choose_settlement`, `choose_road`, `choose_resource`, `respond_to_trade`, etc. Each returns `(choice, reasoning_string)`.
-- **`llm.rs`** -- `LlmPlayer` uses the `genai` crate for multi-provider LLM support. Defines JSON-schema tools (`choose_index`, `choose_resource`, `discard_tool`, `propose_trade_tool`) for structured responses. Retries up to 2x on parse failure, falls back to random.
+- **`anthropic_client.rs`** -- Thin HTTP client for the Anthropic Messages API (`/v1/messages`). Works with both local llamafile/llama.cpp and real Anthropic API. Includes llamafile-specific extensions (`id_slot`, `cache_prompt`) for KV cache slot management.
+- **`llm_player.rs`** -- `LlmPlayer` talks to the Anthropic Messages API via `anthropic_client`. Maintains per-player conversation history for KV cache efficiency. Defines JSON-schema tools (`choose_index`, `choose_resource`, `choose_discard`, `propose_trade`, `respond_to_trade`) for structured responses. Retries up to 2x on parse failure, falls back to random.
 - **`random.rs`** -- `RandomPlayer` for testing and `--demo` mode.
 - **`human.rs`** -- `HumanPlayer` for raw stdin input (non-TUI).
 - **`tui_human.rs`** -- `TuiHumanPlayer` for TUI mode; communicates with the UI via channels to show a selection overlay.

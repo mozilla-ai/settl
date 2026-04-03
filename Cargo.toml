@@ -19,9 +19,8 @@ clap = { version = "4", features = ["derive"] }
 rand = "0.9"
 crossterm = "0.29"
 toml = "1.0"
-genai = "0.6.0-beta.13"
 async-trait = "0.1.89"
-reqwest = "0.13.2"
+reqwest = { version = "0.13.2", features = ["json"] }
 log = "0.4"
 
 [dev-dependencies]
