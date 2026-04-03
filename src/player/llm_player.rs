@@ -286,7 +286,7 @@ impl LlmPlayer {
             let system_prompt = conversation.system_prompt.clone();
             drop(conversation);
 
-            let mut request = MessagesRequest::new(self.client.model(), 16_000);
+            let mut request = MessagesRequest::new(self.client.model(), 4_096);
             request.system = Some(system_prompt);
             request.messages = messages;
             request.tools = vec![tool.clone()];
