@@ -319,15 +319,8 @@ fn draw_hex_cell(
     }
 
     if let Some(n) = hex.number_token {
-        let is_hot = n == 6 || n == 8;
         let num_str = format!("{:>2}", n);
-        let num_style = if is_hot && is_robber {
-            Style::default().fg(Color::White).bg(fill_bg).bold()
-        } else if is_hot {
-            Style::default().fg(Color::Red).bg(fill_bg).bold()
-        } else {
-            Style::default().fg(fg).bg(fill_bg)
-        };
+        let num_style = Style::default().fg(fg).bg(fill_bg);
         for (i, ch) in num_str.chars().enumerate() {
             set_cell(cx - 1 + i as i16, cy, ch, num_style, area, buf);
         }
@@ -348,23 +341,6 @@ fn draw_hex_cell(
     }
     for dx in -3..=3i16 {
         set_cell(cx + dx, cy + 3, ' ', fill, area, buf);
-    }
-
-    // Probability dots on row cy+1 (per DESIGN.md).
-    if let Some(n) = hex.number_token {
-        let is_hot = n == 6 || n == 8;
-        let dots = board::pip_count(n);
-        if dots > 0 {
-            let dot_style = if is_hot {
-                Style::default().fg(Color::Red).bg(fill_bg).bold()
-            } else {
-                Style::default().fg(Color::DarkGray).bg(fill_bg)
-            };
-            let start = cx - (dots as i16 - 1);
-            for d in 0..dots as i16 {
-                set_cell(start + d * 2, cy + 1, '\u{00b7}', dot_style, area, buf);
-            }
-        }
     }
 }
 
