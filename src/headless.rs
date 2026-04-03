@@ -3,6 +3,8 @@
 
 use clap::Parser;
 
+use std::sync::Arc;
+
 use crate::game;
 use crate::player;
 
@@ -41,7 +43,11 @@ pub async fn run(cli: HeadlessCli) {
     // Start local llamafile AI server.
     // Keep `_process` alive so the llamafile is killed when this function returns.
     let (port, _process) = setup_llamafile_headless().await;
-    let client = player::llamafile_player::llamafile_client(port);
+    let client = player::anthropic_client::AnthropicClient::new(
+        format!("http://127.0.0.1:{}", port),
+        "no-key",
+        player::llm_player::LLAMAFILE_MODEL,
+    );
 
     let custom_personality = cli.personality.as_ref().map(|path| {
         player::personality::Personality::from_toml_file(std::path::Path::new(path)).unwrap_or_else(
@@ -65,11 +71,11 @@ pub async fn run(cli: HeadlessCli) {
             let personality = custom_personality
                 .clone()
                 .unwrap_or_else(|| default_personalities[i % default_personalities.len()].clone());
-            Box::new(player::llamafile_player::LlamafilePlayer::with_client(
+            Box::new(player::llm_player::LlmPlayer::new(
                 name_list[i].into(),
-                player::llamafile_player::LLAMAFILE_MODEL.into(),
+                Arc::clone(&client),
                 personality,
-                client.clone(),
+                Some(i),
             )) as Box<dyn player::Player>
         })
         .collect();

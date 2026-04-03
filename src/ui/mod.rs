@@ -1154,12 +1154,19 @@ fn launch_game(
         None
     };
 
-    // Build a shared llamafile client if any player needs it.
-    let llama_client = llamafile_port.map(player::llamafile_player::llamafile_client);
+    // Build a shared Anthropic client if any player needs it.
+    let llama_client = llamafile_port.map(|port| {
+        player::anthropic_client::AnthropicClient::new(
+            format!("http://127.0.0.1:{}", port),
+            "no-key",
+            player::llm_player::LLAMAFILE_MODEL,
+        )
+    });
 
     let players: Vec<Box<dyn player::Player>> = active_players
         .iter()
-        .map(|pc| match pc.kind {
+        .enumerate()
+        .map(|(slot_id, pc)| match pc.kind {
             PlayerKind::Llamafile => {
                 let personality = if pc.personality_index < built_in_personalities.len() {
                     built_in_personalities[pc.personality_index].clone()
@@ -1173,11 +1180,11 @@ fn launch_game(
                 let client = llama_client
                     .clone()
                     .expect("llamafile client should exist when Llamafile players are used");
-                Box::new(player::llamafile_player::LlamafilePlayer::with_client(
+                Box::new(player::llm_player::LlmPlayer::new(
                     pc.name.clone(),
-                    player::llamafile_player::LLAMAFILE_MODEL.into(),
-                    personality,
                     client,
+                    personality,
+                    Some(slot_id),
                 )) as Box<dyn player::Player>
             }
             PlayerKind::Human => {

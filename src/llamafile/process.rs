@@ -16,7 +16,15 @@ impl LlamafileProcess {
     /// which bypasses the quarantine check since `/bin/sh` is already trusted.
     pub async fn start(llamafile_path: &Path, port: u16) -> Result<Self, String> {
         let port_str = port.to_string();
-        let args = ["--server", "--port", &port_str, "--host", "127.0.0.1"];
+        let args = [
+            "--server",
+            "--port",
+            &port_str,
+            "--host",
+            "127.0.0.1",
+            "--parallel",
+            "4",
+        ];
 
         log::debug!(
             "llamafile::start path={} port={} exists={} os={} arch={}",
@@ -88,7 +96,7 @@ impl LlamafileProcess {
 
         let mut process = Self { child, port };
 
-        let url = format!("http://127.0.0.1:{}/v1/models", port);
+        let url = format!("http://127.0.0.1:{}/health", port);
         let client = reqwest::Client::new();
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(60);
 

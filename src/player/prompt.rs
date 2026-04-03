@@ -481,6 +481,252 @@ pub fn setup_road_prompt(
     )
 }
 
+/// Build a strategic context summary for AI decision-making.
+///
+/// Includes VP standings, longest road/army status, and win path analysis.
+pub fn strategic_context(
+    state: &GameState,
+    player_id: PlayerId,
+    player_names: &[String],
+) -> String {
+    let mut sections = Vec::new();
+
+    // VP standings.
+    let my_vp = state.victory_points(player_id);
+    let mut standings: Vec<(PlayerId, u8, &str)> = (0..state.num_players)
+        .map(|i| {
+            let name = player_names.get(i).map(|s| s.as_str()).unwrap_or("???");
+            (i, state.victory_points(i), name)
+        })
+        .collect();
+    standings.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let leader_vp = standings[0].1;
+    let vp_line: Vec<String> = standings
+        .iter()
+        .map(|(id, vp, name)| {
+            let marker = if *id == player_id { "(you)" } else { "" };
+            let leader_tag = if *vp == leader_vp && *vp > 0 {
+                " [leader]"
+            } else {
+                ""
+            };
+            format!("{}{}: {} VP{}", name, marker, vp, leader_tag)
+        })
+        .collect();
+    sections.push(format!("VICTORY POINT RACE:\n  {}", vp_line.join(" | ")));
+
+    // Longest road status.
+    let my_road = crate::game::rules::longest_road_length(state, player_id);
+    let lr_status = if let Some(holder) = state.longest_road_player {
+        let holder_name = player_names
+            .get(holder)
+            .map(|s| s.as_str())
+            .unwrap_or("???");
+        if holder == player_id {
+            format!(
+                "You hold Longest Road ({} segments, +2 VP).",
+                state.longest_road_length
+            )
+        } else {
+            format!(
+                "{} holds Longest Road ({} segments, +2 VP). Your longest: {} segments. Need {}+ to take it.",
+                holder_name,
+                state.longest_road_length,
+                my_road,
+                state.longest_road_length + 1,
+            )
+        }
+    } else {
+        format!(
+            "No one holds Longest Road yet. Your longest: {} segments. First to 5+ claims it (+2 VP).",
+            my_road,
+        )
+    };
+    sections.push(format!("LONGEST ROAD: {}", lr_status));
+
+    // Largest army status.
+    let my_knights = state.players[player_id].knights_played;
+    let la_status = if let Some(holder) = state.largest_army_player {
+        let holder_name = player_names
+            .get(holder)
+            .map(|s| s.as_str())
+            .unwrap_or("???");
+        if holder == player_id {
+            format!(
+                "You hold Largest Army ({} knights, +2 VP).",
+                state.largest_army_size
+            )
+        } else {
+            format!(
+                "{} holds Largest Army ({} knights, +2 VP). You have {} knights. Need {}+ to take it.",
+                holder_name,
+                state.largest_army_size,
+                my_knights,
+                state.largest_army_size + 1,
+            )
+        }
+    } else {
+        format!(
+            "No one holds Largest Army yet. You have {} knights played. First to 3+ claims it (+2 VP).",
+            my_knights,
+        )
+    };
+    sections.push(format!("LARGEST ARMY: {}", la_status));
+
+    // Win path analysis.
+    let vp_needed = 10_u8.saturating_sub(my_vp);
+    if vp_needed > 0 {
+        let mut paths = Vec::new();
+
+        // Count existing settlements that could become cities.
+        let settlement_count = state
+            .buildings
+            .values()
+            .filter(|b| matches!(b, Building::Settlement(p) if *p == player_id))
+            .count();
+        if settlement_count > 0 {
+            paths.push(format!(
+                "upgrade {} settlement(s) to cities (+1 VP each)",
+                settlement_count
+            ));
+        }
+
+        // Longest road opportunity.
+        if state.longest_road_player != Some(player_id) {
+            paths.push("take Longest Road (+2 VP)".into());
+        }
+        // Largest army opportunity.
+        if state.largest_army_player != Some(player_id) {
+            paths.push("take Largest Army (+2 VP)".into());
+        }
+
+        paths.push("dev card VPs (hidden until winning)".into());
+
+        sections.push(format!(
+            "WIN PATH: You need {} more VP. Options: {}",
+            vp_needed,
+            paths.join(", "),
+        ));
+    }
+
+    sections.join("\n")
+}
+
+/// Build a threat assessment for robber placement and defensive strategy.
+pub fn threat_assessment(
+    state: &GameState,
+    player_id: PlayerId,
+    player_names: &[String],
+) -> String {
+    let mut threats: Vec<(PlayerId, u8, &str)> = (0..state.num_players)
+        .filter(|&i| i != player_id)
+        .map(|i| {
+            let name = player_names.get(i).map(|s| s.as_str()).unwrap_or("???");
+            (i, state.victory_points(i), name)
+        })
+        .collect();
+    threats.sort_by(|a, b| b.1.cmp(&a.1));
+
+    if threats.is_empty() {
+        return String::new();
+    }
+
+    let leader = threats[0];
+    let vp_to_win = 10_u8.saturating_sub(leader.1);
+
+    format!(
+        "THREAT: {} has {} VP ({} from winning). Consider blocking their production.",
+        leader.2, leader.1, vp_to_win,
+    )
+}
+
+/// Summarize recent trading patterns for AI context.
+pub fn trading_summary(
+    events: &[GameEvent],
+    player_id: PlayerId,
+    player_names: &[String],
+) -> String {
+    let name = |p: PlayerId| -> &str { player_names.get(p).map(|s| s.as_str()).unwrap_or("???") };
+
+    // Count trade proposals, acceptances, and rejections involving this player.
+    let mut proposed_to_me = 0u32;
+    let mut accepted_mine = 0u32;
+    let mut rejected_mine = 0u32;
+    let mut my_proposals = 0u32;
+
+    // Track per-player acceptance/rejection rates.
+    let mut player_accepts: Vec<u32> = vec![0; player_names.len()];
+    let mut player_rejects: Vec<u32> = vec![0; player_names.len()];
+
+    let mut current_proposer: Option<PlayerId> = None;
+
+    for event in events {
+        match event {
+            GameEvent::TradeProposed { from, .. } => {
+                if *from == player_id {
+                    my_proposals += 1;
+                } else {
+                    proposed_to_me += 1;
+                }
+                current_proposer = Some(*from);
+            }
+            GameEvent::TradeAccepted { by, .. } => {
+                if current_proposer == Some(player_id) {
+                    accepted_mine += 1;
+                }
+                if *by < player_accepts.len() {
+                    player_accepts[*by] += 1;
+                }
+            }
+            GameEvent::TradeRejected { by, .. } => {
+                if current_proposer == Some(player_id) {
+                    rejected_mine += 1;
+                }
+                if *by < player_rejects.len() {
+                    player_rejects[*by] += 1;
+                }
+            }
+            GameEvent::TradeWithdrawn { .. } | GameEvent::TradeCountered { .. } => {
+                current_proposer = None;
+            }
+            _ => {}
+        }
+    }
+
+    if my_proposals == 0 && proposed_to_me == 0 {
+        return String::new();
+    }
+
+    let mut lines = vec!["TRADE PATTERNS:".to_string()];
+
+    if my_proposals > 0 {
+        lines.push(format!(
+            "  Your trades: {} proposed, {} accepted, {} rejected",
+            my_proposals, accepted_mine, rejected_mine,
+        ));
+    }
+
+    // Per-player trade behavior.
+    for i in 0..player_names.len() {
+        if i == player_id {
+            continue;
+        }
+        let a = player_accepts[i];
+        let r = player_rejects[i];
+        if a + r > 0 {
+            lines.push(format!(
+                "  {}: accepted {} / rejected {} trades",
+                name(i),
+                a,
+                r,
+            ));
+        }
+    }
+
+    lines.join("\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -666,6 +912,121 @@ mod tests {
         assert!(
             prompt.contains("expand="),
             "prompt should contain expansion info"
+        );
+    }
+
+    #[test]
+    fn strategic_context_shows_vp_standings() {
+        let state = GameState::new(Board::default_board(), 3);
+        let names = vec!["Alice".into(), "Bob".into(), "Charlie".into()];
+        let ctx = strategic_context(&state, 0, &names);
+        assert!(
+            ctx.contains("VICTORY POINT RACE:"),
+            "should have VP section"
+        );
+        assert!(ctx.contains("Alice"), "should mention Alice");
+        assert!(ctx.contains("VP"), "should mention VP");
+    }
+
+    #[test]
+    fn strategic_context_shows_longest_road() {
+        let state = GameState::new(Board::default_board(), 3);
+        let names = test_names(3);
+        let ctx = strategic_context(&state, 0, &names);
+        assert!(
+            ctx.contains("LONGEST ROAD:"),
+            "should have longest road section"
+        );
+        assert!(
+            ctx.contains("No one holds Longest Road"),
+            "should say no one holds it: {}",
+            ctx,
+        );
+    }
+
+    #[test]
+    fn strategic_context_shows_largest_army() {
+        let state = GameState::new(Board::default_board(), 3);
+        let names = test_names(3);
+        let ctx = strategic_context(&state, 0, &names);
+        assert!(
+            ctx.contains("LARGEST ARMY:"),
+            "should have largest army section"
+        );
+    }
+
+    #[test]
+    fn strategic_context_shows_win_path() {
+        let state = GameState::new(Board::default_board(), 3);
+        let names = test_names(3);
+        let ctx = strategic_context(&state, 0, &names);
+        assert!(ctx.contains("WIN PATH:"), "should have win path section");
+        assert!(
+            ctx.contains("10 more VP"),
+            "should say 10 VP needed at start"
+        );
+    }
+
+    #[test]
+    fn threat_assessment_identifies_leader() {
+        let mut state = GameState::new(Board::default_board(), 3);
+        let names = vec!["Alice".into(), "Bob".into(), "Charlie".into()];
+        // Give Bob some buildings so he has VP.
+        let v = crate::game::board::VertexCoord::new(
+            crate::game::board::HexCoord::new(0, -2),
+            crate::game::board::VertexDirection::North,
+        );
+        state.buildings.insert(v, Building::Settlement(1));
+        let threat = threat_assessment(&state, 0, &names);
+        assert!(
+            threat.contains("Bob"),
+            "should identify Bob as threat: {}",
+            threat,
+        );
+        assert!(
+            threat.contains("from winning"),
+            "should mention VP to win: {}",
+            threat,
+        );
+    }
+
+    #[test]
+    fn trading_summary_empty_when_no_trades() {
+        let events = vec![];
+        let names = test_names(3);
+        let summary = trading_summary(&events, 0, &names);
+        assert!(summary.is_empty(), "should be empty with no trades");
+    }
+
+    #[test]
+    fn trading_summary_counts_proposals() {
+        let events = vec![
+            GameEvent::TradeProposed {
+                from: 0,
+                offer: crate::game::actions::TradeOffer {
+                    from: 0,
+                    offering: vec![(board::Resource::Wood, 1)],
+                    requesting: vec![(board::Resource::Brick, 1)],
+                    message: String::new(),
+                },
+                reasoning: "test".into(),
+            },
+            GameEvent::TradeAccepted {
+                by: 1,
+                reasoning: "ok".into(),
+            },
+        ];
+        let names = test_names(3);
+        let summary = trading_summary(&events, 0, &names);
+        assert!(
+            summary.contains("1 proposed"),
+            "should count 1 proposal: {}",
+            summary,
+        );
+        assert!(
+            summary.contains("1 accepted"),
+            "should count 1 acceptance: {}",
+            summary,
         );
     }
 }

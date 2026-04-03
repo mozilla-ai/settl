@@ -1,6 +1,7 @@
+pub mod anthropic_client;
 #[cfg(test)]
 pub mod human;
-pub mod llamafile_player;
+pub mod llm_player;
 pub mod personality;
 pub mod prompt;
 #[cfg(test)]
