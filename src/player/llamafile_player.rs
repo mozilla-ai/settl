@@ -382,7 +382,8 @@ impl Player for LlamafilePlayer {
     ) -> (usize, String) {
         let system = self.system_prompt();
         let strategy = self.personality.setup_strategy_text();
-        let user = prompt::setup_settlement_prompt(state, player_id, round, legal_vertices);
+        let names: Vec<String> = (0..state.num_players).map(|i| format!("P{}", i)).collect();
+        let user = prompt::setup_settlement_prompt(state, player_id, round, legal_vertices, &names);
         let user = format!("SETUP STRATEGY:\n{strategy}\n\n{user}",);
         let tool = Self::index_tool(legal_vertices.len());
 

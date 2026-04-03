@@ -258,22 +258,30 @@ pub fn turn_prompt_with_history(
     )
 }
 
-/// Annotate a single vertex with adjacent resources, pip total, and port info.
+/// Annotate a single vertex with resources, pips, port, and spatial context.
 ///
-/// Format: `0. (0,-2,N) | Ore(10), Sheep(2), Wood(9) | pips=8`
-/// Or with port: `1. (2,-2,N) | Wheat(9), Brick(6) | pips=9 | 2:1 Wheat port`
-pub fn annotate_vertex(index: usize, v: &VertexCoord, board: &Board) -> String {
+/// Includes opponent proximity, shared production hexes, and expansion potential
+/// so the LLM can reason about spatial relationships, not just resource quality.
+pub fn annotate_vertex(
+    index: usize,
+    v: &VertexCoord,
+    state: &GameState,
+    player_id: PlayerId,
+    player_names: &[String],
+) -> String {
+    let board = &state.board;
     let dir = match v.dir {
         VertexDirection::North => "N",
         VertexDirection::South => "S",
     };
 
+    // Resource and pip info.
     let adj_hexes = board::vertex_neighbors(*v);
     let mut resources = Vec::new();
     let mut total_pips: u8 = 0;
 
-    for hex_coord in adj_hexes {
-        if let Some(hex) = board.get_hex(hex_coord) {
+    for hex_coord in &adj_hexes {
+        if let Some(hex) = board.get_hex(*hex_coord) {
             if let Some(resource) = hex.terrain.resource() {
                 let token = hex.number_token.unwrap_or(0);
                 let pips = board::pip_count(token);
@@ -289,6 +297,7 @@ pub fn annotate_vertex(index: usize, v: &VertexCoord, board: &Board) -> String {
         resources.join(", ")
     };
 
+    // Port info.
     let port_str = if let Some(port) = board.port_at_vertex(*v) {
         match port.port_type {
             PortType::Generic => " | 3:1 port".to_string(),
@@ -298,8 +307,89 @@ pub fn annotate_vertex(index: usize, v: &VertexCoord, board: &Board) -> String {
         String::new()
     };
 
+    // Spatial context: opponents on shared hexes.
+    let mut opponents_nearby: Vec<String> = Vec::new();
+    for hex_coord in &adj_hexes {
+        if !board::is_board_hex(*hex_coord) {
+            continue;
+        }
+        let hex_verts = board::hex_vertices(*hex_coord);
+        for hv in &hex_verts {
+            if hv == v {
+                continue;
+            }
+            if let Some(building) = state.buildings.get(hv) {
+                let owner = match building {
+                    Building::Settlement(p) | Building::City(p) => *p,
+                };
+                if owner != player_id {
+                    let name = player_names
+                        .get(owner)
+                        .cloned()
+                        .unwrap_or_else(|| format!("P{}", owner));
+                    opponents_nearby.push(name);
+                }
+            }
+        }
+    }
+    opponents_nearby.sort();
+    opponents_nearby.dedup();
+
+    let opponent_str = if opponents_nearby.is_empty() {
+        String::new()
+    } else {
+        format!(" | near: {}", opponents_nearby.join(", "))
+    };
+
+    // Expansion potential: how many adjacent vertices are open (no building,
+    // no building on *their* neighbors either = satisfies distance rule).
+    let adj_verts = board::adjacent_vertices(*v);
+    let open_count = adj_verts
+        .iter()
+        .filter(|av| {
+            // Must be on the board (at least one adjacent hex exists).
+            let av_hexes = board::vertex_neighbors(**av);
+            let on_board = av_hexes.iter().any(|h| board::is_board_hex(*h));
+            if !on_board {
+                return false;
+            }
+            // Must not already have a building.
+            if state.buildings.contains_key(av) {
+                return false;
+            }
+            // Must satisfy distance rule (no building on *its* neighbors).
+            let av_neighbors = board::adjacent_vertices(**av);
+            !av_neighbors
+                .iter()
+                .any(|n| n != v && state.buildings.contains_key(n))
+        })
+        .count();
+
+    // Your existing buildings (for round 2 context).
+    let your_buildings: Vec<String> = state
+        .buildings
+        .iter()
+        .filter(|(_, b)| match b {
+            Building::Settlement(p) | Building::City(p) => *p == player_id,
+        })
+        .map(|(bv, _)| {
+            let d = match bv.dir {
+                VertexDirection::North => "N",
+                VertexDirection::South => "S",
+            };
+            format!("({},{},{})", bv.hex.q, bv.hex.r, d)
+        })
+        .collect();
+
+    let your_str = if your_buildings.is_empty() {
+        String::new()
+    } else {
+        format!(" | your settlements: {}", your_buildings.join(", "))
+    };
+
     format!(
-        "  {index}. ({},{},{dir}) | {resources_str} | pips={total_pips}{port_str}",
+        "  {index}. ({},{},{dir}) | {resources_str} | pips={total_pips} | \
+         expand={open_count}{port_str}{opponent_str}{your_str}",
         v.hex.q, v.hex.r,
     )
 }
@@ -310,13 +400,14 @@ pub fn setup_settlement_prompt(
     player_id: PlayerId,
     round: u8,
     legal_vertices: &[VertexCoord],
+    player_names: &[String],
 ) -> String {
     let board_ascii = ascii_board(&state.board);
 
     let vertex_list: String = legal_vertices
         .iter()
         .enumerate()
-        .map(|(i, v)| annotate_vertex(i, v, &state.board))
+        .map(|(i, v)| annotate_vertex(i, v, state, player_id, player_names))
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -325,8 +416,9 @@ pub fn setup_settlement_prompt(
          SETUP PHASE -- Round {round}\n\
          You are Player {player_id}. Place your settlement.\n\
          {round_hint}\n\n\
-         VERTEX FORMAT: index. (q,r,dir) | Resource(number_token), ... | pips=total_probability_dots | port_info\n\
-         Higher pips = more likely to produce. Max is 5 (for 6 and 8).\n\n\
+         VERTEX KEY: index. (q,r,dir) | resources | pips=probability | expand=open_adjacent_spots | port | nearby_opponents | your_buildings\n\
+         - pips: total probability dots (higher=more production, max 5 per hex for 6/8)\n\
+         - expand: number of adjacent vertices where you could later build (satisfying distance rule)\n\n\
          LEGAL SETTLEMENT LOCATIONS:\n{vertex_list}\n\n\
          Choose by calling the choose_index tool.",
         round_hint = if round == 2 {
@@ -404,16 +496,21 @@ mod tests {
         assert!(formatted.contains("1. Play Knight"));
     }
 
+    fn test_names(n: usize) -> Vec<String> {
+        (0..n).map(|i| format!("P{}", i)).collect()
+    }
+
     #[test]
     fn annotate_vertex_shows_resources_and_pips() {
-        let board = Board::default_board();
+        let state = GameState::new(Board::default_board(), 3);
+        let names = test_names(3);
         // North vertex of (0,-2): adjacent to hexes (0,-2), (0,-3), (1,-3).
         // Only (0,-2) is on the board (Mountains/10). The others are off-board.
         let v = crate::game::board::VertexCoord::new(
             crate::game::board::HexCoord::new(0, -2),
             crate::game::board::VertexDirection::North,
         );
-        let annotation = annotate_vertex(0, &v, &board);
+        let annotation = annotate_vertex(0, &v, &state, 0, &names);
         assert!(
             annotation.contains("Ore(10)"),
             "should list Ore(10): {}",
@@ -424,17 +521,23 @@ mod tests {
             "should show pip count: {}",
             annotation
         );
+        assert!(
+            annotation.contains("expand="),
+            "should show expansion potential: {}",
+            annotation
+        );
     }
 
     #[test]
     fn annotate_vertex_shows_port() {
-        let board = Board::default_board();
+        let state = GameState::new(Board::default_board(), 3);
+        let names = test_names(3);
         // North vertex of (2,-2) has a 2:1 Wheat port.
         let v = crate::game::board::VertexCoord::new(
             crate::game::board::HexCoord::new(2, -2),
             crate::game::board::VertexDirection::North,
         );
-        let annotation = annotate_vertex(0, &v, &board);
+        let annotation = annotate_vertex(0, &v, &state, 0, &names);
         assert!(
             annotation.contains("2:1 Wheat port"),
             "should show wheat port: {}",
@@ -443,22 +546,21 @@ mod tests {
     }
 
     #[test]
-    fn annotate_vertex_interior_has_three_resources() {
-        let board = Board::default_board();
+    fn annotate_vertex_interior_no_port() {
+        let state = GameState::new(Board::default_board(), 3);
+        let names = test_names(3);
         // South vertex of (0,-1): adjacent to (0,-1), (0,0), (-1,0).
         // (0,-1) = Fields/12, (0,0) = Desert, (-1,0) = Fields/11
         let v = crate::game::board::VertexCoord::new(
             crate::game::board::HexCoord::new(0, -1),
             crate::game::board::VertexDirection::South,
         );
-        let annotation = annotate_vertex(0, &v, &board);
-        // Should have 2 resource entries (desert produces nothing).
+        let annotation = annotate_vertex(0, &v, &state, 0, &names);
         assert!(
             annotation.contains("Wheat"),
             "should contain Wheat: {}",
             annotation
         );
-        // Should not mention port for interior vertex.
         assert!(
             !annotation.contains("port"),
             "interior vertex should have no port: {}",
@@ -467,17 +569,75 @@ mod tests {
     }
 
     #[test]
+    fn annotate_vertex_shows_opponent_nearby() {
+        let mut state = GameState::new(Board::default_board(), 3);
+        let names = vec!["Alice".into(), "Bob".into(), "Charlie".into()];
+        // Place Bob's settlement at North(0,-2) -- on the Mountains(10) hex.
+        let bob_v = crate::game::board::VertexCoord::new(
+            crate::game::board::HexCoord::new(0, -2),
+            crate::game::board::VertexDirection::North,
+        );
+        state.buildings.insert(bob_v, Building::Settlement(1));
+
+        // South vertex of (1,-2) also touches hex (0,-2), so Bob is nearby.
+        let v = crate::game::board::VertexCoord::new(
+            crate::game::board::HexCoord::new(1, -3),
+            crate::game::board::VertexDirection::South,
+        );
+        let annotation = annotate_vertex(0, &v, &state, 0, &names);
+        assert!(
+            annotation.contains("near: Bob"),
+            "should show Bob nearby: {}",
+            annotation
+        );
+    }
+
+    #[test]
+    fn annotate_vertex_shows_own_buildings_in_round2() {
+        let mut state = GameState::new(Board::default_board(), 3);
+        let names = test_names(3);
+        // Place player 0's first settlement.
+        let my_v = crate::game::board::VertexCoord::new(
+            crate::game::board::HexCoord::new(0, -2),
+            crate::game::board::VertexDirection::North,
+        );
+        state.buildings.insert(my_v, Building::Settlement(0));
+
+        // Any other vertex should show "your settlements: (0,-2,N)".
+        let v = crate::game::board::VertexCoord::new(
+            crate::game::board::HexCoord::new(-2, 2),
+            crate::game::board::VertexDirection::South,
+        );
+        let annotation = annotate_vertex(0, &v, &state, 0, &names);
+        assert!(
+            annotation.contains("your settlements:"),
+            "should show own buildings: {}",
+            annotation
+        );
+        assert!(
+            annotation.contains("(0,-2,N)"),
+            "should reference first settlement coords: {}",
+            annotation
+        );
+    }
+
+    #[test]
     fn setup_settlement_prompt_contains_annotation_legend() {
         let state = GameState::new(Board::default_board(), 3);
+        let names = test_names(3);
         let legal = crate::game::rules::legal_setup_vertices(&state);
-        let prompt = setup_settlement_prompt(&state, 0, 1, &legal);
+        let prompt = setup_settlement_prompt(&state, 0, 1, &legal, &names);
         assert!(
             prompt.contains("pips="),
             "prompt should contain pip annotations"
         );
         assert!(
-            prompt.contains("VERTEX FORMAT:"),
+            prompt.contains("VERTEX KEY:"),
             "prompt should contain legend"
+        );
+        assert!(
+            prompt.contains("expand="),
+            "prompt should contain expansion info"
         );
     }
 }
