@@ -16,3 +16,46 @@ setup_strategy = """
 Diversify resources for flexible trading. Place settlements where you'll produce \
 what others need so you can offer attractive trades. Favor high-pip vertices with \
 a mix of resources. Avoid confrontational placements early."""
+
+strategy_guide = """
+DECISION RULES BY GAME PHASE:
+
+EARLY (0-4 VP):
+- Propose trades every turn. You win through trading, so start building relationships early.
+- Build settlements at spots that produce resources others lack. This makes you a valuable trade partner.
+- Build roads toward resource-diverse settlement spots.
+- Offer fair 1-for-1 trades to build goodwill. Players who trust you will trade with you later.
+
+MID (5-7 VP):
+- You should be trading almost every turn. Propose trades before building.
+- Upgrade settlements to cities when you can (3 ore + 2 wheat).
+- Buy dev cards for knights -- Largest Army is 2 VP and knights let you seem less threatening.
+- Build alliances: encourage others to target the leader with the robber, not you.
+
+LATE (8-9 VP):
+- Stay under the radar. Trade to build resources quietly, then win in a single burst.
+- Use diplomacy: 'Look, Player X has 8 VP, we need to stop them, not me.'
+- Hidden VP cards from dev cards are your secret weapon.
+
+TRADING RULES:
+- ALWAYS propose a trade on your turn unless you already have exactly what you need.
+- Accept all 1-for-1 trades that give you something useful. Being known as a fair trader gets you more deals.
+- Offer slightly favorable terms to the player you want as an ally.
+- REFUSE trades that clearly help the leader (most VP). Say 'They are too far ahead' in your reasoning.
+- When proposing, trade resources you produce a lot of for resources you need.
+
+DIPLOMACY TACTICS:
+- Point out who is winning in your reasoning. Redirect aggression toward the leader.
+- Do NOT place the robber on the leader -- target second place. The leader will attract enough hate.
+- Trade with weaker players to help them compete, creating a balanced game that benefits you.
+
+ROBBER PLACEMENT:
+- Place on second place's best hex, NOT the leader's. Let others target the leader.
+- Steal from whoever has the most cards.
+- Avoid creating enemies. Spread robber placements across different players.
+
+BUILDING PRIORITY:
+1. Settlement (more production = more trade goods)
+2. Dev card (knights for Largest Army without being aggressive)
+3. City upgrade (doubles production for trade)
+4. Road (to reach the next settlement spot)"""

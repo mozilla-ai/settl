@@ -413,6 +413,60 @@ pub fn annotate_vertex(
     )
 }
 
+/// Score a vertex for settlement quality.
+///
+/// Higher is better. Factors: pip count, resource diversity, expansion
+/// potential, and port bonus. Used to pre-filter options for small models.
+pub fn score_vertex(v: &VertexCoord, state: &GameState) -> i32 {
+    let board = &state.board;
+    let adj_hexes = board::vertex_neighbors(*v);
+
+    let mut total_pips: i32 = 0;
+    let mut distinct_resources = std::collections::HashSet::new();
+
+    for hex_coord in &adj_hexes {
+        if let Some(hex) = board.get_hex(*hex_coord) {
+            if let Some(resource) = hex.terrain.resource() {
+                let token = hex.number_token.unwrap_or(0);
+                total_pips += board::pip_count(token) as i32;
+                distinct_resources.insert(resource);
+            }
+        }
+    }
+
+    // Expansion potential: open adjacent vertices satisfying distance rule.
+    let adj_verts = board::adjacent_vertices(*v);
+    let expand = adj_verts
+        .iter()
+        .filter(|av| {
+            let av_hexes = board::vertex_neighbors(**av);
+            let on_board = av_hexes.iter().any(|h| board::is_board_hex(*h));
+            if !on_board {
+                return false;
+            }
+            if state.buildings.contains_key(av) {
+                return false;
+            }
+            let av_neighbors = board::adjacent_vertices(**av);
+            !av_neighbors
+                .iter()
+                .any(|n| n != v && state.buildings.contains_key(n))
+        })
+        .count() as i32;
+
+    // Port bonus.
+    let port_bonus = match board.port_at_vertex(*v) {
+        Some(port) => match port.port_type {
+            PortType::Specific(_) => 3,
+            PortType::Generic => 1,
+        },
+        None => 0,
+    };
+
+    // Weighted score: pips matter most, then diversity, then expansion.
+    total_pips * 3 + distinct_resources.len() as i32 * 4 + expand * 2 + port_bonus
+}
+
 /// Build a prompt for settlement placement during setup.
 pub fn setup_settlement_prompt(
     state: &GameState,
@@ -1027,6 +1081,41 @@ mod tests {
             summary.contains("1 accepted"),
             "should count 1 acceptance: {}",
             summary,
+        );
+    }
+
+    #[test]
+    fn score_vertex_prefers_high_pips_and_diversity() {
+        let board = Board::default_board();
+        let state = GameState::new(board, 2);
+
+        // Use setup vertices (no roads required on empty board).
+        let vertices = crate::game::rules::legal_setup_vertices(&state);
+        let mut scored: Vec<(VertexCoord, i32)> = vertices
+            .iter()
+            .map(|v| (*v, score_vertex(v, &state)))
+            .collect();
+        scored.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // Top-scored vertex should have high pips (>= 9).
+        let (top_v, top_score) = &scored[0];
+        let adj = board::vertex_neighbors(*top_v);
+        let pips: u8 = adj
+            .iter()
+            .filter_map(|h| state.board.get_hex(*h))
+            .filter_map(|h| h.number_token)
+            .map(board::pip_count)
+            .sum();
+        assert!(pips >= 9, "top vertex should have >= 9 pips, got {}", pips);
+        assert!(*top_score > 0, "score should be positive");
+
+        // Bottom-scored vertex should have fewer pips than the top.
+        let (_, bottom_score) = scored.last().unwrap();
+        assert!(
+            top_score > bottom_score,
+            "top score {} should exceed bottom {}",
+            top_score,
+            bottom_score,
         );
     }
 }

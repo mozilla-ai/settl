@@ -382,6 +382,38 @@ impl LlmPlayer {
         }
     }
 
+    /// Pre-filter vertices to the top `max` candidates by heuristic score.
+    ///
+    /// Returns the filtered vertex list and a mapping from filtered indices
+    /// back to original indices in `legal_vertices`.
+    fn filter_top_vertices(
+        state: &GameState,
+        legal_vertices: &[VertexCoord],
+        max: usize,
+    ) -> (Vec<VertexCoord>, Vec<usize>) {
+        if legal_vertices.len() <= max {
+            let map: Vec<usize> = (0..legal_vertices.len()).collect();
+            return (legal_vertices.to_vec(), map);
+        }
+
+        // Score each vertex and sort by score descending.
+        let mut scored: Vec<(usize, i32)> = legal_vertices
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (i, prompt::score_vertex(v, state)))
+            .collect();
+        scored.sort_by(|a, b| b.1.cmp(&a.1));
+        scored.truncate(max);
+
+        // Preserve original ordering within the top set so indices feel natural.
+        scored.sort_by_key(|(i, _)| *i);
+
+        let filtered: Vec<VertexCoord> = scored.iter().map(|(i, _)| legal_vertices[*i]).collect();
+        let index_map: Vec<usize> = scored.iter().map(|(i, _)| *i).collect();
+
+        (filtered, index_map)
+    }
+
     /// Parse a resource name string into a Resource enum.
     fn parse_resource(s: &str) -> Resource {
         match s.to_lowercase().as_str() {
@@ -454,21 +486,36 @@ impl Player for LlmPlayer {
         round: u8,
         player_names: &[String],
     ) -> (usize, String) {
+        // Pre-filter to top candidates by heuristic score.
+        // Small models choke on 50+ options; showing only the best ones
+        // makes the choice tractable.
+        const MAX_OPTIONS: usize = 8;
+        let (filtered_vertices, index_map) =
+            Self::filter_top_vertices(state, legal_vertices, MAX_OPTIONS);
+
         let strategy = self.personality.setup_strategy_text();
-        let user =
-            prompt::setup_settlement_prompt(state, player_id, round, legal_vertices, player_names);
+        let user = prompt::setup_settlement_prompt(
+            state,
+            player_id,
+            round,
+            &filtered_vertices,
+            player_names,
+        );
         let user = format!("SETUP STRATEGY:\n{strategy}\n\n{user}");
-        let tool = Self::index_tool(legal_vertices.len());
+        let tool = Self::index_tool(filtered_vertices.len());
 
         match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
-                let idx = Self::extract_index(&args, legal_vertices.len());
-                (idx, reasoning)
+                let filtered_idx = Self::extract_index(&args, filtered_vertices.len());
+                let original_idx = index_map[filtered_idx];
+                (original_idx, reasoning)
             }
             Err(_) => {
+                // Random fallback still picks from the filtered (good) set.
                 use rand::Rng;
-                let idx = rand::rng().random_range(0..legal_vertices.len());
-                (idx, "[AI was confused and acted randomly]".into())
+                let filtered_idx = rand::rng().random_range(0..filtered_vertices.len());
+                let original_idx = index_map[filtered_idx];
+                (original_idx, "[AI was confused and acted randomly]".into())
             }
         }
     }
@@ -802,6 +849,7 @@ pub(crate) fn fallback_discard(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::game::board::{HexCoord, VertexCoord, VertexDirection};
     use crate::game::state::PlayerState;
     use serde_json::json;
 
@@ -975,5 +1023,57 @@ mod tests {
     fn propose_trade_tool_schema_valid() {
         let tool = LlmPlayer::propose_trade_tool();
         assert_eq!(tool.name, "propose_trade");
+    }
+
+    #[test]
+    fn filter_top_vertices_returns_all_when_under_max() {
+        let board = crate::game::board::Board::default_board();
+        let state = GameState::new(board, 2);
+        let vertices: Vec<VertexCoord> = vec![
+            VertexCoord::new(HexCoord::new(0, 0), VertexDirection::North),
+            VertexCoord::new(HexCoord::new(1, 0), VertexDirection::South),
+        ];
+        let (filtered, map) = LlmPlayer::filter_top_vertices(&state, &vertices, 10);
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(map, vec![0, 1]);
+    }
+
+    #[test]
+    fn filter_top_vertices_selects_best() {
+        let board = crate::game::board::Board::default_board();
+        let state = GameState::new(board, 2);
+        let all_vertices = crate::game::rules::legal_setup_vertices(&state);
+        assert!(
+            all_vertices.len() > 10,
+            "should have many vertices on empty board"
+        );
+
+        let (filtered, map) = LlmPlayer::filter_top_vertices(&state, &all_vertices, 5);
+        assert_eq!(filtered.len(), 5);
+        assert_eq!(map.len(), 5);
+
+        // All returned indices should be valid.
+        for &idx in &map {
+            assert!(idx < all_vertices.len());
+        }
+
+        // Filtered vertices should all be high quality (score >= median).
+        let scores: Vec<i32> = all_vertices
+            .iter()
+            .map(|v| prompt::score_vertex(v, &state))
+            .collect();
+        let mut sorted_scores = scores.clone();
+        sorted_scores.sort();
+        let median = sorted_scores[sorted_scores.len() / 2];
+
+        for &idx in &map {
+            assert!(
+                scores[idx] >= median,
+                "filtered vertex {} (score {}) should be above median ({})",
+                idx,
+                scores[idx],
+                median,
+            );
+        }
     }
 }

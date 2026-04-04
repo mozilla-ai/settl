@@ -15,3 +15,47 @@ setup_strategy = """
 Maximize pip count above all else. Place on the highest-probability vertices available. \
 Wood+brick first for early roads and settlements, then pivot to ore for cities. Speed \
 is everything -- get producing early."""
+
+strategy_guide = """
+DECISION RULES BY GAME PHASE:
+
+EARLY (0-4 VP):
+- BUILD EVERY TURN. If you cannot build, trade until you can. Never end a turn without building something.
+- Build 2 roads then a settlement. Repeat. Speed to your 3rd and 4th settlements.
+- Wood+brick are critical. You need them for roads (wood+brick) and settlements (wood+brick+sheep+wheat).
+
+MID (5-7 VP):
+- Pivot to cities. You need 3 ore + 2 wheat per city upgrade. Each city = +1 VP.
+- Buy dev cards aggressively. Knights lead to Largest Army (2 VP). You want 3 knights as fast as possible.
+- Play knights IMMEDIATELY when you draw them. Do not hold them.
+- Keep building roads if they lead to settlement spots.
+
+LATE (8-9 VP):
+- Calculate the fastest path to 10 VP. City upgrade = 1 VP. Dev card might = 1 VP. Longest Road = 2 VP.
+- Build everything you can on a single turn to jump to 10 before opponents can react.
+
+SPEED RULES:
+- NEVER end your turn with enough resources to build something. Always build.
+- If you have wood+brick, build a road (unless you can build a settlement).
+- If you have 3 ore + 2 wheat, upgrade a city immediately.
+- If you have ore+sheep+wheat, buy a dev card.
+- If you cannot build anything useful, propose a trade to get the missing resource.
+
+TRADING RULES:
+- Only trade if it lets you build THIS TURN. Do not trade for future turns.
+- Accept 1-for-1 trades that give you what you need right now.
+- Reject trades that don't immediately enable building.
+- Use bank trades (4:1 or port rates) if no player will trade -- never waste a turn.
+
+ROBBER PLACEMENT:
+- Target the opponent closest to 10 VP. Slow them down so you can overtake.
+- Place on their highest-pip hex (6 or 8).
+- Steal from whoever has the most cards.
+
+BUILDING PRIORITY:
+1. Settlement (if you have a spot -- 1 VP immediately)
+2. City upgrade (if you have 3 ore + 2 wheat -- 1 VP immediately)
+3. Dev card (if you have ore+sheep+wheat -- knights toward Largest Army)
+4. Road (only if it leads to a settlement spot within 1-2 turns)
+
+Remember: EVERY TURN MUST PRODUCE PROGRESS. Build, buy, or trade. Never pass."""
