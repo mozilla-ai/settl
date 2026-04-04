@@ -72,7 +72,13 @@ fn compute_layout(size: Rect) -> PlayingLayout {
 /// Everything except the board area -- shared between text and pixel paths.
 fn draw_panels(f: &mut Frame, ps: &PlayingState, layout: &PlayingLayout) {
     if let Some(state) = &ps.state {
-        resource_bar::render_players(state, &ps.player_names, layout.players, f.buffer_mut());
+        resource_bar::render_players(
+            state,
+            &ps.player_names,
+            ps.human_player_index,
+            layout.players,
+            f.buffer_mut(),
+        );
     } else {
         let no_players = Paragraph::new("").block(
             Block::default()

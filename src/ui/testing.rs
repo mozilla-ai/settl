@@ -110,6 +110,7 @@ pub fn make_test_playing_state(
     ps.hex_grid = Some(HexGrid::new());
     ps.input_mode = input_mode;
     ps.human_response_tx = Some(response_tx);
+    ps.human_player_index = Some(0);
 
     (ps, response_rx)
 }

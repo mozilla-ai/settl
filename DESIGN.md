@@ -71,13 +71,13 @@ Full resource names displayed on hex tiles (what the terrain produces, not terra
 Code uses `Light` variants for buildings/roads via `PLAYER_COLORS` constant. Standard variants for text labels in player panel.
 
 ### Resource Colors (in player panel and trade UI)
-| Resource | Color | Label |
-|----------|-------|-------|
-| Wood | Green | `W` |
-| Brick | Red | `B` |
-| Sheep | Light green | `S` |
-| Wheat | Yellow | `H` (harvest) |
-| Ore | Gray | `O` |
+| Resource | Color | Panel Label | Key |
+|----------|-------|-------------|-----|
+| Wood | Green | `Wood` | `w` |
+| Brick | Red | `Brick` | `b` |
+| Sheep | Light green | `Sheep` | `s` |
+| Wheat | Yellow | `Wheat` | `h` (harvest) |
+| Ore | Gray | `Ore` | `o` |
 
 ### UI Chrome
 | Element | Color | Purpose |
@@ -386,15 +386,16 @@ Two keys. Fast response keeps the game moving.
 ### Player Panel Layout
 ```
  ▸ Alice        7VP
-   W:2 B:1 S:0 H:3 O:2
+   Wood:2 Brick:1 Sheep:0
+   Wheat:3 Ore:2
    Dev:3 Kn:2  ★LR
 
    Bob          5VP
-   W:0 B:2 S:1 H:1 O:0
+   Cards: 4
    Dev:1
 
    Carol        4VP
-   W:1 B:0 S:2 H:0 O:1
+   Cards: 3
    Kn:1
 
  Turn 15 | Playing
@@ -404,8 +405,10 @@ Two keys. Fast response keeps the game moving.
 - `▸` marks current player (bright color)
 - VP in bold, yellow if >= 8
 - `★LR` = Longest Road, `★LA` = Largest Army (yellow bold)
+- Human player sees own resources with full names across two lines
+- Opponents show only total card count (resources are hidden)
+- In spectator mode (all AI), all players show full resources
 - Resources colored per resource type
-- Compact: 3 lines per player max
 
 ## Decisions Log
 | Date | Decision | Rationale |

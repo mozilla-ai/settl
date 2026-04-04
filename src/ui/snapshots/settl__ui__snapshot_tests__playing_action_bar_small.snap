@@ -1,24 +1,25 @@
 ---
 source: src/ui/snapshot_tests.rs
+assertion_line: 204
 expression: buffer_to_string(&buf)
 ---
 ┌ Board ─────────────────────────────────┐┌ Players ───────────────────────────┐
 │                                        ││▸Alice 0VP                          │
-│                                        ││  W:0 B:0 S:0 H:0 O:0               │
-│                                        ││                                    │
-│                                *       ││ Bob 0VP                            │
-│                                        ││  W:0 B:0 S:0 H:0 O:0               │
-│                             ╱     ╲    ││                                    │
-│                           ╱         ╲  ││ Charlie 0VP                        │
-│                         ╱             ╲││  W:0 B:0 S:0 H:0 O:0               │
-│                        ╱      Ore      ││                                    │
-│                               10       ││ Diana 0VP                          │
-│                        ╲               ││  W:0 B:0 S:0 H:0 O:0               │
-│                      *  ╲             ╱││                                    │
-│                           ╲         ╱  ││Turn: 1                             │
-│                   ╱     ╲   ╲     ╱   ╱││Phase: Setup                        │
-│                 ╱         ╲         ╱  ││Deck: 25 cards                      │
-│            *  ╱             ╲     ╱    ││                                    │
+│                                        ││  Wood:0 Brick:0 Sheep:0            │
+│                                        ││  Wheat:0 Ore:0                     │
+│                                *       ││                                    │
+│                                        ││ Bob 0VP                            │
+│                             ╱     ╲    ││  Cards: 0                          │
+│                           ╱         ╲  ││                                    │
+│                         ╱             ╲││ Charlie 0VP                        │
+│                        ╱      Ore      ││  Cards: 0                          │
+│                               10       ││                                    │
+│                        ╲               ││ Diana 0VP                          │
+│                      *  ╲             ╱││  Cards: 0                          │
+│                           ╲         ╱  ││                                    │
+│                   ╱     ╲   ╲     ╱   ╱││Turn: 1                             │
+│                 ╱         ╲         ╱  ││Phase: Setup                        │
+│            *  ╱             ╲     ╱    ││Deck: 25 cards                      │
 │              ╱     Wheat     ╲   ╱     ││                                    │
 │                     12                 │└────────────────────────────────────┘
 │              ╲               ╱   ╲     │┌ Game Log (2) ──────────────────────┐

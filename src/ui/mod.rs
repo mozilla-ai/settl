@@ -212,6 +212,8 @@ pub struct PlayingState {
     pub hex_grid: Option<board_view::HexGrid>,
     /// Last dice roll: (die1, die2, total). Displayed persistently in the status bar.
     pub last_roll: Option<(u8, u8, u8)>,
+    /// Index of the local human player (None in spectator/all-AI mode).
+    pub human_player_index: Option<usize>,
 }
 
 impl PlayingState {
@@ -249,6 +251,7 @@ impl PlayingState {
             human_response_tx: None,
             hex_grid: None,
             last_roll: None,
+            human_player_index: None,
         }
     }
 
@@ -1559,8 +1562,13 @@ fn launch_game(
         orchestrator.run().await
     });
 
+    let human_player_index = active_players
+        .iter()
+        .position(|p| p.kind == PlayerKind::Human);
+
     let mut ps = PlayingState::new(rx, player_names, has_human);
     ps.llamafile_log = llamafile_log;
+    ps.human_player_index = human_player_index;
     if let Some((_, prompt_rx, response_tx)) = human_channels {
         ps.human_prompt_rx = Some(prompt_rx);
         ps.human_response_tx = Some(response_tx);
@@ -1677,8 +1685,11 @@ fn resume_game(
         orchestrator.run().await
     });
 
+    let human_player_index = save.player_configs.iter().position(|p| p.is_human);
+
     let mut ps = PlayingState::new(rx, player_names, has_human);
     ps.llamafile_log = llamafile_log;
+    ps.human_player_index = human_player_index;
     if let Some((_, prompt_rx, response_tx)) = human_channels {
         ps.human_prompt_rx = Some(prompt_rx);
         ps.human_response_tx = Some(response_tx);
