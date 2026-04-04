@@ -564,6 +564,33 @@ async fn run_event_loop(
                                             saved_config,
                                             task_handle: Some(handle),
                                             process_rx: Some(process_rx),
+                                            resume_save: None,
+                                        };
+                                        app.screen = Screen::LlamafileSetup(setup_state);
+                                    }
+                                }
+                            }
+                            Action::ResumeGame => {
+                                if let Some(save) = crate::game::save::load_autosave() {
+                                    let model = save.llamafile_model;
+                                    if let Some(ref process) = app.llamafile_process {
+                                        let screen = resume_game(
+                                            save,
+                                            &app.personalities,
+                                            Some(process.port),
+                                        );
+                                        app.screen = screen;
+                                    } else {
+                                        let (status_tx, status_rx) = mpsc::unbounded_channel();
+                                        let (handle, process_rx) =
+                                            spawn_llamafile_setup(model, status_tx);
+                                        let setup_state = LlamafileSetupState {
+                                            status: crate::llamafile::LlamafileStatus::Checking,
+                                            status_rx,
+                                            saved_config: NewGameState::new(&app.personalities),
+                                            task_handle: Some(handle),
+                                            process_rx: Some(process_rx),
+                                            resume_save: Some(save),
                                         };
                                         app.screen = Screen::LlamafileSetup(setup_state);
                                     }
@@ -592,11 +619,15 @@ async fn run_event_loop(
                         app.llamafile_process = Some(process);
                     }
                 }
-                // Move saved_config out of the setup state.
+                // Move config out of the setup state and launch/resume.
                 if let Screen::LlamafileSetup(setup) =
                     std::mem::replace(&mut app.screen, Screen::MainMenu(MainMenuState::new()))
                 {
-                    let screen = launch_game(&setup.saved_config, &app.personalities, Some(port));
+                    let screen = if let Some(save) = setup.resume_save {
+                        resume_game(save, &app.personalities, Some(port))
+                    } else {
+                        launch_game(&setup.saved_config, &app.personalities, Some(port))
+                    };
                     app.screen = screen;
                 }
             }
@@ -689,6 +720,7 @@ enum Action {
     Quit,
     Transition(Screen),
     StartGame,
+    ResumeGame,
 }
 
 fn handle_input(app: &mut App, key: KeyCode) -> Action {
@@ -711,6 +743,7 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 KeyCode::Enter => {
                     let selected_item = items[state.selected];
                     match selected_item {
+                        "Continue" => Action::ResumeGame,
                         "New Game" => Action::Transition(Screen::NewGame(NewGameState::new(
                             &app.personalities,
                         ))),
@@ -761,15 +794,19 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
 
         Screen::LlamafileSetup(_) => match key {
             KeyCode::Esc => {
-                // Cancel setup: abort the background task and return to NewGame.
+                // Cancel setup: abort the background task.
                 if let Screen::LlamafileSetup(mut setup) =
                     std::mem::replace(&mut app.screen, Screen::MainMenu(MainMenuState::new()))
                 {
                     if let Some(handle) = setup.task_handle.take() {
                         handle.abort();
                     }
-                    // Drop the oneshot receiver (cleaned up with the setup state).
-                    Action::Transition(Screen::NewGame(setup.saved_config))
+                    // If resuming, go back to main menu; otherwise back to NewGame.
+                    if setup.resume_save.is_some() {
+                        Action::Transition(Screen::MainMenu(MainMenuState::new()))
+                    } else {
+                        Action::Transition(Screen::NewGame(setup.saved_config))
+                    }
                 } else {
                     Action::Transition(Screen::NewGame(NewGameState::new(&app.personalities)))
                 }
@@ -1344,10 +1381,136 @@ fn launch_game(
 
     let player_names: Vec<String> = active_players.iter().map(|p| p.name.clone()).collect();
 
+    let save_configs: Vec<crate::game::save::SavedPlayerConfig> = active_players
+        .iter()
+        .map(|pc| crate::game::save::SavedPlayerConfig {
+            name: pc.name.clone(),
+            is_human: pc.kind == PlayerKind::Human,
+            personality_index: pc.personality_index,
+        })
+        .collect();
+    let model = ng.llamafile_model;
+
     // Spawn game engine.
     tokio::spawn(async move {
         let mut orchestrator = GameOrchestrator::new(state, players);
         orchestrator.ui_tx = Some(tx);
+        orchestrator.player_configs = save_configs;
+        orchestrator.llamafile_model = model;
+
+        orchestrator.run().await
+    });
+
+    let mut ps = PlayingState::new(rx, player_names, has_human);
+    if let Some((_, prompt_rx, response_tx)) = human_channels {
+        ps.human_prompt_rx = Some(prompt_rx);
+        ps.human_response_tx = Some(response_tx);
+    }
+    Screen::Playing(ps)
+}
+
+/// Resume a saved game, recreating players from the save file.
+fn resume_game(
+    save: crate::game::save::SaveFile,
+    discovered_personalities: &[Personality],
+    llamafile_port: Option<u16>,
+) -> Screen {
+    use player::tui_human::{HumanInputChannel, TuiHumanPlayer};
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    let built_in_personalities = [
+        Personality::default_personality(),
+        Personality::aggressive(),
+        Personality::grudge_holder(),
+        Personality::builder(),
+        Personality::chaos_agent(),
+    ];
+
+    let has_human = save.player_configs.iter().any(|p| p.is_human);
+    let human_channels: Option<(
+        Arc<HumanInputChannel>,
+        mpsc::UnboundedReceiver<player::tui_human::HumanPrompt>,
+        mpsc::UnboundedSender<HumanResponse>,
+    )> = if has_human {
+        let (prompt_tx, prompt_rx) = mpsc::unbounded_channel();
+        let (response_tx, response_rx) = mpsc::unbounded_channel::<HumanResponse>();
+        let channel = Arc::new(HumanInputChannel {
+            prompt_tx,
+            response_rx: Mutex::new(response_rx),
+        });
+        Some((channel, prompt_rx, response_tx))
+    } else {
+        None
+    };
+
+    let llama_client = llamafile_port.map(|port| {
+        player::anthropic_client::AnthropicClient::new(
+            format!("http://127.0.0.1:{}", port),
+            "no-key",
+            player::llm_player::LLAMAFILE_MODEL,
+        )
+    });
+
+    let (tx, rx) = mpsc::unbounded_channel();
+
+    let mut players: Vec<Box<dyn player::Player>> = Vec::new();
+    for (slot_id, pc) in save.player_configs.iter().enumerate() {
+        if pc.is_human {
+            let channel = human_channels.as_ref().unwrap().0.clone();
+            players
+                .push(Box::new(TuiHumanPlayer::new(pc.name.clone(), channel))
+                    as Box<dyn player::Player>);
+        } else {
+            let personality = if pc.personality_index < built_in_personalities.len() {
+                built_in_personalities[pc.personality_index].clone()
+            } else {
+                let disc_idx = pc.personality_index - built_in_personalities.len();
+                discovered_personalities
+                    .get(disc_idx)
+                    .cloned()
+                    .unwrap_or_default()
+            };
+            let client = llama_client
+                .clone()
+                .expect("llamafile client should exist when Llamafile players are used");
+            let mut llm = player::llm_player::LlmPlayer::new(
+                pc.name.clone(),
+                client,
+                personality,
+                Some(slot_id),
+            );
+
+            let (reasoning_tx, mut reasoning_rx) = mpsc::unbounded_channel::<String>();
+            llm.set_reasoning_sender(reasoning_tx);
+            let ui_tx_clone = tx.clone();
+            let player_name_clone = pc.name.clone();
+            tokio::spawn(async move {
+                while let Some(chunk) = reasoning_rx.recv().await {
+                    let _ = ui_tx_clone.send(UiEvent::AiReasoningChunk {
+                        player_id: slot_id,
+                        player_name: player_name_clone.clone(),
+                        chunk,
+                    });
+                }
+            });
+
+            players.push(Box::new(llm) as Box<dyn player::Player>);
+        }
+    }
+
+    let player_names = save.player_names.clone();
+    let save_configs = save.player_configs.clone();
+    let model = save.llamafile_model;
+    let events = save.events;
+    let state = save.game_state;
+
+    tokio::spawn(async move {
+        let mut orchestrator = GameOrchestrator::new(state, players);
+        orchestrator.ui_tx = Some(tx);
+        orchestrator.player_configs = save_configs;
+        orchestrator.llamafile_model = model;
+        orchestrator.events = events;
 
         orchestrator.run().await
     });

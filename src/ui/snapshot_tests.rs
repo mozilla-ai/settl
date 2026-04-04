@@ -16,7 +16,10 @@ const HEIGHT: u16 = 65;
 #[test]
 fn snapshot_main_menu() {
     // Use explicit state to avoid filesystem-dependent menu items.
-    let mut app = make_test_app(Screen::MainMenu(MainMenuState { selected: 0 }));
+    let mut app = make_test_app(Screen::MainMenu(MainMenuState {
+        selected: 0,
+        has_save: false,
+    }));
     let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
     insta::assert_snapshot!("main_menu", buffer_to_string(&buf));
 }
@@ -42,7 +45,10 @@ fn snapshot_post_game() {
 #[test]
 fn snapshot_size_warning() {
     // Render at a small size so the warning popup appears.
-    let mut app = make_test_app(Screen::MainMenu(MainMenuState { selected: 0 }));
+    let mut app = make_test_app(Screen::MainMenu(MainMenuState {
+        selected: 0,
+        has_save: false,
+    }));
     app.show_size_warning = true;
     let buf = render_app_to_buffer(&mut app, 80, 24);
     insta::assert_snapshot!("size_warning", buffer_to_string(&buf));

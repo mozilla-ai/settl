@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use super::LlamafileStatus;
 
 /// Which Bonsai model to use for local AI.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum LlamafileModel {
     /// Bonsai-1.7B: fast, small download (~267 MB), limited reasoning output.
     #[default]

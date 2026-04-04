@@ -25,15 +25,23 @@ const TITLE_ART: &str = r#"
 #[derive(Debug, Default)]
 pub struct MainMenuState {
     pub selected: usize,
+    pub has_save: bool,
 }
 
 impl MainMenuState {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            selected: 0,
+            has_save: crate::game::save::has_autosave(),
+        }
     }
 
     pub fn menu_items(&self) -> Vec<&'static str> {
-        vec!["New Game", "About", "Quit"]
+        if self.has_save {
+            vec!["Continue", "New Game", "About", "Quit"]
+        } else {
+            vec!["New Game", "About", "Quit"]
+        }
     }
 }
 
@@ -181,6 +189,8 @@ pub struct LlamafileSetupState {
     pub task_handle: Option<tokio::task::JoinHandle<()>>,
     /// Oneshot receiver for the llamafile process once it's ready.
     pub process_rx: Option<tokio::sync::oneshot::Receiver<crate::llamafile::LlamafileProcess>>,
+    /// If set, we are resuming a saved game instead of starting a new one.
+    pub resume_save: Option<crate::game::save::SaveFile>,
 }
 
 impl std::fmt::Debug for LlamafileSetupState {

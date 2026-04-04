@@ -2,11 +2,13 @@
 //!
 //! Used for LLM context (recent history) and UI event streaming.
 
+use serde::{Deserialize, Serialize};
+
 use crate::game::actions::{DevCard, PlayerId, TradeOffer};
 use crate::game::board::{EdgeCoord, HexCoord, Resource, VertexCoord};
 
 /// Every discrete game event.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GameEvent {
     // -- Setup --
     InitialSettlementPlaced {
