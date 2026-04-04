@@ -155,6 +155,61 @@ fn new_game_focus_navigation() {
     if let Screen::NewGame(ref state) = app.screen {
         assert_eq!(state.focus, NewGameFocus::AiModel);
     }
+    // Down to ReasoningEffort.
+    handle_input(&mut app, KeyCode::Down);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::ReasoningEffort);
+    }
+}
+
+#[test]
+fn reasoning_effort_toggle() {
+    let mut app = new_game_app();
+    // Navigate to ReasoningEffort row.
+    // StartButton -> PlayerCount -> P1 -> P2 -> P3 -> FriendlyRobber -> BoardLayout -> AiModel -> ReasoningEffort
+    for _ in 0..8 {
+        handle_input(&mut app, KeyCode::Down);
+    }
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::ReasoningEffort);
+        assert_eq!(state.effort_index, 0); // "low"
+    }
+    // Cycle forward: low -> medium.
+    handle_input(&mut app, KeyCode::Right);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.effort_index, 1); // "medium"
+    }
+    // Cycle forward: medium -> high.
+    handle_input(&mut app, KeyCode::Right);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.effort_index, 2); // "high"
+    }
+    // Cycle backward: high -> medium.
+    handle_input(&mut app, KeyCode::Left);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.effort_index, 1); // "medium"
+    }
+}
+
+#[test]
+fn reasoning_effort_updates_all_players() {
+    let mut app = new_game_app();
+    // Navigate to ReasoningEffort row.
+    for _ in 0..8 {
+        handle_input(&mut app, KeyCode::Down);
+    }
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::ReasoningEffort);
+    }
+    // Cycle forward: low -> medium.
+    handle_input(&mut app, KeyCode::Right);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.effort_index, 1);
+        // All player configs should be updated.
+        for pc in &state.players {
+            assert_eq!(pc.effort_index, 1, "all players should have effort_index=1");
+        }
+    }
 }
 
 #[test]

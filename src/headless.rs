@@ -31,6 +31,10 @@ pub struct HeadlessCli {
     /// If not set, uses a local llamafile.
     #[arg(long)]
     pub model: Option<String>,
+
+    /// Reasoning effort level: low, medium, high, or max.
+    #[arg(long, default_value = "low")]
+    pub effort: String,
 }
 
 pub async fn run(cli: HeadlessCli) {
@@ -70,12 +74,14 @@ pub async fn run(cli: HeadlessCli) {
             let personality = custom_personality
                 .clone()
                 .unwrap_or_else(|| default_personalities[i % default_personalities.len()].clone());
-            Box::new(player::llm_player::LlmPlayer::new(
+            let mut llm = player::llm_player::LlmPlayer::new(
                 name_list[i].into(),
                 Arc::clone(&client),
                 personality,
                 Some(i),
-            )) as Box<dyn player::Player>
+            );
+            llm.set_effort(cli.effort.clone());
+            Box::new(llm) as Box<dyn player::Player>
         })
         .collect();
 

@@ -94,6 +94,8 @@ pub struct LlmPlayer {
     extra_context: tokio::sync::Mutex<String>,
     /// Optional channel to stream reasoning text chunks to the UI in real-time.
     reasoning_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+    /// Optional reasoning effort level (e.g. "low", "medium", "high", "max").
+    effort: Option<String>,
 }
 
 impl LlmPlayer {
@@ -114,12 +116,18 @@ impl LlmPlayer {
             conversation: tokio::sync::Mutex::new(Conversation::new(system_prompt)),
             extra_context: tokio::sync::Mutex::new(String::new()),
             reasoning_tx: None,
+            effort: None,
         }
     }
 
     /// Set the streaming reasoning sender. Called before the game starts.
     pub fn set_reasoning_sender(&mut self, tx: tokio::sync::mpsc::UnboundedSender<String>) {
         self.reasoning_tx = Some(tx);
+    }
+
+    /// Set the reasoning effort level. Called before the game starts.
+    pub fn set_effort(&mut self, effort: String) {
+        self.effort = Some(effort);
     }
 
     // -- Tool definitions (same schemas as before, new ToolDef type) --
@@ -293,6 +301,11 @@ impl LlmPlayer {
             request.id_slot = self.slot_id;
             request.cache_prompt = Some(true);
             request.stream = self.reasoning_tx.is_some();
+            if let Some(ref effort) = self.effort {
+                request.output_config = Some(crate::player::anthropic_client::OutputConfig {
+                    effort: effort.clone(),
+                });
+            }
 
             // On retry, notify the UI that we're retrying.
             if attempt > 0 {

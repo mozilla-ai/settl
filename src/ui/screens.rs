@@ -68,6 +68,7 @@ pub struct PlayerConfig {
     pub name: String,
     pub kind: PlayerKind,
     pub personality_index: usize,
+    pub effort_index: usize,
 }
 
 const DEFAULT_NAMES: &[&str] = &["Marco", "Leif", "Vasco"];
@@ -85,6 +86,8 @@ pub enum NewGameFocus {
     BoardLayout,
     /// AI Model Size toggle.
     AiModel,
+    /// Reasoning effort level toggle.
+    ReasoningEffort,
     /// The "Start Game" button.
     StartButton,
 }
@@ -105,6 +108,8 @@ pub struct NewGameState {
     pub model_index: usize,
     /// Cached model display names from the config.
     pub model_names: Vec<String>,
+    /// Selected reasoning effort index into EFFORT_LEVELS.
+    pub effort_index: usize,
 }
 
 impl NewGameState {
@@ -122,6 +127,11 @@ impl NewGameState {
 
         let model_names: Vec<String> = config.models.iter().map(|m| m.name.clone()).collect();
 
+        let effort_index = crate::config::EFFORT_LEVELS
+            .iter()
+            .position(|&l| l == config.default_effort)
+            .unwrap_or(crate::config::DEFAULT_EFFORT_INDEX);
+
         let username = std::env::var("USER")
             .ok()
             .filter(|s| !s.is_empty())
@@ -134,12 +144,14 @@ impl NewGameState {
                         name: username.clone(),
                         kind: PlayerKind::Human,
                         personality_index: 0,
+                        effort_index,
                     }
                 } else {
                     PlayerConfig {
                         name: DEFAULT_NAMES[i - 1].into(),
                         kind: PlayerKind::Llamafile,
                         personality_index: i.min(personality_names.len().saturating_sub(1)),
+                        effort_index,
                     }
                 }
             })
@@ -154,6 +166,7 @@ impl NewGameState {
             random_board: false,
             model_index: 0,
             model_names,
+            effort_index,
         }
     }
 
@@ -366,6 +379,7 @@ impl SettingsState {
         let config = Config {
             models: self.models.clone(),
             hooks: Vec::new(),
+            default_effort: crate::config::default_effort(),
         };
         let _ = crate::config::save_config(&config);
         config
@@ -707,6 +721,21 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
             .map(|s| s.as_str())
             .unwrap_or("(none)"),
         ms_focused,
+    );
+
+    // Reasoning Effort.
+    let re_y = ms_y + 1;
+    let re_focused = matches!(state.focus, NewGameFocus::ReasoningEffort);
+    draw_toggle_row(
+        f,
+        x_start,
+        re_y,
+        content_width,
+        "Reasoning Effort",
+        crate::config::EFFORT_LEVELS
+            .get(state.effort_index)
+            .unwrap_or(&"low"),
+        re_focused,
     );
 
     // Hint bar at bottom.

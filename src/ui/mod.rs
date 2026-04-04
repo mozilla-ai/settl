@@ -1279,6 +1279,7 @@ fn focusable_rows(state: &NewGameState) -> Vec<NewGameFocus> {
     rows.push(NewGameFocus::FriendlyRobber);
     rows.push(NewGameFocus::BoardLayout);
     rows.push(NewGameFocus::AiModel);
+    rows.push(NewGameFocus::ReasoningEffort);
     rows
 }
 
@@ -1332,6 +1333,18 @@ fn cycle_new_game_value(state: &mut NewGameState, forward: bool) {
                         .checked_sub(1)
                         .unwrap_or(state.model_names.len() - 1)
                 };
+            }
+        }
+        NewGameFocus::ReasoningEffort => {
+            let n = crate::config::EFFORT_LEVELS.len();
+            state.effort_index = if forward {
+                (state.effort_index + 1) % n
+            } else {
+                state.effort_index.checked_sub(1).unwrap_or(n - 1)
+            };
+            // Update all AI player configs to match.
+            for pc in &mut state.players {
+                pc.effort_index = state.effort_index;
             }
         }
         NewGameFocus::StartButton => {}
@@ -1415,6 +1428,11 @@ fn launch_game(
                     personality,
                     Some(slot_id),
                 );
+
+                // Set reasoning effort from the player config.
+                if let Some(&level) = crate::config::EFFORT_LEVELS.get(pc.effort_index) {
+                    llm.set_effort(level.to_string());
+                }
 
                 // Set up streaming reasoning bridge: LlmPlayer -> String chunks -> UiEvent.
                 let (reasoning_tx, mut reasoning_rx) = mpsc::unbounded_channel::<String>();
@@ -1545,6 +1563,9 @@ fn resume_game(
                 personality,
                 Some(slot_id),
             );
+
+            // Set reasoning effort from config default.
+            llm.set_effort(config.default_effort.clone());
 
             let (reasoning_tx, mut reasoning_rx) = mpsc::unbounded_channel::<String>();
             llm.set_reasoning_sender(reasoning_tx);
@@ -1738,6 +1759,7 @@ fn clone_new_game_state(ng: &NewGameState) -> NewGameState {
         random_board: ng.random_board,
         model_index: ng.model_index,
         model_names: ng.model_names.clone(),
+        effort_index: ng.effort_index,
     }
 }
 

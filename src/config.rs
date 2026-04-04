@@ -39,6 +39,12 @@ pub enum ModelBackend {
     },
 }
 
+/// Valid effort levels for the Anthropic Messages API.
+pub const EFFORT_LEVELS: &[&str] = &["low", "medium", "high", "max"];
+
+/// Default effort level index (points to "low" in EFFORT_LEVELS).
+pub const DEFAULT_EFFORT_INDEX: usize = 0;
+
 /// A hook that runs a shell command when a game event fires.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookConfig {
@@ -56,12 +62,20 @@ pub struct Config {
     /// Event hooks -- shell commands triggered by game events.
     #[serde(default)]
     pub hooks: Vec<HookConfig>,
+    /// Default reasoning effort level for AI players.
+    #[serde(default = "default_effort")]
+    pub default_effort: String,
+}
+
+pub fn default_effort() -> String {
+    EFFORT_LEVELS[DEFAULT_EFFORT_INDEX].to_string()
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             hooks: Vec::new(),
+            default_effort: default_effort(),
             models: vec![
                 ModelEntry {
                     name: "Bonsai 1.7B (fast)".into(),
@@ -154,6 +168,7 @@ mod tests {
                 event: "GameWon".into(),
                 command: "echo win".into(),
             }],
+            default_effort: default_effort(),
             models: vec![
                 ModelEntry {
                     name: "Test Llamafile".into(),
@@ -227,6 +242,8 @@ mod tests {
     #[test]
     fn merge_anthropic_models_updates_existing() {
         let mut config = Config {
+            hooks: Vec::new(),
+            default_effort: default_effort(),
             models: vec![ModelEntry {
                 name: "Old Name".into(),
                 backend: ModelBackend::Api {
