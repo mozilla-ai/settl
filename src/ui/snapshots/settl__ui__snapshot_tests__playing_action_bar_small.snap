@@ -30,6 +30,6 @@ expression: buffer_to_string(&buf)
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │▸ Build Settlement[s]  Build Road[r]  Buy Development Card[d]  Propose Trade[t│
 │                                                                              │
-│ [Arrow/Enter] select  [s]ettlement  [r]oad  [c]ity  [d]ev card  [t]rade  [e]n│
+│ [Arrow/Enter] select  [s]ettlement  [r]oad  [c]ity  [d]ev card  [b]ank trade │
 └──────────────────────────────────────────────────────────────────────────────┘
  YOUR TURN  | q:quit  ?:help  Tab:AI  Space:pause

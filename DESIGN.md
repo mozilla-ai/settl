@@ -292,6 +292,7 @@ These work in trade targeting, steal targeting, and any player-selection context
 | `c` | Upgrade to City | Occasional |
 | `d` | Buy Dev Card | Occasional |
 | `p` | Play Dev Card | Occasional |
+| `b` | Bank Trade | Occasional |
 | `t` | Open Trade Builder | Common |
 | `Enter` | Select highlighted action | Always |
 | `←` `→` | Navigate action bar | Always |

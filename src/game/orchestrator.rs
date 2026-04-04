@@ -390,6 +390,7 @@ impl GameOrchestrator {
                     self.handle_build_settlement(player_id).await
                 }
                 PlayerChoice::BuildCityIntent => self.handle_build_city(player_id).await,
+                PlayerChoice::BankTradeIntent => self.handle_bank_trade(player_id).await,
             };
 
             match action_result {
@@ -428,6 +429,7 @@ impl GameOrchestrator {
         let mut has_road = false;
         let mut has_settlement = false;
         let mut has_city = false;
+        let mut has_bank_trade = false;
 
         for action in actions {
             match &action {
@@ -447,6 +449,12 @@ impl GameOrchestrator {
                     if !has_city {
                         choices.push(PlayerChoice::BuildCityIntent);
                         has_city = true;
+                    }
+                }
+                Action::BankTrade { .. } => {
+                    if !has_bank_trade {
+                        choices.push(PlayerChoice::BankTradeIntent);
+                        has_bank_trade = true;
                     }
                 }
                 _ => choices.push(PlayerChoice::GameAction(action)),
@@ -896,6 +904,34 @@ impl GameOrchestrator {
         self.apply_and_log(Action::BuildCity(vertex), player_id, &reasoning)
     }
 
+    /// Handle a Bank Trade intent: show legal bank trades and let the player pick one.
+    async fn handle_bank_trade(&mut self, player_id: PlayerId) -> Result<(), OrchestratorError> {
+        let all_actions = rules::legal_actions(&self.state);
+        let bank_trades: Vec<PlayerChoice> = all_actions
+            .into_iter()
+            .filter(|a| matches!(a, Action::BankTrade { .. }))
+            .map(PlayerChoice::GameAction)
+            .collect();
+
+        if bank_trades.is_empty() {
+            return Ok(());
+        }
+
+        let (idx, reasoning) = self
+            .with_timeout(
+                self.players[player_id].choose_action(&self.state, player_id, &bank_trades),
+                (0, "timeout fallback".into()),
+            )
+            .await;
+
+        let choice = &bank_trades[idx.min(bank_trades.len() - 1)];
+        if let PlayerChoice::GameAction(action) = choice {
+            self.apply_and_log(action.clone(), player_id, &reasoning)
+        } else {
+            Ok(())
+        }
+    }
+
     /// Handle a player proposing a trade: collect offer, broadcast to others, execute if accepted.
     async fn handle_trade(&mut self, player_id: PlayerId) -> Result<(), OrchestratorError> {
         // Step 1: Get the trade offer from the proposing player.
@@ -1331,6 +1367,41 @@ mod tests {
                 .iter()
                 .any(|c| matches!(c, PlayerChoice::PlayKnight)),
             "Should not include dev card intents after already playing one"
+        );
+    }
+
+    #[test]
+    fn build_choices_collapses_bank_trades_into_single_intent() {
+        let mut orch = make_orchestrator(3);
+        orch.state.phase = GamePhase::Playing {
+            current_player: 0,
+            has_rolled: true,
+        };
+        // Give player enough resources for multiple bank trades (4:1 default).
+        orch.state.players[0].add_resource(Resource::Wood, 4);
+        orch.state.players[0].add_resource(Resource::Brick, 4);
+
+        let choices = orch.build_choices();
+
+        // Should have exactly one BankTradeIntent, not multiple BankTrade actions.
+        let bank_trade_intents: Vec<_> = choices
+            .iter()
+            .filter(|c| matches!(c, PlayerChoice::BankTradeIntent))
+            .collect();
+        assert_eq!(
+            bank_trade_intents.len(),
+            1,
+            "Should collapse all bank trades into a single BankTradeIntent"
+        );
+
+        // Should have no raw BankTrade GameAction entries.
+        let raw_bank_trades: Vec<_> = choices
+            .iter()
+            .filter(|c| matches!(c, PlayerChoice::GameAction(Action::BankTrade { .. })))
+            .collect();
+        assert!(
+            raw_bank_trades.is_empty(),
+            "Should not have any raw BankTrade actions in choices"
         );
     }
 

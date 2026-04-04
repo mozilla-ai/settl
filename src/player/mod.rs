@@ -37,28 +37,33 @@ pub enum PlayerChoice {
     BuildSettlementIntent,
     /// Intent to build a city — vertex collected via board cursor.
     BuildCityIntent,
+    /// Intent to do a bank trade — specific give/get collected in a follow-up step.
+    BankTradeIntent,
 }
 
 impl PlayerChoice {
     /// Short human-readable label for the TUI action bar (no coordinates).
-    pub fn label(&self) -> &'static str {
+    pub fn label(&self) -> String {
         match self {
-            PlayerChoice::GameAction(Action::BuildSettlement(_)) => "Build Settlement",
-            PlayerChoice::GameAction(Action::BuildCity(_)) => "Build City",
-            PlayerChoice::GameAction(Action::BuildRoad(_)) => "Build Road",
-            PlayerChoice::GameAction(Action::BuyDevCard) => "Buy Development Card",
-            PlayerChoice::GameAction(Action::EndTurn) => "End Turn",
-            PlayerChoice::GameAction(Action::ProposeTrade) => "Propose Trade",
-            PlayerChoice::GameAction(Action::BankTrade { .. }) => "Bank Trade",
-            PlayerChoice::GameAction(Action::PlayDevCard(_, _)) => "Play Dev Card",
-            PlayerChoice::PlayKnight => "Play Knight",
-            PlayerChoice::PlayMonopoly => "Play Monopoly",
-            PlayerChoice::PlayYearOfPlenty => "Play Year of Plenty",
-            PlayerChoice::PlayRoadBuilding => "Play Road Building",
-            PlayerChoice::ProposeTrade => "Propose Trade",
-            PlayerChoice::BuildRoadIntent => "Build Road",
-            PlayerChoice::BuildSettlementIntent => "Build Settlement",
-            PlayerChoice::BuildCityIntent => "Build City",
+            PlayerChoice::GameAction(Action::BuildSettlement(_)) => "Build Settlement".into(),
+            PlayerChoice::GameAction(Action::BuildCity(_)) => "Build City".into(),
+            PlayerChoice::GameAction(Action::BuildRoad(_)) => "Build Road".into(),
+            PlayerChoice::GameAction(Action::BuyDevCard) => "Buy Development Card".into(),
+            PlayerChoice::GameAction(Action::EndTurn) => "End Turn".into(),
+            PlayerChoice::GameAction(Action::ProposeTrade) => "Propose Trade".into(),
+            PlayerChoice::GameAction(Action::BankTrade { give, get }) => {
+                format!("{} -> {}", give, get)
+            }
+            PlayerChoice::GameAction(Action::PlayDevCard(_, _)) => "Play Dev Card".into(),
+            PlayerChoice::PlayKnight => "Play Knight".into(),
+            PlayerChoice::PlayMonopoly => "Play Monopoly".into(),
+            PlayerChoice::PlayYearOfPlenty => "Play Year of Plenty".into(),
+            PlayerChoice::PlayRoadBuilding => "Play Road Building".into(),
+            PlayerChoice::ProposeTrade => "Propose Trade".into(),
+            PlayerChoice::BuildRoadIntent => "Build Road".into(),
+            PlayerChoice::BuildSettlementIntent => "Build Settlement".into(),
+            PlayerChoice::BuildCityIntent => "Build City".into(),
+            PlayerChoice::BankTradeIntent => "Bank Trade".into(),
         }
     }
 
@@ -78,6 +83,7 @@ impl PlayerChoice {
             PlayerChoice::BuildRoadIntent => Some('r'),
             PlayerChoice::BuildSettlementIntent => Some('s'),
             PlayerChoice::BuildCityIntent => Some('c'),
+            PlayerChoice::BankTradeIntent => Some('b'),
             _ => None,
         }
     }
@@ -111,6 +117,7 @@ impl std::fmt::Display for PlayerChoice {
             PlayerChoice::BuildRoadIntent => write!(f, "Build Road"),
             PlayerChoice::BuildSettlementIntent => write!(f, "Build Settlement"),
             PlayerChoice::BuildCityIntent => write!(f, "Build City"),
+            PlayerChoice::BankTradeIntent => write!(f, "Bank Trade"),
         }
     }
 }

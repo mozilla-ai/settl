@@ -214,7 +214,7 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
             }
             let line1 = Line::from(spans);
             let line2 = Line::from(Span::styled(
-                " [Arrow/Enter] select  [s]ettlement  [r]oad  [c]ity  [d]ev card  [t]rade  [e]nd turn",
+                " [Arrow/Enter] select  [s]ettlement  [r]oad  [c]ity  [d]ev card  [b]ank trade  [t]rade  [e]nd turn",
                 Style::default().fg(Color::DarkGray),
             ));
             let para = Paragraph::new(vec![line1, Line::from(""), line2]);
