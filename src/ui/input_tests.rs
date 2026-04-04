@@ -363,6 +363,34 @@ fn new_game_enter_starts_game_from_any_focus() {
     }
 }
 
+#[test]
+fn new_game_ram_warning_enter_proceeds() {
+    let mut app = new_game_app();
+    if let Screen::NewGame(ref mut state) = app.screen {
+        state.ram_warning = Some((12, 6));
+    }
+    // Enter should dismiss warning and trigger StartGame.
+    let action = handle_input(&mut app, KeyCode::Enter);
+    assert!(matches!(action, Action::StartGame));
+    if let Screen::NewGame(ref state) = app.screen {
+        assert!(state.ram_warning.is_none(), "warning should be cleared");
+    }
+}
+
+#[test]
+fn new_game_ram_warning_esc_dismisses() {
+    let mut app = new_game_app();
+    if let Screen::NewGame(ref mut state) = app.screen {
+        state.ram_warning = Some((12, 6));
+    }
+    // Esc should just dismiss the warning, not navigate away.
+    let action = handle_input(&mut app, KeyCode::Esc);
+    assert!(matches!(action, Action::None));
+    if let Screen::NewGame(ref state) = app.screen {
+        assert!(state.ram_warning.is_none(), "warning should be cleared");
+    }
+}
+
 // ── ActionBar ────────────────────────────────────────────────────────
 
 #[test]

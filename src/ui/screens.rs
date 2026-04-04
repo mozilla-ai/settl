@@ -110,6 +110,8 @@ pub struct NewGameState {
     pub model_names: Vec<String>,
     /// Selected reasoning effort index into EFFORT_LEVELS.
     pub effort_index: usize,
+    /// If set, shows a RAM warning popup: (required_gb, available_gb).
+    pub ram_warning: Option<(u32, u32)>,
 }
 
 impl NewGameState {
@@ -167,6 +169,7 @@ impl NewGameState {
             model_index: 0,
             model_names,
             effort_index,
+            ram_warning: None,
         }
     }
 
@@ -747,6 +750,38 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
     .alignment(Alignment::Center)
     .style(Style::default().fg(Color::DarkGray));
     f.render_widget(hint, hint_area);
+
+    // RAM warning popup overlay.
+    if let Some((required, available)) = state.ram_warning {
+        let width = 52u16.min(area.width.saturating_sub(4));
+        let height = 7u16.min(area.height.saturating_sub(4));
+        let x = area.x + (area.width.saturating_sub(width)) / 2;
+        let y = area.y + (area.height.saturating_sub(height)) / 2;
+        let popup_area = Rect::new(x, y, width, height);
+
+        f.render_widget(Clear, popup_area);
+        let block = Block::default()
+            .title(" Low Memory Warning ")
+            .title_alignment(Alignment::Center)
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Yellow));
+        let inner = block.inner(popup_area);
+        f.render_widget(block, popup_area);
+
+        let text = vec![
+            Line::from(Span::styled(
+                format!("Model needs ~{required} GB RAM, system has {available} GB."),
+                Style::default().fg(Color::White),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Enter: start anyway  |  Any key: cancel",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+        let para = Paragraph::new(text).alignment(Alignment::Center);
+        f.render_widget(para, inner);
+    }
 }
 
 /// Draw the post-game screen.

@@ -588,6 +588,23 @@ async fn run_event_loop(
                                         );
                                         app.screen = screen;
                                     } else {
+                                        // Check RAM before starting llamafile.
+                                        if let Some(required) =
+                                            model_entry.and_then(|e| e.min_ram_gb())
+                                        {
+                                            if let Some(available) =
+                                                crate::system_info::total_ram_gb()
+                                            {
+                                                if available < required {
+                                                    if let Screen::NewGame(ref mut ng) = app.screen
+                                                    {
+                                                        ng.ram_warning =
+                                                            Some((required, available));
+                                                    }
+                                                    continue;
+                                                }
+                                            }
+                                        }
                                         let (status_tx, status_rx) = mpsc::unbounded_channel();
                                         let saved_config = clone_new_game_state(ng);
                                         let (url, filename) = llamafile_url_filename(model_entry);
@@ -829,27 +846,44 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
 
         Screen::Settings(state) => handle_settings_input(state, key, &mut app.config),
 
-        Screen::NewGame(state) => match key {
-            KeyCode::Esc => Action::Transition(Screen::MainMenu(MainMenuState::new())),
-            KeyCode::Up | KeyCode::Char('k') => {
-                move_new_game_focus_up(state);
-                Action::None
+        Screen::NewGame(state) => {
+            // RAM warning popup intercepts input when visible.
+            if state.ram_warning.is_some() {
+                match key {
+                    KeyCode::Enter => {
+                        // User chose to proceed anyway.
+                        state.ram_warning = None;
+                        return Action::StartGame;
+                    }
+                    _ => {
+                        // Any other key dismisses the warning.
+                        state.ram_warning = None;
+                        return Action::None;
+                    }
+                }
             }
-            KeyCode::Down | KeyCode::Char('j') => {
-                move_new_game_focus_down(state);
-                Action::None
+            match key {
+                KeyCode::Esc => Action::Transition(Screen::MainMenu(MainMenuState::new())),
+                KeyCode::Up | KeyCode::Char('k') => {
+                    move_new_game_focus_up(state);
+                    Action::None
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    move_new_game_focus_down(state);
+                    Action::None
+                }
+                KeyCode::Left => {
+                    cycle_new_game_value(state, false);
+                    Action::None
+                }
+                KeyCode::Right => {
+                    cycle_new_game_value(state, true);
+                    Action::None
+                }
+                KeyCode::Enter => Action::StartGame,
+                _ => Action::None,
             }
-            KeyCode::Left => {
-                cycle_new_game_value(state, false);
-                Action::None
-            }
-            KeyCode::Right => {
-                cycle_new_game_value(state, true);
-                Action::None
-            }
-            KeyCode::Enter => Action::StartGame,
-            _ => Action::None,
-        },
+        }
 
         Screen::LlamafileSetup(_) => match key {
             KeyCode::Esc => {
@@ -1760,6 +1794,7 @@ fn clone_new_game_state(ng: &NewGameState) -> NewGameState {
         model_index: ng.model_index,
         model_names: ng.model_names.clone(),
         effort_index: ng.effort_index,
+        ram_warning: None,
     }
 }
 

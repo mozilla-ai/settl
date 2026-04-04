@@ -6,5 +6,6 @@ pub mod hooks;
 pub mod llamafile;
 pub mod logging;
 pub mod player;
+pub mod system_info;
 pub mod trading;
 pub mod ui;

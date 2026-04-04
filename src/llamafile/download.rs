@@ -36,6 +36,23 @@ impl LlamafileModel {
             Self::Bonsai8B => "8B (smart)",
         }
     }
+
+    /// Minimum RAM in GB recommended to run this model.
+    pub fn min_ram_gb(self) -> u32 {
+        match self {
+            Self::Bonsai1B => 4,
+            Self::Bonsai8B => 12,
+        }
+    }
+}
+
+/// Estimate minimum RAM (in GB) for a llamafile based on its file size.
+///
+/// Heuristic: the model needs roughly 2x its file size in RAM (weights
+/// plus inference buffers and KV cache with `--parallel 4`).
+pub fn estimate_ram_gb_from_file_size(file_size_bytes: u64) -> u32 {
+    let size_gb = file_size_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+    (size_gb * 2.0).ceil().max(2.0) as u32
 }
 
 /// Minimum file size to consider a cached llamafile valid (100 MB).

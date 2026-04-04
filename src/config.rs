@@ -39,6 +39,34 @@ pub enum ModelBackend {
     },
 }
 
+impl ModelEntry {
+    /// Estimate minimum RAM in GB needed for a llamafile model.
+    /// Returns `None` for API models (no local RAM needed).
+    pub fn min_ram_gb(&self) -> Option<u32> {
+        match &self.backend {
+            ModelBackend::Llamafile { filename, .. } => {
+                // Check known built-in models first.
+                if filename.contains("1.7B") {
+                    Some(crate::llamafile::LlamafileModel::Bonsai1B.min_ram_gb())
+                } else if filename.contains("8B") {
+                    Some(crate::llamafile::LlamafileModel::Bonsai8B.min_ram_gb())
+                } else {
+                    // Custom llamafile: estimate from file size if it exists on disk.
+                    let path = crate::llamafile::download::llamafile_dir().join(filename);
+                    if let Ok(meta) = std::fs::metadata(&path) {
+                        Some(crate::llamafile::download::estimate_ram_gb_from_file_size(
+                            meta.len(),
+                        ))
+                    } else {
+                        None
+                    }
+                }
+            }
+            ModelBackend::Api { .. } => None,
+        }
+    }
+}
+
 /// Valid effort levels for the Anthropic Messages API.
 pub const EFFORT_LEVELS: &[&str] = &["low", "medium", "high", "max"];
 
