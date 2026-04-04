@@ -49,7 +49,7 @@ fn compute_layout(size: Rect) -> PlayingLayout {
 
     let top_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(107), Constraint::Length(30)])
+        .constraints([Constraint::Fill(1), Constraint::Length(38)])
         .split(main_chunks[0]);
 
     let right_split = Layout::default()

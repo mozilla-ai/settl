@@ -111,8 +111,8 @@ Code uses `Light` variants for buildings/roads via `PLAYER_COLORS` constant. Sta
 ```
 
 ### Layout Constraints (ratatui)
-- **Board panel:** `Constraint::Min(107)` width, `Constraint::Min(20)` height
-- **Player panel:** `Constraint::Length(22)` width
+- **Board panel:** `Constraint::Fill(1)` width (takes remaining space), `Constraint::Min(20)` height
+- **Right column:** `Constraint::Length(38)` width
 - **Context bar:** `Constraint::Length(5)` height
 - **Status bar:** `Constraint::Length(1)` height
 
