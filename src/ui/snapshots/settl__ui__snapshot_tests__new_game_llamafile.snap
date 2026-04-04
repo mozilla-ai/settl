@@ -5,6 +5,8 @@ expression: buffer_to_string(&buf)
 
                                                                                  New Game
 
+                                                       [ Start Game ]
+
                                                      PLAYERS
 
                                                          Players:  ○ 3   ● 4
@@ -20,7 +22,6 @@ expression: buffer_to_string(&buf)
                                                           Board Layout        Beginner
                                                           AI Model            Bonsai 1.7B (fast)
 
-                                                       [ Start Game ]
 
 
 
@@ -65,5 +66,4 @@ expression: buffer_to_string(&buf)
 
 
 
-
-                                                          ↑↓: move  |  ←→: change  |  Enter: select  |  Esc: back
+                                                          ↑↓: move  |  ←→: change  |  Enter: start  |  Esc: back

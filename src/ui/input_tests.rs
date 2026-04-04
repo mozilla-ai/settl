@@ -93,13 +93,14 @@ fn new_game_esc_returns_to_main_menu() {
 #[test]
 fn new_game_player_count_toggle() {
     let mut app = new_game_app();
-    // Default is 4 players. Focus starts on PlayerCount.
+    // Default is 4 players. Focus starts on StartButton.
     if let Screen::NewGame(ref state) = app.screen {
-        assert_eq!(state.focus, NewGameFocus::PlayerCount);
+        assert_eq!(state.focus, NewGameFocus::StartButton);
         assert!(state.four_players);
         assert_eq!(state.num_players(), 4);
     }
-    // Toggle to 3 players.
+    // Move down to PlayerCount, then toggle to 3 players.
+    handle_input(&mut app, KeyCode::Down);
     handle_input(&mut app, KeyCode::Right);
     if let Screen::NewGame(ref state) = app.screen {
         assert!(!state.four_players);
@@ -116,12 +117,20 @@ fn new_game_player_count_toggle() {
 #[test]
 fn new_game_focus_navigation() {
     let mut app = new_game_app();
-    // Start on PlayerCount. Down should go to Player { row: 1 }.
+    // Start on StartButton. Down should go to PlayerCount.
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::StartButton);
+    }
+    handle_input(&mut app, KeyCode::Down);
+    if let Screen::NewGame(ref state) = app.screen {
+        assert_eq!(state.focus, NewGameFocus::PlayerCount);
+    }
+    // Down to Player { row: 1 }.
     handle_input(&mut app, KeyCode::Down);
     if let Screen::NewGame(ref state) = app.screen {
         assert_eq!(state.focus, NewGameFocus::Player { row: 1 });
     }
-    // Down again to Player { row: 2 }.
+    // Down to Player { row: 2 }.
     handle_input(&mut app, KeyCode::Down);
     if let Screen::NewGame(ref state) = app.screen {
         assert_eq!(state.focus, NewGameFocus::Player { row: 2 });
@@ -146,17 +155,13 @@ fn new_game_focus_navigation() {
     if let Screen::NewGame(ref state) = app.screen {
         assert_eq!(state.focus, NewGameFocus::AiModel);
     }
-    // Down to StartButton.
-    handle_input(&mut app, KeyCode::Down);
-    if let Screen::NewGame(ref state) = app.screen {
-        assert_eq!(state.focus, NewGameFocus::StartButton);
-    }
 }
 
 #[test]
 fn new_game_focus_skips_player_4_in_3_player_mode() {
     let mut app = new_game_app();
-    // Toggle to 3-player mode.
+    // Move to PlayerCount and toggle to 3-player mode.
+    handle_input(&mut app, KeyCode::Down);
     handle_input(&mut app, KeyCode::Right);
     // Navigate: PlayerCount -> Player 2 -> Player 3 -> FriendlyRobber (skip Player 4).
     handle_input(&mut app, KeyCode::Down);
@@ -276,6 +281,30 @@ fn new_game_model_toggle() {
     handle_input(&mut app, KeyCode::Right);
     if let Screen::NewGame(ref state) = app.screen {
         assert_eq!(state.model_index, 0);
+    }
+}
+
+#[test]
+fn new_game_enter_starts_game_from_any_focus() {
+    // Enter should trigger StartGame regardless of which row is focused.
+    for focus in &[
+        NewGameFocus::StartButton,
+        NewGameFocus::PlayerCount,
+        NewGameFocus::Player { row: 1 },
+        NewGameFocus::FriendlyRobber,
+        NewGameFocus::BoardLayout,
+        NewGameFocus::AiModel,
+    ] {
+        let mut app = new_game_app();
+        if let Screen::NewGame(ref mut state) = app.screen {
+            state.focus = *focus;
+        }
+        let action = handle_input(&mut app, KeyCode::Enter);
+        assert!(
+            matches!(action, Action::StartGame),
+            "Enter on {:?} should trigger StartGame",
+            focus,
+        );
     }
 }
 
