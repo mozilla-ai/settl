@@ -651,10 +651,10 @@ fn draw_cursor_overlay(
                     } else {
                         legal_style
                     };
-                    // 3-wide marker for hex cursor to match settlement/road visual weight.
-                    set_cell(sx - 1, sy, '[', style, area, buf);
-                    set_cell(sx, sy, 'R', style, area, buf);
-                    set_cell(sx + 1, sy, ']', style, area, buf);
+                    // Place [R] below the number token (cy+1) so numbers stay visible.
+                    set_cell(sx - 1, sy + 1, '[', style, area, buf);
+                    set_cell(sx, sy + 1, 'R', style, area, buf);
+                    set_cell(sx + 1, sy + 1, ']', style, area, buf);
                 }
             }
         }
@@ -753,6 +753,38 @@ mod tests {
         let cell = buf.cell(ratatui::layout::Position::new(1, 0)).unwrap();
         assert_eq!(cell.symbol(), " ");
         assert_eq!(cell.fg, Color::Reset);
+    }
+
+    #[test]
+    fn hex_cursor_robber_marker_below_number_row() {
+        // The [R] robber cursor should render at cy+1, not cy, so numbers stay visible.
+        let (area, mut buf) = make_buf(30, 20);
+        let cx: i16 = 15;
+        let cy: i16 = 10;
+
+        // Simulate a number token at cy (the row that must NOT be overwritten).
+        let num_style = Style::default().fg(Color::White).bg(Color::Green);
+        set_cell(cx - 1, cy, ' ', num_style, area, &mut buf);
+        set_cell(cx, cy, '6', num_style, area, &mut buf);
+        set_cell(cx + 1, cy, ' ', num_style, area, &mut buf);
+
+        // Draw the cursor marker the same way draw_cursor_overlay does for Hexes.
+        let style = Style::default().fg(Color::Black).bg(Color::Yellow).bold();
+        set_cell(cx - 1, cy + 1, '[', style, area, &mut buf);
+        set_cell(cx, cy + 1, 'R', style, area, &mut buf);
+        set_cell(cx + 1, cy + 1, ']', style, area, &mut buf);
+
+        // Number row (cy) is untouched.
+        let num_cell = buf
+            .cell(ratatui::layout::Position::new(cx as u16, cy as u16))
+            .unwrap();
+        assert_eq!(num_cell.symbol(), "6");
+
+        // Robber marker is one row below (cy+1).
+        let r_cell = buf
+            .cell(ratatui::layout::Position::new(cx as u16, (cy + 1) as u16))
+            .unwrap();
+        assert_eq!(r_cell.symbol(), "R");
     }
 
     #[test]
