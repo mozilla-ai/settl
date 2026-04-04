@@ -30,7 +30,7 @@ fn terrain_color(t: Terrain) -> Color {
         Terrain::Pasture => Color::Rgb(80, 180, 60),
         Terrain::Fields => Color::Rgb(200, 170, 50),
         Terrain::Mountains => Color::Rgb(140, 140, 150),
-        Terrain::Desert => Color::Rgb(180, 160, 120),
+        Terrain::Desert => Color::Rgb(205, 175, 115),
     }
 }
 

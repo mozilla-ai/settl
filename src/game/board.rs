@@ -211,7 +211,7 @@ impl Terrain {
             Terrain::Pasture => (80, 180, 60),
             Terrain::Fields => (200, 170, 50),
             Terrain::Mountains => (140, 140, 150),
-            Terrain::Desert => (180, 160, 120),
+            Terrain::Desert => (205, 175, 115),
         }
     }
 }
