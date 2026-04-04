@@ -53,6 +53,10 @@ pub struct GameOrchestrator {
     pub max_turns: u32,
     /// Optional channel to send UI events to the TUI.
     pub ui_tx: Option<mpsc::UnboundedSender<UiEvent>>,
+    /// Player configs for auto-save (set by the launcher).
+    pub player_configs: Vec<crate::game::save::SavedPlayerConfig>,
+    /// Which llamafile model is in use (for auto-save).
+    pub llamafile_model: crate::llamafile::LlamafileModel,
 }
 
 impl GameOrchestrator {
@@ -65,6 +69,8 @@ impl GameOrchestrator {
             player_names,
             max_turns: 500,
             ui_tx: None,
+            player_configs: Vec::new(),
+            llamafile_model: crate::llamafile::LlamafileModel::default(),
         }
     }
 
@@ -109,6 +115,29 @@ impl GameOrchestrator {
         self.events.push(event);
     }
 
+    /// Write the current game state to the autosave file.
+    fn auto_save(&self) {
+        if self.player_configs.is_empty() {
+            return;
+        }
+        let save = crate::game::save::SaveFile {
+            game_state: self.state.clone(),
+            player_names: self.player_names.clone(),
+            player_configs: self.player_configs.clone(),
+            events: self.events.clone(),
+            llamafile_model: self.llamafile_model,
+            saved_at: {
+                let d = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
+                format!("{}", d.as_secs())
+            },
+        };
+        if let Err(e) = crate::game::save::auto_save(&save) {
+            log::warn!("Auto-save failed: {}", e);
+        }
+    }
+
     /// Run the full game and return the winner's PlayerId.
     pub async fn run(&mut self) -> Result<PlayerId, OrchestratorError> {
         // Send initial state so the TUI can render the board before any prompts arrive.
@@ -123,6 +152,7 @@ impl GameOrchestrator {
                 current_player: 0,
                 has_rolled: false,
             };
+            self.auto_save();
         }
 
         // Phase 2: Main game loop.
@@ -146,6 +176,7 @@ impl GameOrchestrator {
                     player: winner,
                     final_vp: vp,
                 });
+                crate::game::save::delete_autosave();
                 if let Some(tx) = &self.ui_tx {
                     let _ = tx.send(UiEvent::GameOver {
                         winner,
@@ -154,6 +185,7 @@ impl GameOrchestrator {
                 }
                 return Ok(winner);
             }
+            self.auto_save();
         }
     }
 

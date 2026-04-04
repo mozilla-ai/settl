@@ -204,6 +204,7 @@ pub fn llamafile_setup_app() -> App {
         saved_config: NewGameState::new(&[]),
         task_handle: None,
         process_rx: None,
+        resume_save: None,
     };
     make_test_app(Screen::LlamafileSetup(setup))
 }
