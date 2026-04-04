@@ -16,7 +16,7 @@ expression: buffer_to_string(&buf)
 │                                     ╱             ╲  *  ╱             ╲     ╱             ╲  *                                   ││  W:0 B:0 S:0 H:0 O:0               │
 │                                    ╱      Ore      ╲   ╱     Sheep     ╲   ╱     Wood      ╲                                     ││                                    │
 │                                           10                   2                   9                                             ││Turn: 1                             │
-│                                    ╲               ╱   ╲               ╱   ╲               ╱                                     ││Phase: Setup { round:               │
+│                                    ╲               ╱   ╲               ╱   ╲               ╱                                     ││Phase: Setup                        │
 │                                  *  ╲             ╱     ╲             ╱     ╲             ╱                                      ││Deck: 25 cards                      │
 │                                       ╲         ╱         ╲         ╱         ╲         ╱                                        ││                                    │
 │                               ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲                                ││                                    │

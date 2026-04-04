@@ -109,15 +109,17 @@ pub fn render_players(state: &GameState, player_names: &[String], area: Rect, bu
         ),
     ]));
 
+    let phase_label = match &state.phase {
+        crate::game::state::GamePhase::Setup { .. } => "Setup",
+        crate::game::state::GamePhase::Playing { .. } => "Playing",
+        crate::game::state::GamePhase::Discarding { .. } => "Discarding",
+        crate::game::state::GamePhase::PlacingRobber { .. } => "Placing Robber",
+        crate::game::state::GamePhase::Stealing { .. } => "Stealing",
+        crate::game::state::GamePhase::GameOver { .. } => "Game Over",
+    };
     lines.push(Line::from(vec![
         Span::styled("Phase: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            format!("{:?}", state.phase)
-                .chars()
-                .take(15)
-                .collect::<String>(),
-            Style::default().fg(Color::White),
-        ),
+        Span::styled(phase_label, Style::default().fg(Color::White)),
     ]));
 
     lines.push(Line::from(vec![
