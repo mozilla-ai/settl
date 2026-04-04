@@ -1046,7 +1046,14 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 } => {
                     let len = positions.len();
                     match key {
-                        KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
+                        KeyCode::Left
+                        | KeyCode::Right
+                        | KeyCode::Up
+                        | KeyCode::Down
+                        | KeyCode::Char('h')
+                        | KeyCode::Char('j')
+                        | KeyCode::Char('k')
+                        | KeyCode::Char('l') => {
                             if len > 0 {
                                 let cur = &positions[*selected];
                                 let cur_col = cur.screen_col as i32;
@@ -1311,10 +1318,10 @@ fn find_nearest_in_direction(
 
         // Check if position is in the direction of the pressed key (90-degree cone).
         let in_direction = match key {
-            KeyCode::Up => dy < 0 && dy.abs() >= dx.abs(),
-            KeyCode::Down => dy > 0 && dy.abs() >= dx.abs(),
-            KeyCode::Left => dx < 0 && dx.abs() >= dy.abs(),
-            KeyCode::Right => dx > 0 && dx.abs() >= dy.abs(),
+            KeyCode::Up | KeyCode::Char('k') => dy < 0 && dy.abs() >= dx.abs(),
+            KeyCode::Down | KeyCode::Char('j') => dy > 0 && dy.abs() >= dx.abs(),
+            KeyCode::Left | KeyCode::Char('h') => dx < 0 && dx.abs() >= dy.abs(),
+            KeyCode::Right | KeyCode::Char('l') => dx > 0 && dx.abs() >= dy.abs(),
             _ => false,
         };
 

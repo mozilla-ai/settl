@@ -1204,6 +1204,67 @@ fn board_cursor_p_cycles_backward() {
 }
 
 #[test]
+fn board_cursor_hjkl_navigates() {
+    // Three positions in a row (left, center, right) and one below center.
+    let positions = vec![
+        CursorTarget {
+            screen_col: 10,
+            screen_row: 5,
+        },
+        CursorTarget {
+            screen_col: 20,
+            screen_row: 5,
+        },
+        CursorTarget {
+            screen_col: 30,
+            screen_row: 5,
+        },
+        CursorTarget {
+            screen_col: 20,
+            screen_row: 10,
+        },
+    ];
+    let (ps, _rx) = make_test_playing_state(InputMode::BoardCursor {
+        legal: CursorLegal::Settlements(Vec::new()),
+        positions,
+        selected: 1, // Start at center (col=20, row=5)
+    });
+    let mut app = make_test_app(Screen::Playing(ps));
+
+    // 'l' should move right (to index 2, col=30).
+    handle_input(&mut app, KeyCode::Char('l'));
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BoardCursor { selected, .. } = &ps.input_mode {
+            assert_eq!(*selected, 2, "'l' should move right");
+        }
+    }
+
+    // 'h' should move left (back to index 1, col=20).
+    handle_input(&mut app, KeyCode::Char('h'));
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BoardCursor { selected, .. } = &ps.input_mode {
+            assert_eq!(*selected, 1, "'h' should move left");
+        }
+    }
+
+    // 'j' should move down (to index 3, row=10).
+    handle_input(&mut app, KeyCode::Char('j'));
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BoardCursor { selected, .. } = &ps.input_mode {
+            assert_eq!(*selected, 3, "'j' should move down");
+        }
+    }
+
+    // 'k' should move up (back to index 1, row=5).
+    handle_input(&mut app, KeyCode::Char('k'));
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BoardCursor { selected, .. } = &ps.input_mode {
+            assert_eq!(*selected, 1, "'k' should move up");
+        }
+    }
+}
+
+#[test]
 fn board_cursor_enter_sends_selected_index() {
     let positions = vec![
         CursorTarget {
