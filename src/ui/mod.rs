@@ -833,13 +833,7 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 cycle_new_game_value(state, true);
                 Action::None
             }
-            KeyCode::Enter => match state.focus {
-                NewGameFocus::StartButton => Action::StartGame,
-                _ => {
-                    cycle_new_game_value(state, true);
-                    Action::None
-                }
-            },
+            KeyCode::Enter => Action::StartGame,
             _ => Action::None,
         },
 
@@ -1260,7 +1254,7 @@ fn find_nearest_in_direction(
 
 /// Ordered list of focusable rows, skipping player 4 when in 3-player mode.
 fn focusable_rows(state: &NewGameState) -> Vec<NewGameFocus> {
-    let mut rows = vec![NewGameFocus::PlayerCount];
+    let mut rows = vec![NewGameFocus::StartButton, NewGameFocus::PlayerCount];
     // AI player rows: indices 1, 2, 3 (skip index 3 in 3-player mode).
     for i in 1..4 {
         if i == 3 && !state.four_players {
@@ -1271,7 +1265,6 @@ fn focusable_rows(state: &NewGameState) -> Vec<NewGameFocus> {
     rows.push(NewGameFocus::FriendlyRobber);
     rows.push(NewGameFocus::BoardLayout);
     rows.push(NewGameFocus::AiModel);
-    rows.push(NewGameFocus::StartButton);
     rows
 }
 

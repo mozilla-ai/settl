@@ -147,7 +147,7 @@ impl NewGameState {
 
         Self {
             players,
-            focus: NewGameFocus::PlayerCount,
+            focus: NewGameFocus::StartButton,
             personality_names,
             four_players: true,
             friendly_robber: false,
@@ -552,8 +552,20 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
         .style(Style::default().fg(Color::Yellow).bold());
     f.render_widget(title, title_area);
 
+    // Start button (at top for quick launch).
+    let button_y = area.y + 3;
+    let button_focused = matches!(state.focus, NewGameFocus::StartButton);
+    let button_style = if button_focused {
+        Style::default().fg(Color::Black).bg(Color::Green).bold()
+    } else {
+        Style::default().fg(Color::Green).bold()
+    };
+    let button_area = Rect::new(x_start, button_y, content_width, 1);
+    let button = Paragraph::new("  [ Start Game ]").style(button_style);
+    f.render_widget(button, button_area);
+
     // -- PLAYERS section --
-    let section_y = area.y + 3;
+    let section_y = button_y + 2;
     let section_area = Rect::new(x_start, section_y, content_width, 1);
     let section = Paragraph::new("PLAYERS").style(Style::default().fg(Color::DarkGray).bold());
     f.render_widget(section, section_area);
@@ -696,23 +708,11 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
         ms_focused,
     );
 
-    // Start button.
-    let button_y = ms_y + 2;
-    let button_focused = matches!(state.focus, NewGameFocus::StartButton);
-    let button_style = if button_focused {
-        Style::default().fg(Color::Black).bg(Color::Green).bold()
-    } else {
-        Style::default().fg(Color::Green).bold()
-    };
-    let button_area = Rect::new(x_start, button_y, content_width, 1);
-    let button = Paragraph::new("  [ Start Game ]").style(button_style);
-    f.render_widget(button, button_area);
-
     // Hint bar at bottom.
     let hint_y = area.y + area.height - 1;
     let hint_area = Rect::new(area.x, hint_y, area.width, 1);
     let hint = Paragraph::new(
-        "\u{2191}\u{2193}: move  |  \u{2190}\u{2192}: change  |  Enter: select  |  Esc: back",
+        "\u{2191}\u{2193}: move  |  \u{2190}\u{2192}: change  |  Enter: start  |  Esc: back",
     )
     .alignment(Alignment::Center)
     .style(Style::default().fg(Color::DarkGray));

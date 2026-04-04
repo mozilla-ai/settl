@@ -206,20 +206,13 @@ fn screen_navigation_menu_to_newgame_and_back() {
 fn screen_navigation_new_game_configure_and_start() {
     let mut app = new_game_app();
 
-    // Navigate down to the start button.
-    // Default focus is PlayerCount.
-    // Down x7: PlayerCount -> P2 -> P3 -> P4 -> FriendlyRobber -> BoardLayout -> AiModel -> StartButton.
-    for _ in 0..7 {
-        handle_input(&mut app, KeyCode::Down);
-    }
-
+    // Default focus is StartButton -- Enter immediately starts the game.
     if let Screen::NewGame(ref state) = app.screen {
         assert_eq!(state.focus, NewGameFocus::StartButton);
     } else {
         panic!("should still be on NewGame");
     }
 
-    // Enter on StartButton triggers StartGame action.
     let action = handle_input(&mut app, KeyCode::Enter);
     assert!(
         matches!(action, Action::StartGame),
