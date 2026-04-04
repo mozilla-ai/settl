@@ -365,6 +365,7 @@ impl SettingsState {
     pub fn save(&self) -> Config {
         let config = Config {
             models: self.models.clone(),
+            hooks: Vec::new(),
         };
         let _ = crate::config::save_config(&config);
         config

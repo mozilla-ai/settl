@@ -48,6 +48,8 @@ pub struct GameOrchestrator {
     /// Event history for LLM context.
     pub events: Vec<GameEvent>,
     /// Player names, indexed by PlayerId.
+    /// Event hooks -- shell commands triggered by game events.
+    pub hooks: Vec<crate::config::HookConfig>,
     pub player_names: Vec<String>,
     /// Maximum turns before declaring the game stuck (safety valve).
     pub max_turns: u32,
@@ -67,6 +69,7 @@ impl GameOrchestrator {
             players,
             events: Vec::new(),
             player_names,
+            hooks: Vec::new(),
             max_turns: 500,
             ui_tx: None,
             player_configs: Vec::new(),
@@ -110,8 +113,9 @@ impl GameOrchestrator {
         }
     }
 
-    /// Record a game event for LLM history context.
+    /// Record a game event for LLM history context and fire hooks.
     fn record_event(&mut self, event: GameEvent) {
+        crate::hooks::fire(&self.hooks, &event, &self.player_names);
         self.events.push(event);
     }
 

@@ -85,7 +85,9 @@ pub async fn run(cli: HeadlessCli) {
     println!("{}\n", player::prompt::ascii_board(&board));
     println!("Starting game with {} players...\n", cli.players);
 
+    let config = crate::config::load_config();
     let mut orchestrator = game::orchestrator::GameOrchestrator::new(state, players);
+    orchestrator.hooks = config.hooks;
 
     match orchestrator.run().await {
         Ok(_winner) => {

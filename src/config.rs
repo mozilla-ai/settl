@@ -39,16 +39,29 @@ pub enum ModelBackend {
     },
 }
 
+/// A hook that runs a shell command when a game event fires.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HookConfig {
+    /// Event name to match (e.g. "DiceRolled", "GameWon") or "*" for all events.
+    pub event: String,
+    /// Shell command to execute. Event data is piped as JSON to stdin.
+    pub command: String,
+}
+
 /// Top-level application config.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Registered AI models.
     pub models: Vec<ModelEntry>,
+    /// Event hooks -- shell commands triggered by game events.
+    #[serde(default)]
+    pub hooks: Vec<HookConfig>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
+            hooks: Vec::new(),
             models: vec![
                 ModelEntry {
                     name: "Bonsai 1.7B (fast)".into(),
@@ -137,6 +150,10 @@ mod tests {
     #[test]
     fn roundtrip_toml() {
         let config = Config {
+            hooks: vec![HookConfig {
+                event: "GameWon".into(),
+                command: "echo win".into(),
+            }],
             models: vec![
                 ModelEntry {
                     name: "Test Llamafile".into(),
@@ -183,6 +200,10 @@ mod tests {
             }
             _ => panic!("Expected Api backend"),
         }
+
+        assert_eq!(parsed.hooks.len(), 1);
+        assert_eq!(parsed.hooks[0].event, "GameWon");
+        assert_eq!(parsed.hooks[0].command, "echo win");
     }
 
     #[test]
