@@ -429,10 +429,14 @@ pub fn legal_actions(state: &GameState) -> Vec<Action> {
         if ps.resource_count(give_res) >= rate {
             for &get_res in Resource::all() {
                 if give_res != get_res {
-                    actions.push(Action::BankTrade {
-                        give: give_res,
-                        get: get_res,
-                    });
+                    let in_circulation = total_in_circulation(state, get_res);
+                    let bank_has = BANK_SUPPLY_PER_RESOURCE.saturating_sub(in_circulation);
+                    if bank_has > 0 {
+                        actions.push(Action::BankTrade {
+                            give: give_res,
+                            get: get_res,
+                        });
+                    }
                 }
             }
         }
@@ -790,6 +794,13 @@ fn apply_bank_trade(state: &mut GameState, give: Resource, get: Resource) -> Res
     let rate = trade_rate(state, player, give);
 
     if state.players[player].resource_count(give) < rate {
+        return Err(RuleError::InsufficientResources);
+    }
+
+    // Bank must have the requested resource available.
+    let in_circulation = total_in_circulation(state, get);
+    let bank_has = BANK_SUPPLY_PER_RESOURCE.saturating_sub(in_circulation);
+    if bank_has == 0 {
         return Err(RuleError::InsufficientResources);
     }
 
@@ -1542,6 +1553,49 @@ mod tests {
         give_resources(&mut state, 0, &[(Resource::Brick, 3)]);
 
         assert!(apply_bank_trade(&mut state, Resource::Brick, Resource::Ore).is_err());
+    }
+
+    #[test]
+    fn bank_trade_rejected_when_bank_empty() {
+        let mut state = make_state(4);
+        set_playing(&mut state, 0);
+        // Player 0 has 4 Brick to trade.
+        give_resources(&mut state, 0, &[(Resource::Brick, 4)]);
+        // Distribute all 19 Ore among other players so the bank has none.
+        give_resources(&mut state, 1, &[(Resource::Ore, 10)]);
+        give_resources(&mut state, 2, &[(Resource::Ore, 9)]);
+
+        assert_eq!(
+            apply_bank_trade(&mut state, Resource::Brick, Resource::Ore),
+            Err(RuleError::InsufficientResources),
+        );
+        // Player's Brick should be untouched.
+        assert_eq!(state.players[0].resource_count(Resource::Brick), 4);
+    }
+
+    #[test]
+    fn bank_trade_excluded_from_legal_actions_when_bank_empty() {
+        let mut state = make_state(4);
+        set_playing(&mut state, 0);
+        give_resources(&mut state, 0, &[(Resource::Brick, 4)]);
+        // Exhaust all Ore in the bank.
+        give_resources(&mut state, 1, &[(Resource::Ore, 10)]);
+        give_resources(&mut state, 2, &[(Resource::Ore, 9)]);
+
+        let actions = legal_actions(&state);
+        let ore_trade = actions.iter().any(|a| {
+            matches!(
+                a,
+                Action::BankTrade {
+                    get: Resource::Ore,
+                    ..
+                }
+            )
+        });
+        assert!(
+            !ore_trade,
+            "Should not offer bank trade for depleted resource"
+        );
     }
 
     // -- End turn --
