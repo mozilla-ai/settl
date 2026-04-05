@@ -2128,7 +2128,7 @@ fn handle_personalities_input(state: &mut PersonalitiesState, key: KeyCode) -> A
                     setup_strategy: None,
                     strategy_guide: None,
                 };
-                let stem = find_unique_stem("new-personality");
+                let stem = find_unique_stem(&state.base_dir, "new-personality");
                 state.entries.push((new_p, PersonalitySource::Custom(stem)));
                 state.selected = state.entries.len() - 1;
                 state.detail_scroll = 0;
@@ -2142,7 +2142,7 @@ fn handle_personalities_input(state: &mut PersonalitiesState, key: KeyCode) -> A
                     let mut dup = p;
                     dup.name = format!("Copy of {}", dup.name);
                     let base_stem = Personality::filename_from_name(&dup.name);
-                    let stem = find_unique_stem(&base_stem);
+                    let stem = find_unique_stem(&state.base_dir, &base_stem);
                     state.entries.push((dup, PersonalitySource::Custom(stem)));
                     state.selected = state.entries.len() - 1;
                     state.detail_scroll = 0;
@@ -2207,13 +2207,14 @@ fn handle_personalities_input(state: &mut PersonalitiesState, key: KeyCode) -> A
                 state.commit_edit_text(field);
                 // Update the filename stem if name changed.
                 if field == PersonalityField::Name {
+                    let base_dir = state.base_dir.clone();
                     if let Some((p, PersonalitySource::Custom(ref mut stem))) =
                         state.entries.get_mut(state.selected)
                     {
-                        let old_path = format!("./personalities/{}.toml", stem);
+                        let old_path = format!("{}/{}.toml", base_dir, stem);
                         let new_stem = Personality::filename_from_name(&p.name);
-                        let new_stem = find_unique_stem_excluding(&new_stem, stem);
-                        let new_path = format!("./personalities/{}.toml", new_stem);
+                        let new_stem = find_unique_stem_excluding(&base_dir, &new_stem, stem);
+                        let new_path = format!("{}/{}.toml", base_dir, new_stem);
                         if old_path != new_path {
                             let _ = std::fs::rename(&old_path, &new_path);
                         }
@@ -2413,15 +2414,15 @@ fn handle_personalities_input(state: &mut PersonalitiesState, key: KeyCode) -> A
     }
 }
 
-/// Find a unique filename stem in ./personalities/, appending -2, -3, etc. if needed.
-fn find_unique_stem(base: &str) -> String {
-    let path = format!("./personalities/{}.toml", base);
+/// Find a unique filename stem in a directory, appending -2, -3, etc. if needed.
+fn find_unique_stem(dir: &str, base: &str) -> String {
+    let path = format!("{}/{}.toml", dir, base);
     if !std::path::Path::new(&path).exists() {
         return base.to_string();
     }
     for i in 2..100 {
         let candidate = format!("{}-{}", base, i);
-        let path = format!("./personalities/{}.toml", candidate);
+        let path = format!("{}/{}.toml", dir, candidate);
         if !std::path::Path::new(&path).exists() {
             return candidate;
         }
@@ -2430,11 +2431,11 @@ fn find_unique_stem(base: &str) -> String {
 }
 
 /// Find a unique stem, excluding a specific existing stem (for renames).
-fn find_unique_stem_excluding(base: &str, exclude: &str) -> String {
+fn find_unique_stem_excluding(dir: &str, base: &str, exclude: &str) -> String {
     if base == exclude {
         return base.to_string();
     }
-    let path = format!("./personalities/{}.toml", base);
+    let path = format!("{}/{}.toml", dir, base);
     if !std::path::Path::new(&path).exists() {
         return base.to_string();
     }
@@ -2443,7 +2444,7 @@ fn find_unique_stem_excluding(base: &str, exclude: &str) -> String {
         if candidate == exclude {
             return candidate;
         }
-        let path = format!("./personalities/{}.toml", candidate);
+        let path = format!("{}/{}.toml", dir, candidate);
         if !std::path::Path::new(&path).exists() {
             return candidate;
         }

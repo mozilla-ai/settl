@@ -353,6 +353,61 @@ impl ModelField {
     }
 }
 
+// ── Shared Text Input Helpers ──────────────────────────────────────────
+
+/// Insert a character at the cursor position in a text buffer.
+fn text_insert(buf: &mut String, cursor: &mut usize, ch: char) {
+    buf.insert(*cursor, ch);
+    *cursor += ch.len_utf8();
+}
+
+/// Delete the character before the cursor.
+fn text_backspace(buf: &mut String, cursor: &mut usize) {
+    if *cursor > 0 {
+        let prev = buf[..*cursor]
+            .char_indices()
+            .next_back()
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+        buf.drain(prev..*cursor);
+        *cursor = prev;
+    }
+}
+
+/// Delete the character at the cursor.
+fn text_delete(buf: &mut String, cursor: &mut usize) {
+    if *cursor < buf.len() {
+        let next = buf[*cursor..]
+            .char_indices()
+            .nth(1)
+            .map(|(i, _)| *cursor + i)
+            .unwrap_or(buf.len());
+        buf.drain(*cursor..next);
+    }
+}
+
+/// Move cursor left by one character.
+fn text_left(buf: &str, cursor: &mut usize) {
+    if *cursor > 0 {
+        *cursor = buf[..*cursor]
+            .char_indices()
+            .next_back()
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+    }
+}
+
+/// Move cursor right by one character.
+fn text_right(buf: &str, cursor: &mut usize) {
+    if *cursor < buf.len() {
+        *cursor = buf[*cursor..]
+            .char_indices()
+            .nth(1)
+            .map(|(i, _)| *cursor + i)
+            .unwrap_or(buf.len());
+    }
+}
+
 /// Sub-focus within the Settings screen.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SettingsFocus {
@@ -464,58 +519,24 @@ impl SettingsState {
         config
     }
 
-    /// Insert a character at the cursor position.
     pub fn input_insert(&mut self, ch: char) {
-        self.input_buf.insert(self.input_cursor, ch);
-        self.input_cursor += ch.len_utf8();
+        text_insert(&mut self.input_buf, &mut self.input_cursor, ch);
     }
 
-    /// Delete the character before the cursor.
     pub fn input_backspace(&mut self) {
-        if self.input_cursor > 0 {
-            // Find the previous char boundary.
-            let prev = self.input_buf[..self.input_cursor]
-                .char_indices()
-                .next_back()
-                .map(|(i, _)| i)
-                .unwrap_or(0);
-            self.input_buf.drain(prev..self.input_cursor);
-            self.input_cursor = prev;
-        }
+        text_backspace(&mut self.input_buf, &mut self.input_cursor);
     }
 
-    /// Delete the character at the cursor.
     pub fn input_delete(&mut self) {
-        if self.input_cursor < self.input_buf.len() {
-            let next = self.input_buf[self.input_cursor..]
-                .char_indices()
-                .nth(1)
-                .map(|(i, _)| self.input_cursor + i)
-                .unwrap_or(self.input_buf.len());
-            self.input_buf.drain(self.input_cursor..next);
-        }
+        text_delete(&mut self.input_buf, &mut self.input_cursor);
     }
 
-    /// Move cursor left by one character.
     pub fn input_left(&mut self) {
-        if self.input_cursor > 0 {
-            self.input_cursor = self.input_buf[..self.input_cursor]
-                .char_indices()
-                .next_back()
-                .map(|(i, _)| i)
-                .unwrap_or(0);
-        }
+        text_left(&self.input_buf, &mut self.input_cursor);
     }
 
-    /// Move cursor right by one character.
     pub fn input_right(&mut self) {
-        if self.input_cursor < self.input_buf.len() {
-            self.input_cursor = self.input_buf[self.input_cursor..]
-                .char_indices()
-                .nth(1)
-                .map(|(i, _)| self.input_cursor + i)
-                .unwrap_or(self.input_buf.len());
-        }
+        text_right(&self.input_buf, &mut self.input_cursor);
     }
 }
 
@@ -576,17 +597,22 @@ pub struct PersonalitiesState {
     pub catchphrase_selected: usize,
     /// Whether any changes were made.
     pub dirty: bool,
+    /// Base directory for personality TOML files.
+    pub base_dir: String,
 }
 
 impl PersonalitiesState {
+    const DEFAULT_DIR: &'static str = "./personalities";
+
     pub fn new(discovered: &[Personality]) -> Self {
+        let base_dir = Self::DEFAULT_DIR.to_string();
         let mut entries: Vec<(Personality, PersonalitySource)> = Personality::built_in_all()
             .into_iter()
             .map(|p| (p, PersonalitySource::BuiltIn))
             .collect();
 
         // Discover custom personalities from disk to get filenames.
-        if let Ok(dir) = std::fs::read_dir("./personalities") {
+        if let Ok(dir) = std::fs::read_dir(&base_dir) {
             let mut custom: Vec<(Personality, String)> = dir
                 .flatten()
                 .filter_map(|entry| {
@@ -629,6 +655,7 @@ impl PersonalitiesState {
             detail_scroll: 0,
             catchphrase_selected: 0,
             dirty: false,
+            base_dir,
         }
     }
 
@@ -701,8 +728,8 @@ impl PersonalitiesState {
     /// Save the currently selected custom personality to its TOML file.
     pub fn save_current(&self) {
         if let Some((p, PersonalitySource::Custom(stem))) = self.entries.get(self.selected) {
-            let path = format!("./personalities/{}.toml", stem);
-            let _ = std::fs::create_dir_all("./personalities");
+            let path = format!("{}/{}.toml", self.base_dir, stem);
+            let _ = std::fs::create_dir_all(&self.base_dir);
             let _ = p.to_toml_file(std::path::Path::new(&path));
         }
     }
@@ -710,7 +737,7 @@ impl PersonalitiesState {
     /// Delete the currently selected custom personality's TOML file.
     pub fn delete_current(&mut self) {
         if let Some((_, PersonalitySource::Custom(stem))) = self.entries.get(self.selected) {
-            let path = format!("./personalities/{}.toml", stem);
+            let path = format!("{}/{}.toml", self.base_dir, stem);
             let _ = std::fs::remove_file(&path);
             self.entries.remove(self.selected);
             if self.selected >= self.entries.len() && self.selected > 0 {
@@ -720,57 +747,24 @@ impl PersonalitiesState {
         }
     }
 
-    /// Insert a character at the cursor position.
     pub fn input_insert(&mut self, ch: char) {
-        self.input_buf.insert(self.input_cursor, ch);
-        self.input_cursor += ch.len_utf8();
+        text_insert(&mut self.input_buf, &mut self.input_cursor, ch);
     }
 
-    /// Delete the character before the cursor.
     pub fn input_backspace(&mut self) {
-        if self.input_cursor > 0 {
-            let prev = self.input_buf[..self.input_cursor]
-                .char_indices()
-                .next_back()
-                .map(|(i, _)| i)
-                .unwrap_or(0);
-            self.input_buf.drain(prev..self.input_cursor);
-            self.input_cursor = prev;
-        }
+        text_backspace(&mut self.input_buf, &mut self.input_cursor);
     }
 
-    /// Delete the character at the cursor.
     pub fn input_delete(&mut self) {
-        if self.input_cursor < self.input_buf.len() {
-            let next = self.input_buf[self.input_cursor..]
-                .char_indices()
-                .nth(1)
-                .map(|(i, _)| self.input_cursor + i)
-                .unwrap_or(self.input_buf.len());
-            self.input_buf.drain(self.input_cursor..next);
-        }
+        text_delete(&mut self.input_buf, &mut self.input_cursor);
     }
 
-    /// Move cursor left by one character.
     pub fn input_left(&mut self) {
-        if self.input_cursor > 0 {
-            self.input_cursor = self.input_buf[..self.input_cursor]
-                .char_indices()
-                .next_back()
-                .map(|(i, _)| i)
-                .unwrap_or(0);
-        }
+        text_left(&self.input_buf, &mut self.input_cursor);
     }
 
-    /// Move cursor right by one character.
     pub fn input_right(&mut self) {
-        if self.input_cursor < self.input_buf.len() {
-            self.input_cursor = self.input_buf[self.input_cursor..]
-                .char_indices()
-                .nth(1)
-                .map(|(i, _)| self.input_cursor + i)
-                .unwrap_or(self.input_buf.len());
-        }
+        text_right(&self.input_buf, &mut self.input_cursor);
     }
 }
 
