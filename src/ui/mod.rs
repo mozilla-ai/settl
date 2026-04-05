@@ -408,19 +408,13 @@ impl PlayingState {
                 // If the last message is a Reasoning from the same player
                 // (streaming in-progress), replace its text with the final
                 // clean version.
-                let replaced = if let Some(last) = self.chat_messages.last_mut() {
-                    if last.player_id == player_id
+                let is_continuation = self.chat_messages.last().is_some_and(|last| {
+                    last.player_id == player_id
                         && last.kind == chat_panel::ChatMessageKind::Reasoning
-                    {
-                        last.text = reasoning.clone();
-                        true
-                    } else {
-                        false
-                    }
+                });
+                if is_continuation {
+                    self.chat_messages.last_mut().unwrap().text = reasoning;
                 } else {
-                    false
-                };
-                if !replaced {
                     self.chat_messages.push(chat_panel::ChatMessage {
                         player: player_name,
                         player_id,

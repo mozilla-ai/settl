@@ -1,4 +1,4 @@
-//! AI reasoning / chat panel --shows LLM reasoning traces and trade negotiations.
+//! AI reasoning / chat panel -- shows LLM reasoning traces and trade negotiations.
 //!
 //! Renders a scrollable panel of AI "thoughts" that were sent via UiEvent messages
 //! containing reasoning text. Visually distinct from the game log which shows
@@ -171,5 +171,75 @@ mod tests {
         let area = Rect::new(0, 0, 80, 20);
         let mut buf = Buffer::empty(area);
         render_chat(&messages, 0, area, &mut buf);
+    }
+
+    #[test]
+    fn narration_renders_without_player_header() {
+        let messages = vec![
+            ChatMessage {
+                player: String::new(),
+                player_id: usize::MAX,
+                text: "-- Turn 1 -- Alice's turn --".into(),
+                kind: ChatMessageKind::Narration,
+            },
+            ChatMessage {
+                player: "Alice".into(),
+                player_id: 0,
+                text: "I should build near wheat.".into(),
+                kind: ChatMessageKind::Reasoning,
+            },
+            ChatMessage {
+                player: String::new(),
+                player_id: usize::MAX,
+                text: "Alice built a settlement.".into(),
+                kind: ChatMessageKind::Narration,
+            },
+        ];
+        let area = Rect::new(0, 0, 80, 20);
+        let mut buf = Buffer::empty(area);
+        render_chat(&messages, 0, area, &mut buf);
+
+        let text = crate::ui::testing::buffer_to_string(&buf);
+        // Narration lines should appear without "PlayerName: " prefix.
+        assert!(
+            text.contains("Turn 1"),
+            "narration turn marker should be visible"
+        );
+        assert!(
+            text.contains("Alice:"),
+            "reasoning should have player prefix"
+        );
+        assert!(
+            text.contains("built a settlement"),
+            "narration action should be visible"
+        );
+    }
+
+    #[test]
+    fn mixed_narration_and_reasoning_count() {
+        let messages = vec![
+            ChatMessage {
+                player: String::new(),
+                player_id: usize::MAX,
+                text: "narration".into(),
+                kind: ChatMessageKind::Narration,
+            },
+            ChatMessage {
+                player: "Bot".into(),
+                player_id: 0,
+                text: "reasoning".into(),
+                kind: ChatMessageKind::Reasoning,
+            },
+        ];
+        let area = Rect::new(0, 0, 80, 10);
+        let mut buf = Buffer::empty(area);
+        render_chat(&messages, 0, area, &mut buf);
+
+        let text = crate::ui::testing::buffer_to_string(&buf);
+        // Panel title should show total count of 2 (both kinds).
+        assert!(
+            text.contains("AI Reasoning (2)"),
+            "title should count all message kinds"
+        );
     }
 }
