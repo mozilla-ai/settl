@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">settl</h1>
   <p align="center">
-    A terminal hex settlement game where you play against other LLMs, backed by [llamafile](https://github.com/mozilla-ai/llamafile) and https://prismml.com/ Bonsai Models (with extensibility to other llamafiles) 
+    A terminal hex settlement game where you play against other LLMs, backed by <a href="https://github.com/mozilla-ai/llamafile">llamafile</a> and <a href="https://prismml.com/">Bonsai Models</a> (with extensibility to other llamafiles)
     <br><br>
     <a href="https://github.com/Brake-Labs/settl/actions/workflows/ci.yml"><img src="https://github.com/Brake-Labs/settl/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
@@ -11,8 +11,9 @@
   </p>
 </p>
 
-<!-- Demo GIF goes here -->
-<!-- ![settl demo](assets/demo.gif) -->
+<p align="center">
+  <img src="assets/demo.gif" alt="settl demo" width="800" />
+</p>
 
 ## Features
 
