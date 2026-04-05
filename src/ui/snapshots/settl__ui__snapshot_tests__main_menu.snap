@@ -35,10 +35,11 @@ expression: buffer_to_string(&buf)
 
                                                                              terminal settlers
 
-                                                                               > New Game
-                                                                                 Settings
-                                                                                 Docs
-                                                                                 About
-                                                                                 Quit
+                                                                            > New Game
+                                                                              Personalities
+                                                                              Settings
+                                                                              Docs
+                                                                              About
+                                                                              Quit
 
                                                                   [↑↓] navigate  [Enter] select  [q] quit

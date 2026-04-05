@@ -1,0 +1,69 @@
+---
+source: src/ui/snapshot_tests.rs
+expression: buffer_to_string(&buf)
+---
+┌ Personalities ─────────┐┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ > Balanced Strategist  ││ Balanced Strategist                                                                                                                          │
+│   The Merchant         ││ (built-in, read-only)                                                                                                                        │
+│   The Grudge Holder    ││                                                                                                                                              │
+│   The Architect        ││ Style:                                                                                                                                       │
+│   The Wild Card        ││ You play a balanced game, adapting your strategy to the board state. You trade fairly and build efficiently.                                 │
+│                        ││                                                                                                                                              │
+│                        ││   Aggression:   █████░░░░░  0.5                                                                                                              │
+│                        ││   Cooperation:  █████░░░░░  0.5                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││ Catchphrases:                                                                                                                                │
+│                        ││   (none)                                                                                                                                     │
+│                        ││                                                                                                                                              │
+│                        ││ Setup Strategy:                                                                                                                              │
+│                        ││ Diversify resources across both settlements. Favor ore+wheat for city-building. Aim for high pip totals (6, 8 are best). Spread across       │
+│                        ││ different numbers to reduce variance.                                                                                                        │
+│                        ││                                                                                                                                              │
+│                        ││ Strategy Guide:                                                                                                                              │
+│                        ││ DECISION RULES BY GAME PHASE: EARLY (0-4 VP):                                                                                                │
+│                        ││   ... (32 lines total)                                                                                                                       │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+│                        ││                                                                                                                                              │
+└────────────────────────┘└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                         [j/k] select  [Enter] edit  [n] new  [D] duplicate  [d] delete  [Tab] detail  [Esc] back

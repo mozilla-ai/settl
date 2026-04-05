@@ -39,9 +39,24 @@ impl MainMenuState {
 
     pub fn menu_items(&self) -> Vec<&'static str> {
         if self.has_save {
-            vec!["Continue", "New Game", "Settings", "Docs", "About", "Quit"]
+            vec![
+                "Continue",
+                "New Game",
+                "Personalities",
+                "Settings",
+                "Docs",
+                "About",
+                "Quit",
+            ]
         } else {
-            vec!["New Game", "Settings", "Docs", "About", "Quit"]
+            vec![
+                "New Game",
+                "Personalities",
+                "Settings",
+                "Docs",
+                "About",
+                "Quit",
+            ]
         }
     }
 }
@@ -335,6 +350,61 @@ impl ModelField {
     }
 }
 
+// ── Shared Text Input Helpers ──────────────────────────────────────────
+
+/// Insert a character at the cursor position in a text buffer.
+fn text_insert(buf: &mut String, cursor: &mut usize, ch: char) {
+    buf.insert(*cursor, ch);
+    *cursor += ch.len_utf8();
+}
+
+/// Delete the character before the cursor.
+fn text_backspace(buf: &mut String, cursor: &mut usize) {
+    if *cursor > 0 {
+        let prev = buf[..*cursor]
+            .char_indices()
+            .next_back()
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+        buf.drain(prev..*cursor);
+        *cursor = prev;
+    }
+}
+
+/// Delete the character at the cursor.
+fn text_delete(buf: &mut String, cursor: &mut usize) {
+    if *cursor < buf.len() {
+        let next = buf[*cursor..]
+            .char_indices()
+            .nth(1)
+            .map(|(i, _)| *cursor + i)
+            .unwrap_or(buf.len());
+        buf.drain(*cursor..next);
+    }
+}
+
+/// Move cursor left by one character.
+fn text_left(buf: &str, cursor: &mut usize) {
+    if *cursor > 0 {
+        *cursor = buf[..*cursor]
+            .char_indices()
+            .next_back()
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+    }
+}
+
+/// Move cursor right by one character.
+fn text_right(buf: &str, cursor: &mut usize) {
+    if *cursor < buf.len() {
+        *cursor = buf[*cursor..]
+            .char_indices()
+            .nth(1)
+            .map(|(i, _)| *cursor + i)
+            .unwrap_or(buf.len());
+    }
+}
+
 /// Sub-focus within the Settings screen.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SettingsFocus {
@@ -446,58 +516,252 @@ impl SettingsState {
         config
     }
 
-    /// Insert a character at the cursor position.
     pub fn input_insert(&mut self, ch: char) {
-        self.input_buf.insert(self.input_cursor, ch);
-        self.input_cursor += ch.len_utf8();
+        text_insert(&mut self.input_buf, &mut self.input_cursor, ch);
     }
 
-    /// Delete the character before the cursor.
     pub fn input_backspace(&mut self) {
-        if self.input_cursor > 0 {
-            // Find the previous char boundary.
-            let prev = self.input_buf[..self.input_cursor]
-                .char_indices()
-                .next_back()
-                .map(|(i, _)| i)
-                .unwrap_or(0);
-            self.input_buf.drain(prev..self.input_cursor);
-            self.input_cursor = prev;
-        }
+        text_backspace(&mut self.input_buf, &mut self.input_cursor);
     }
 
-    /// Delete the character at the cursor.
     pub fn input_delete(&mut self) {
-        if self.input_cursor < self.input_buf.len() {
-            let next = self.input_buf[self.input_cursor..]
-                .char_indices()
-                .nth(1)
-                .map(|(i, _)| self.input_cursor + i)
-                .unwrap_or(self.input_buf.len());
-            self.input_buf.drain(self.input_cursor..next);
-        }
+        text_delete(&mut self.input_buf, &mut self.input_cursor);
     }
 
-    /// Move cursor left by one character.
     pub fn input_left(&mut self) {
-        if self.input_cursor > 0 {
-            self.input_cursor = self.input_buf[..self.input_cursor]
-                .char_indices()
-                .next_back()
-                .map(|(i, _)| i)
-                .unwrap_or(0);
+        text_left(&self.input_buf, &mut self.input_cursor);
+    }
+
+    pub fn input_right(&mut self) {
+        text_right(&self.input_buf, &mut self.input_cursor);
+    }
+}
+
+// ── Personalities Screen ───────────────────────────────────────────────
+
+/// Which field is being edited in a personality.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PersonalityField {
+    Name,
+    Style,
+    Aggression,
+    Cooperation,
+    Catchphrases,
+}
+
+/// Sub-focus within the Personalities screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PersonalitiesFocus {
+    /// Browsing the personality list (left panel).
+    List,
+    /// Viewing detail in the right panel (scrollable).
+    Detail,
+    /// Editing a text field (Name or Style) with the input buffer.
+    EditText(PersonalityField),
+    /// Adjusting a slider field (Aggression or Cooperation).
+    EditSlider(PersonalityField),
+    /// Editing the catchphrases list.
+    EditCatchphrases,
+    /// Adding or editing a single catchphrase with text input.
+    EditCatchphraseText,
+    /// Confirming deletion of a custom personality.
+    ConfirmDelete,
+}
+
+/// Source tracking: built-in or from a TOML file.
+#[derive(Debug, Clone)]
+pub enum PersonalitySource {
+    BuiltIn,
+    /// Loaded from a TOML file. Stores the filename stem (no path/ext).
+    Custom(String),
+}
+
+/// State for the Personalities screen.
+pub struct PersonalitiesState {
+    /// All personalities: built-in first, then custom.
+    pub entries: Vec<(Personality, PersonalitySource)>,
+    /// Which entry is selected in the list.
+    pub selected: usize,
+    /// Current sub-focus.
+    pub focus: PersonalitiesFocus,
+    /// Text input buffer (used when editing a field).
+    pub input_buf: String,
+    /// Cursor position within input_buf (byte offset).
+    pub input_cursor: usize,
+    /// Scroll offset for the detail panel.
+    pub detail_scroll: u16,
+    /// Index of the catchphrase being edited/selected.
+    pub catchphrase_selected: usize,
+    /// Whether any changes were made.
+    pub dirty: bool,
+    /// Base directory for personality TOML files.
+    pub base_dir: String,
+}
+
+impl PersonalitiesState {
+    const DEFAULT_DIR: &'static str = "./personalities";
+
+    pub fn new(discovered: &[Personality]) -> Self {
+        let base_dir = Self::DEFAULT_DIR.to_string();
+        let mut entries: Vec<(Personality, PersonalitySource)> = Personality::built_in_all()
+            .into_iter()
+            .map(|p| (p, PersonalitySource::BuiltIn))
+            .collect();
+
+        // Discover custom personalities from disk to get filenames.
+        if let Ok(dir) = std::fs::read_dir(&base_dir) {
+            let mut custom: Vec<(Personality, String)> = dir
+                .flatten()
+                .filter_map(|entry| {
+                    let path = entry.path();
+                    if path.extension().and_then(|e| e.to_str()) == Some("toml") {
+                        let stem = path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+                        Personality::from_toml_file(&path).ok().map(|p| (p, stem))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            custom.sort_by(|a, b| a.0.name.cmp(&b.0.name));
+            for (p, stem) in custom {
+                entries.push((p, PersonalitySource::Custom(stem)));
+            }
+        }
+
+        // If no custom found but discovered personalities were passed, use those.
+        let has_custom = entries
+            .iter()
+            .any(|(_, s)| matches!(s, PersonalitySource::Custom(_)));
+        if !has_custom {
+            for p in discovered {
+                let stem = Personality::filename_from_name(&p.name);
+                entries.push((p.clone(), PersonalitySource::Custom(stem)));
+            }
+        }
+
+        Self {
+            entries,
+            selected: 0,
+            focus: PersonalitiesFocus::List,
+            input_buf: String::new(),
+            input_cursor: 0,
+            detail_scroll: 0,
+            catchphrase_selected: 0,
+            dirty: false,
+            base_dir,
         }
     }
 
-    /// Move cursor right by one character.
-    pub fn input_right(&mut self) {
-        if self.input_cursor < self.input_buf.len() {
-            self.input_cursor = self.input_buf[self.input_cursor..]
-                .char_indices()
-                .nth(1)
-                .map(|(i, _)| self.input_cursor + i)
-                .unwrap_or(self.input_buf.len());
+    /// Whether the currently selected personality is a custom (editable) one.
+    pub fn selected_is_custom(&self) -> bool {
+        self.entries
+            .get(self.selected)
+            .map(|(_, s)| matches!(s, PersonalitySource::Custom(_)))
+            .unwrap_or(false)
+    }
+
+    /// The number of built-in personalities in the list.
+    pub fn builtin_count(&self) -> usize {
+        self.entries
+            .iter()
+            .filter(|(_, s)| matches!(s, PersonalitySource::BuiltIn))
+            .count()
+    }
+
+    /// Start editing a text field: populate the input buffer with the current value.
+    pub fn begin_edit_text(&mut self, field: PersonalityField) {
+        if let Some((p, _)) = self.entries.get(self.selected) {
+            self.input_buf = match field {
+                PersonalityField::Name => p.name.clone(),
+                PersonalityField::Style => p.style.clone(),
+                _ => String::new(),
+            };
+            self.input_cursor = self.input_buf.len();
+            self.focus = PersonalitiesFocus::EditText(field);
         }
+    }
+
+    /// Apply the current input buffer to the selected personality's text field.
+    pub fn commit_edit_text(&mut self, field: PersonalityField) {
+        if let Some((p, _)) = self.entries.get_mut(self.selected) {
+            match field {
+                PersonalityField::Name => p.name = self.input_buf.clone(),
+                PersonalityField::Style => p.style = self.input_buf.clone(),
+                _ => {}
+            }
+            self.dirty = true;
+        }
+    }
+
+    /// Begin editing a slider field.
+    pub fn begin_edit_slider(&mut self, field: PersonalityField) {
+        self.focus = PersonalitiesFocus::EditSlider(field);
+    }
+
+    /// Advance to the next field in the sequential edit flow.
+    pub fn next_field(&mut self, current: PersonalityField) {
+        match current {
+            PersonalityField::Name => self.begin_edit_text(PersonalityField::Style),
+            PersonalityField::Style => {
+                self.begin_edit_slider(PersonalityField::Aggression);
+            }
+            PersonalityField::Aggression => {
+                self.begin_edit_slider(PersonalityField::Cooperation);
+            }
+            PersonalityField::Cooperation => {
+                self.catchphrase_selected = 0;
+                self.focus = PersonalitiesFocus::EditCatchphrases;
+            }
+            PersonalityField::Catchphrases => {
+                self.focus = PersonalitiesFocus::List;
+            }
+        }
+    }
+
+    /// Save the currently selected custom personality to its TOML file.
+    pub fn save_current(&self) {
+        if let Some((p, PersonalitySource::Custom(stem))) = self.entries.get(self.selected) {
+            let path = format!("{}/{}.toml", self.base_dir, stem);
+            let _ = std::fs::create_dir_all(&self.base_dir);
+            let _ = p.to_toml_file(std::path::Path::new(&path));
+        }
+    }
+
+    /// Delete the currently selected custom personality's TOML file.
+    pub fn delete_current(&mut self) {
+        if let Some((_, PersonalitySource::Custom(stem))) = self.entries.get(self.selected) {
+            let path = format!("{}/{}.toml", self.base_dir, stem);
+            let _ = std::fs::remove_file(&path);
+            self.entries.remove(self.selected);
+            if self.selected >= self.entries.len() && self.selected > 0 {
+                self.selected -= 1;
+            }
+            self.dirty = true;
+        }
+    }
+
+    pub fn input_insert(&mut self, ch: char) {
+        text_insert(&mut self.input_buf, &mut self.input_cursor, ch);
+    }
+
+    pub fn input_backspace(&mut self) {
+        text_backspace(&mut self.input_buf, &mut self.input_cursor);
+    }
+
+    pub fn input_delete(&mut self) {
+        text_delete(&mut self.input_buf, &mut self.input_cursor);
+    }
+
+    pub fn input_left(&mut self) {
+        text_left(&self.input_buf, &mut self.input_cursor);
+    }
+
+    pub fn input_right(&mut self) {
+        text_right(&self.input_buf, &mut self.input_cursor);
     }
 }
 
@@ -1334,6 +1598,445 @@ pub fn draw_settings(f: &mut Frame, state: &SettingsState) {
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
     f.render_widget(hint, hint_area);
+}
+
+/// Draw the Personalities management screen.
+pub fn draw_personalities(f: &mut Frame, state: &PersonalitiesState) {
+    let area = f.area();
+    f.render_widget(Clear, area);
+
+    // Two-panel layout: sidebar (26 chars) | detail (rest).
+    let sidebar_width = 26u16.min(area.width / 3);
+    let detail_width = area.width.saturating_sub(sidebar_width);
+
+    // -- Left panel: personality list --
+    let sidebar_area = Rect::new(area.x, area.y, sidebar_width, area.height.saturating_sub(1));
+    let sidebar_border_color = if matches!(state.focus, PersonalitiesFocus::List) {
+        Color::Cyan
+    } else {
+        Color::DarkGray
+    };
+    let sidebar_block = Block::default()
+        .title(" Personalities ")
+        .title_alignment(Alignment::Left)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(sidebar_border_color));
+    let sidebar_inner = sidebar_block.inner(sidebar_area);
+    f.render_widget(sidebar_block, sidebar_area);
+
+    let builtin_count = state.builtin_count();
+    let mut row_y = 0u16;
+
+    for (i, (p, source)) in state.entries.iter().enumerate() {
+        // Draw separator between built-in and custom.
+        if i == builtin_count && builtin_count > 0 && row_y < sidebar_inner.height {
+            let sep_area = Rect::new(
+                sidebar_inner.x,
+                sidebar_inner.y + row_y,
+                sidebar_inner.width,
+                1,
+            );
+            let sep_line = "\u{2500}".repeat(sidebar_inner.width as usize);
+            f.render_widget(
+                Paragraph::new(sep_line).style(Style::default().fg(Color::DarkGray)),
+                sep_area,
+            );
+            row_y += 1;
+        }
+        if row_y >= sidebar_inner.height {
+            break;
+        }
+
+        let is_selected = i == state.selected;
+        let row_area = Rect::new(
+            sidebar_inner.x,
+            sidebar_inner.y + row_y,
+            sidebar_inner.width,
+            1,
+        );
+
+        let style = if is_selected {
+            Style::default().fg(Color::Black).bg(Color::Cyan).bold()
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let marker = if is_selected { ">" } else { " " };
+        let tag = if matches!(source, PersonalitySource::Custom(_)) {
+            " *"
+        } else {
+            ""
+        };
+        let max_name = (sidebar_inner.width as usize).saturating_sub(4 + tag.len());
+        let label = format!(" {} {}{}", marker, truncate_str(&p.name, max_name), tag);
+
+        f.render_widget(Paragraph::new(label).style(style), row_area);
+        row_y += 1;
+    }
+
+    // -- Right panel: detail view --
+    let detail_area = Rect::new(
+        area.x + sidebar_width,
+        area.y,
+        detail_width,
+        area.height.saturating_sub(1),
+    );
+    let detail_border_color = if !matches!(state.focus, PersonalitiesFocus::List) {
+        Color::Cyan
+    } else {
+        Color::DarkGray
+    };
+    let detail_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(detail_border_color));
+    let detail_inner = detail_block.inner(detail_area);
+    f.render_widget(detail_block, detail_area);
+
+    if let Some((p, source)) = state.entries.get(state.selected) {
+        let w = detail_inner.width.saturating_sub(2) as usize;
+        let mut lines: Vec<Line> = Vec::new();
+
+        // Name header.
+        lines.push(Line::from(Span::styled(
+            &p.name,
+            Style::default().fg(Color::Yellow).bold(),
+        )));
+
+        let is_builtin = matches!(source, PersonalitySource::BuiltIn);
+        if is_builtin {
+            lines.push(Line::from(Span::styled(
+                "(built-in, read-only)",
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+        lines.push(Line::from(""));
+
+        // Style field.
+        if matches!(
+            state.focus,
+            PersonalitiesFocus::EditText(PersonalityField::Style)
+        ) {
+            lines.push(Line::from(Span::styled(
+                "Style:",
+                Style::default().fg(Color::DarkGray),
+            )));
+            let before = &state.input_buf[..state.input_cursor];
+            let after = &state.input_buf[state.input_cursor..];
+            lines.push(Line::from(vec![
+                Span::styled(before, Style::default().fg(Color::Black).bg(Color::Cyan)),
+                Span::styled("|", Style::default().fg(Color::Yellow).bg(Color::Cyan)),
+                Span::styled(after, Style::default().fg(Color::Black).bg(Color::Cyan)),
+            ]));
+        } else {
+            lines.push(Line::from(Span::styled(
+                "Style:",
+                Style::default().fg(Color::DarkGray),
+            )));
+            for chunk in wrap_text(&p.style, w) {
+                lines.push(Line::from(Span::styled(
+                    chunk,
+                    Style::default().fg(Color::White),
+                )));
+            }
+        }
+        lines.push(Line::from(""));
+
+        // Aggression slider.
+        let agg_editing = matches!(
+            state.focus,
+            PersonalitiesFocus::EditSlider(PersonalityField::Aggression)
+        );
+        draw_slider_line(
+            &mut lines,
+            "Aggression",
+            p.aggression,
+            Color::Red,
+            agg_editing,
+        );
+
+        // Cooperation slider.
+        let coop_editing = matches!(
+            state.focus,
+            PersonalitiesFocus::EditSlider(PersonalityField::Cooperation)
+        );
+        draw_slider_line(
+            &mut lines,
+            "Cooperation",
+            p.cooperation,
+            Color::Green,
+            coop_editing,
+        );
+        lines.push(Line::from(""));
+
+        // Catchphrases.
+        let editing_catchphrases = matches!(
+            state.focus,
+            PersonalitiesFocus::EditCatchphrases | PersonalitiesFocus::EditCatchphraseText
+        );
+        lines.push(Line::from(Span::styled(
+            "Catchphrases:",
+            Style::default().fg(Color::DarkGray),
+        )));
+        if p.catchphrases.is_empty() && !editing_catchphrases {
+            lines.push(Line::from(Span::styled(
+                "  (none)",
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+        for (ci, phrase) in p.catchphrases.iter().enumerate() {
+            let is_cp_selected = editing_catchphrases && ci == state.catchphrase_selected;
+            if matches!(state.focus, PersonalitiesFocus::EditCatchphraseText)
+                && ci == state.catchphrase_selected
+            {
+                let before = &state.input_buf[..state.input_cursor];
+                let after = &state.input_buf[state.input_cursor..];
+                lines.push(Line::from(vec![
+                    Span::styled("  \"", Style::default().fg(Color::Cyan)),
+                    Span::styled(before, Style::default().fg(Color::Black).bg(Color::Cyan)),
+                    Span::styled("|", Style::default().fg(Color::Yellow).bg(Color::Cyan)),
+                    Span::styled(after, Style::default().fg(Color::Black).bg(Color::Cyan)),
+                    Span::styled("\"", Style::default().fg(Color::Cyan)),
+                ]));
+            } else if is_cp_selected {
+                lines.push(Line::from(Span::styled(
+                    format!("  > \"{}\"", truncate_str(phrase, w.saturating_sub(6))),
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                )));
+            } else {
+                lines.push(Line::from(Span::styled(
+                    format!("    \"{}\"", truncate_str(phrase, w.saturating_sub(6))),
+                    Style::default().fg(Color::Cyan),
+                )));
+            }
+        }
+        // Show text input for new catchphrase being added.
+        if matches!(state.focus, PersonalitiesFocus::EditCatchphraseText)
+            && state.catchphrase_selected >= p.catchphrases.len()
+        {
+            let before = &state.input_buf[..state.input_cursor];
+            let after = &state.input_buf[state.input_cursor..];
+            lines.push(Line::from(vec![
+                Span::styled("  \"", Style::default().fg(Color::Cyan)),
+                Span::styled(before, Style::default().fg(Color::Black).bg(Color::Cyan)),
+                Span::styled("|", Style::default().fg(Color::Yellow).bg(Color::Cyan)),
+                Span::styled(after, Style::default().fg(Color::Black).bg(Color::Cyan)),
+                Span::styled("\"", Style::default().fg(Color::Cyan)),
+            ]));
+        }
+        if editing_catchphrases && !matches!(state.focus, PersonalitiesFocus::EditCatchphraseText) {
+            lines.push(Line::from(Span::styled(
+                "  [a] add  [d] delete  [Enter] edit  [Esc] done",
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+        lines.push(Line::from(""));
+
+        // Setup strategy (view-only summary).
+        lines.push(Line::from(Span::styled(
+            "Setup Strategy:",
+            Style::default().fg(Color::DarkGray),
+        )));
+        if let Some(strat) = &p.setup_strategy {
+            let line_count = strat.lines().count();
+            let preview: String = strat.lines().take(3).collect::<Vec<_>>().join(" ");
+            for chunk in wrap_text(&preview, w) {
+                lines.push(Line::from(Span::styled(
+                    chunk,
+                    Style::default().fg(Color::White),
+                )));
+            }
+            if line_count > 3 {
+                lines.push(Line::from(Span::styled(
+                    format!("  ... ({} lines total)", line_count),
+                    Style::default().fg(Color::DarkGray),
+                )));
+            }
+        } else {
+            lines.push(Line::from(Span::styled(
+                "  (not set)",
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+        lines.push(Line::from(""));
+
+        // Strategy guide (view-only summary).
+        lines.push(Line::from(Span::styled(
+            "Strategy Guide:",
+            Style::default().fg(Color::DarkGray),
+        )));
+        if let Some(guide) = &p.strategy_guide {
+            let line_count = guide.lines().count();
+            let preview: String = guide.lines().take(3).collect::<Vec<_>>().join(" ");
+            for chunk in wrap_text(&preview, w) {
+                lines.push(Line::from(Span::styled(
+                    chunk,
+                    Style::default().fg(Color::White),
+                )));
+            }
+            if line_count > 3 {
+                lines.push(Line::from(Span::styled(
+                    format!("  ... ({} lines total)", line_count),
+                    Style::default().fg(Color::DarkGray),
+                )));
+            }
+        } else {
+            lines.push(Line::from(Span::styled(
+                "  (not set)",
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+
+        // Name editing overlay: replace the first line with input buffer.
+        if matches!(
+            state.focus,
+            PersonalitiesFocus::EditText(PersonalityField::Name)
+        ) {
+            let before = &state.input_buf[..state.input_cursor];
+            let after = &state.input_buf[state.input_cursor..];
+            lines[0] = Line::from(vec![
+                Span::styled(before, Style::default().fg(Color::Black).bg(Color::Cyan)),
+                Span::styled("|", Style::default().fg(Color::Yellow).bg(Color::Cyan)),
+                Span::styled(after, Style::default().fg(Color::Black).bg(Color::Cyan)),
+            ]);
+        }
+
+        let content = Paragraph::new(lines)
+            .scroll((state.detail_scroll, 0))
+            .wrap(Wrap { trim: false });
+        let padded = Rect::new(
+            detail_inner.x + 1,
+            detail_inner.y,
+            detail_inner.width.saturating_sub(2),
+            detail_inner.height,
+        );
+        f.render_widget(content, padded);
+    }
+
+    // -- Delete confirmation overlay --
+    if matches!(state.focus, PersonalitiesFocus::ConfirmDelete) {
+        if let Some((p, _)) = state.entries.get(state.selected) {
+            let popup_w = 48u16.min(area.width.saturating_sub(4));
+            let popup_h = 3u16;
+            let x = area.x + (area.width.saturating_sub(popup_w)) / 2;
+            let y = area.y + (area.height.saturating_sub(popup_h)) / 2;
+            let overlay = Rect::new(x, y, popup_w, popup_h);
+            f.render_widget(Clear, overlay);
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Red));
+            let inner = block.inner(overlay);
+            f.render_widget(block, overlay);
+            let msg = format!("Delete \"{}\"? [y] yes  [n] no", truncate_str(&p.name, 20));
+            f.render_widget(
+                Paragraph::new(msg)
+                    .alignment(Alignment::Center)
+                    .style(Style::default().fg(Color::Red).bold()),
+                inner,
+            );
+        }
+    }
+
+    // -- Hint bar --
+    let hint_y = area.y + area.height - 1;
+    let hint_area = Rect::new(area.x, hint_y, area.width, 1);
+    let hint_text = match &state.focus {
+        PersonalitiesFocus::List => {
+            "[j/k] select  [Enter] edit  [n] new  [D] duplicate  [d] delete  [Tab] detail  [Esc] back"
+        }
+        PersonalitiesFocus::Detail => "[j/k] scroll  [Tab] list  [Enter] edit  [Esc] back",
+        PersonalitiesFocus::EditText(_) => {
+            "Type to edit  |  [Enter/Tab] next field  |  [Esc] cancel"
+        }
+        PersonalitiesFocus::EditSlider(_) => {
+            "[Left/Right] adjust  |  [Enter/Tab] next field  |  [Esc] cancel"
+        }
+        PersonalitiesFocus::EditCatchphrases => {
+            "[j/k] select  [a] add  [d] delete  [Enter] edit  [Esc] done"
+        }
+        PersonalitiesFocus::EditCatchphraseText => {
+            "Type phrase  |  [Enter] save  |  [Esc] cancel"
+        }
+        PersonalitiesFocus::ConfirmDelete => "[y] confirm  [n] cancel",
+    };
+    f.render_widget(
+        Paragraph::new(hint_text)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::DarkGray)),
+        hint_area,
+    );
+}
+
+/// Build a slider visualization line for the detail panel.
+fn draw_slider_line(
+    lines: &mut Vec<Line>,
+    label: &str,
+    value: f32,
+    fill_color: Color,
+    editing: bool,
+) {
+    let bar_len = 10;
+    let filled = (value * bar_len as f32).round() as usize;
+    let empty = bar_len - filled;
+    let bar_filled = "\u{2588}".repeat(filled);
+    let bar_empty = "\u{2591}".repeat(empty);
+
+    let mut spans = Vec::new();
+    if editing {
+        spans.push(Span::styled("< ", Style::default().fg(Color::Yellow)));
+    } else {
+        spans.push(Span::styled("  ", Style::default().fg(Color::DarkGray)));
+    }
+    spans.push(Span::styled(
+        format!("{:<14}", format!("{}:", label)),
+        Style::default().fg(Color::DarkGray),
+    ));
+    spans.push(Span::styled(bar_filled, Style::default().fg(fill_color)));
+    spans.push(Span::styled(
+        bar_empty,
+        Style::default().fg(Color::DarkGray),
+    ));
+    spans.push(Span::styled(
+        format!("  {:.1}", value),
+        Style::default().fg(Color::White),
+    ));
+    if editing {
+        spans.push(Span::styled(" >", Style::default().fg(Color::Yellow)));
+    }
+
+    lines.push(Line::from(spans));
+}
+
+/// Simple word-wrap: split text into lines of at most `width` characters.
+fn wrap_text(text: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return vec![text.to_string()];
+    }
+    let mut result = Vec::new();
+    for line in text.lines() {
+        if line.is_empty() {
+            result.push(String::new());
+            continue;
+        }
+        let mut current = String::new();
+        for word in line.split_whitespace() {
+            if current.is_empty() {
+                current = word.to_string();
+            } else if current.len() + 1 + word.len() <= width {
+                current.push(' ');
+                current.push_str(word);
+            } else {
+                result.push(current);
+                current = word.to_string();
+            }
+        }
+        if !current.is_empty() {
+            result.push(current);
+        }
+    }
+    if result.is_empty() {
+        result.push(String::new());
+    }
+    result
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────

@@ -61,6 +61,13 @@ fn snapshot_docs() {
     insta::assert_snapshot!("docs", buffer_to_string(&buf));
 }
 
+#[test]
+fn snapshot_personalities() {
+    let mut app = personalities_app();
+    let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
+    insta::assert_snapshot!("personalities", buffer_to_string(&buf));
+}
+
 // ── Playing screen: various input modes ──────────────────────────────
 
 #[test]

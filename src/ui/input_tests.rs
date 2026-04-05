@@ -1388,3 +1388,235 @@ fn board_cursor_esc_does_not_send_response() {
         panic!("Expected Playing screen");
     }
 }
+
+// ── Personalities Screen ────────────────────────────────────────────
+
+#[test]
+fn personalities_esc_returns_to_main_menu() {
+    let mut app = personalities_app();
+    let action = handle_input(&mut app, KeyCode::Esc);
+    assert!(matches!(action, Action::Transition(Screen::MainMenu(_))));
+}
+
+#[test]
+fn personalities_jk_navigates_list() {
+    let mut app = personalities_app();
+    handle_input(&mut app, KeyCode::Char('j'));
+    if let Screen::Personalities(ref state) = app.screen {
+        assert_eq!(state.selected, 1);
+    } else {
+        panic!("Expected Personalities screen");
+    }
+    handle_input(&mut app, KeyCode::Char('k'));
+    if let Screen::Personalities(ref state) = app.screen {
+        assert_eq!(state.selected, 0);
+    } else {
+        panic!("Expected Personalities screen");
+    }
+}
+
+#[test]
+fn personalities_k_at_zero_stays() {
+    let mut app = personalities_app();
+    handle_input(&mut app, KeyCode::Char('k'));
+    if let Screen::Personalities(ref state) = app.screen {
+        assert_eq!(state.selected, 0);
+    }
+}
+
+#[test]
+fn personalities_tab_switches_to_detail() {
+    let mut app = personalities_app();
+    handle_input(&mut app, KeyCode::Tab);
+    if let Screen::Personalities(ref state) = app.screen {
+        assert!(matches!(state.focus, PersonalitiesFocus::Detail));
+    } else {
+        panic!("Expected Personalities screen");
+    }
+}
+
+#[test]
+fn personalities_detail_tab_returns_to_list() {
+    let mut app = personalities_app();
+    // Switch to detail.
+    handle_input(&mut app, KeyCode::Tab);
+    // Switch back to list.
+    handle_input(&mut app, KeyCode::Tab);
+    if let Screen::Personalities(ref state) = app.screen {
+        assert!(matches!(state.focus, PersonalitiesFocus::List));
+    }
+}
+
+#[test]
+fn personalities_detail_jk_scrolls() {
+    let mut app = personalities_app();
+    handle_input(&mut app, KeyCode::Tab);
+    handle_input(&mut app, KeyCode::Char('j'));
+    handle_input(&mut app, KeyCode::Char('j'));
+    if let Screen::Personalities(ref state) = app.screen {
+        assert_eq!(state.detail_scroll, 2);
+    }
+    handle_input(&mut app, KeyCode::Char('k'));
+    if let Screen::Personalities(ref state) = app.screen {
+        assert_eq!(state.detail_scroll, 1);
+    }
+}
+
+#[test]
+fn personalities_enter_on_builtin_shows_detail() {
+    let mut app = personalities_app();
+    // First item is built-in, Enter should switch to Detail (not edit).
+    handle_input(&mut app, KeyCode::Enter);
+    if let Screen::Personalities(ref state) = app.screen {
+        assert!(
+            matches!(state.focus, PersonalitiesFocus::Detail),
+            "Enter on built-in should switch to Detail view"
+        );
+    }
+}
+
+#[test]
+fn personalities_d_on_builtin_is_noop() {
+    let mut app = personalities_app();
+    // Try to delete a built-in personality.
+    handle_input(&mut app, KeyCode::Char('d'));
+    if let Screen::Personalities(ref state) = app.screen {
+        assert!(
+            matches!(state.focus, PersonalitiesFocus::List),
+            "Should stay in List mode"
+        );
+    }
+}
+
+#[test]
+fn personalities_duplicate_creates_custom() {
+    let mut app = personalities_app();
+    let initial_count = if let Screen::Personalities(ref state) = app.screen {
+        state.entries.len()
+    } else {
+        panic!("Expected Personalities screen");
+    };
+    handle_input(&mut app, KeyCode::Char('D'));
+    if let Screen::Personalities(ref state) = app.screen {
+        assert_eq!(state.entries.len(), initial_count + 1);
+        assert!(state.selected_is_custom());
+        // Should be in edit mode.
+        assert!(matches!(
+            state.focus,
+            PersonalitiesFocus::EditText(PersonalityField::Name)
+        ));
+    }
+}
+
+#[test]
+fn personalities_new_creates_custom() {
+    let mut app = personalities_app();
+    let initial_count = if let Screen::Personalities(ref state) = app.screen {
+        state.entries.len()
+    } else {
+        panic!("Expected Personalities screen");
+    };
+    handle_input(&mut app, KeyCode::Char('n'));
+    if let Screen::Personalities(ref state) = app.screen {
+        assert_eq!(state.entries.len(), initial_count + 1);
+        assert!(state.selected_is_custom());
+        assert!(matches!(
+            state.focus,
+            PersonalitiesFocus::EditText(PersonalityField::Name)
+        ));
+    }
+}
+
+#[test]
+fn personalities_edit_text_esc_cancels() {
+    let mut app = personalities_app();
+    // Create a new personality to enter edit mode.
+    handle_input(&mut app, KeyCode::Char('n'));
+    // Should be in EditText(Name).
+    handle_input(&mut app, KeyCode::Esc);
+    if let Screen::Personalities(ref state) = app.screen {
+        assert!(matches!(state.focus, PersonalitiesFocus::List));
+    }
+}
+
+#[test]
+fn personalities_edit_text_enter_advances() {
+    let mut app = personalities_app();
+    handle_input(&mut app, KeyCode::Char('n'));
+    // In EditText(Name), Enter should advance to EditText(Style).
+    handle_input(&mut app, KeyCode::Enter);
+    if let Screen::Personalities(ref state) = app.screen {
+        assert!(matches!(
+            state.focus,
+            PersonalitiesFocus::EditText(PersonalityField::Style)
+        ));
+    }
+}
+
+#[test]
+fn personalities_edit_slider_advances() {
+    let mut app = personalities_app();
+    handle_input(&mut app, KeyCode::Char('n'));
+    // Name -> Style -> Aggression.
+    handle_input(&mut app, KeyCode::Enter);
+    handle_input(&mut app, KeyCode::Enter);
+    if let Screen::Personalities(ref state) = app.screen {
+        assert!(matches!(
+            state.focus,
+            PersonalitiesFocus::EditSlider(PersonalityField::Aggression)
+        ));
+    }
+    // Adjust slider right.
+    handle_input(&mut app, KeyCode::Right);
+    if let Screen::Personalities(ref state) = app.screen {
+        let (p, _) = &state.entries[state.selected];
+        assert!((p.aggression - 0.6).abs() < 0.01);
+    }
+    // Advance to Cooperation.
+    handle_input(&mut app, KeyCode::Enter);
+    if let Screen::Personalities(ref state) = app.screen {
+        assert!(matches!(
+            state.focus,
+            PersonalitiesFocus::EditSlider(PersonalityField::Cooperation)
+        ));
+    }
+    // Advance to Catchphrases.
+    handle_input(&mut app, KeyCode::Enter);
+    if let Screen::Personalities(ref state) = app.screen {
+        assert!(matches!(state.focus, PersonalitiesFocus::EditCatchphrases));
+    }
+}
+
+#[test]
+fn personalities_edit_catchphrases_add_and_done() {
+    let mut app = personalities_app();
+    handle_input(&mut app, KeyCode::Char('n'));
+    // Skip to catchphrases: Name -> Style -> Agg -> Coop -> Catchphrases.
+    handle_input(&mut app, KeyCode::Enter); // commit Name
+    handle_input(&mut app, KeyCode::Enter); // commit Style
+    handle_input(&mut app, KeyCode::Enter); // commit Aggression
+    handle_input(&mut app, KeyCode::Enter); // commit Cooperation
+                                            // Now in EditCatchphrases.
+    assert!(matches!(
+        app.screen,
+        Screen::Personalities(PersonalitiesState {
+            focus: PersonalitiesFocus::EditCatchphrases,
+            ..
+        })
+    ));
+    // Add a catchphrase.
+    handle_input(&mut app, KeyCode::Char('a'));
+    handle_input(&mut app, KeyCode::Char('H'));
+    handle_input(&mut app, KeyCode::Char('i'));
+    handle_input(&mut app, KeyCode::Enter);
+    if let Screen::Personalities(ref state) = app.screen {
+        let (p, _) = &state.entries[state.selected];
+        assert_eq!(p.catchphrases.len(), 1);
+        assert_eq!(p.catchphrases[0], "Hi");
+    }
+    // Esc returns to List.
+    handle_input(&mut app, KeyCode::Esc);
+    if let Screen::Personalities(ref state) = app.screen {
+        assert!(matches!(state.focus, PersonalitiesFocus::List));
+    }
+}

@@ -85,6 +85,7 @@ pub enum Screen {
     About(AboutState),
     Docs(DocsState),
     Settings(SettingsState),
+    Personalities(PersonalitiesState),
     LlamafileSetup(LlamafileSetupState),
     Playing(PlayingState),
     PostGame(PostGameState),
@@ -780,6 +781,7 @@ fn draw_screen(f: &mut Frame, screen: &Screen) {
         Screen::About(_) => screens::draw_about(f),
         Screen::Docs(state) => screens::draw_docs(f, state),
         Screen::Settings(state) => screens::draw_settings(f, state),
+        Screen::Personalities(state) => screens::draw_personalities(f, state),
         Screen::LlamafileSetup(state) => screens::draw_llamafile_setup(f, state),
         Screen::Playing(ps) => layout::draw_playing(f, ps),
         Screen::PostGame(state) => screens::draw_post_game(f, state),
@@ -868,6 +870,9 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                             &app.personalities,
                             &app.config,
                         ))),
+                        "Personalities" => Action::Transition(Screen::Personalities(
+                            PersonalitiesState::new(&app.personalities),
+                        )),
                         "Settings" => Action::Transition(Screen::Settings(
                             SettingsState::from_config(&app.config),
                         )),
@@ -927,6 +932,15 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
         },
 
         Screen::Settings(state) => handle_settings_input(state, key, &mut app.config),
+
+        Screen::Personalities(state) => {
+            let action = handle_personalities_input(state, key);
+            // When leaving the screen, refresh discovered personalities.
+            if matches!(action, Action::Transition(Screen::MainMenu(_))) {
+                app.personalities = discover_personalities();
+            }
+            action
+        }
 
         Screen::NewGame(state) => {
             // RAM warning popup intercepts input when visible.
@@ -2064,6 +2078,378 @@ fn handle_settings_input(
             _ => Action::None,
         },
     }
+}
+
+// ── Personalities Input Handler ────────────────────────────────────────
+
+fn handle_personalities_input(state: &mut PersonalitiesState, key: KeyCode) -> Action {
+    use screens::{PersonalitiesFocus, PersonalityField, PersonalitySource};
+
+    match state.focus {
+        PersonalitiesFocus::List => match key {
+            KeyCode::Esc => Action::Transition(Screen::MainMenu(MainMenuState::new())),
+            KeyCode::Up | KeyCode::Char('k') => {
+                if state.selected > 0 {
+                    state.selected -= 1;
+                    state.detail_scroll = 0;
+                }
+                Action::None
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if state.selected + 1 < state.entries.len() {
+                    state.selected += 1;
+                    state.detail_scroll = 0;
+                }
+                Action::None
+            }
+            KeyCode::Tab | KeyCode::Char('l') | KeyCode::Right => {
+                if !state.entries.is_empty() {
+                    state.focus = PersonalitiesFocus::Detail;
+                }
+                Action::None
+            }
+            KeyCode::Enter => {
+                if state.selected_is_custom() {
+                    state.begin_edit_text(PersonalityField::Name);
+                } else if !state.entries.is_empty() {
+                    // Built-in: switch to detail view.
+                    state.focus = PersonalitiesFocus::Detail;
+                }
+                Action::None
+            }
+            KeyCode::Char('n') => {
+                // Create a new blank personality.
+                let new_p = Personality {
+                    name: "New Personality".into(),
+                    style: String::new(),
+                    aggression: 0.5,
+                    cooperation: 0.5,
+                    catchphrases: Vec::new(),
+                    setup_strategy: None,
+                    strategy_guide: None,
+                };
+                let stem = find_unique_stem(&state.base_dir, "new-personality");
+                state.entries.push((new_p, PersonalitySource::Custom(stem)));
+                state.selected = state.entries.len() - 1;
+                state.detail_scroll = 0;
+                state.save_current();
+                state.begin_edit_text(PersonalityField::Name);
+                Action::None
+            }
+            KeyCode::Char('D') => {
+                // Duplicate selected personality as a custom one.
+                if let Some((p, _)) = state.entries.get(state.selected).cloned() {
+                    let mut dup = p;
+                    dup.name = format!("Copy of {}", dup.name);
+                    let base_stem = Personality::filename_from_name(&dup.name);
+                    let stem = find_unique_stem(&state.base_dir, &base_stem);
+                    state.entries.push((dup, PersonalitySource::Custom(stem)));
+                    state.selected = state.entries.len() - 1;
+                    state.detail_scroll = 0;
+                    state.save_current();
+                    state.begin_edit_text(PersonalityField::Name);
+                }
+                Action::None
+            }
+            KeyCode::Char('d') => {
+                if state.selected_is_custom() {
+                    state.focus = PersonalitiesFocus::ConfirmDelete;
+                }
+                Action::None
+            }
+            _ => Action::None,
+        },
+
+        PersonalitiesFocus::Detail => match key {
+            KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left => {
+                state.focus = PersonalitiesFocus::List;
+                Action::None
+            }
+            KeyCode::Tab => {
+                state.focus = PersonalitiesFocus::List;
+                Action::None
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                state.detail_scroll = state.detail_scroll.saturating_add(1);
+                Action::None
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                state.detail_scroll = state.detail_scroll.saturating_sub(1);
+                Action::None
+            }
+            KeyCode::PageDown => {
+                state.detail_scroll = state.detail_scroll.saturating_add(10);
+                Action::None
+            }
+            KeyCode::PageUp => {
+                state.detail_scroll = state.detail_scroll.saturating_sub(10);
+                Action::None
+            }
+            KeyCode::Enter => {
+                if state.selected_is_custom() {
+                    state.begin_edit_text(PersonalityField::Name);
+                }
+                Action::None
+            }
+            _ => Action::None,
+        },
+
+        PersonalitiesFocus::EditText(field) => match key {
+            KeyCode::Esc => {
+                state.focus = PersonalitiesFocus::List;
+                Action::None
+            }
+            KeyCode::Enter | KeyCode::Tab => {
+                // Reject empty names.
+                if field == PersonalityField::Name && state.input_buf.trim().is_empty() {
+                    return Action::None;
+                }
+                state.commit_edit_text(field);
+                // Update the filename stem if name changed.
+                if field == PersonalityField::Name {
+                    let base_dir = state.base_dir.clone();
+                    if let Some((p, PersonalitySource::Custom(ref mut stem))) =
+                        state.entries.get_mut(state.selected)
+                    {
+                        let old_path = format!("{}/{}.toml", base_dir, stem);
+                        let new_stem = Personality::filename_from_name(&p.name);
+                        let new_stem = find_unique_stem_excluding(&base_dir, &new_stem, stem);
+                        let new_path = format!("{}/{}.toml", base_dir, new_stem);
+                        if old_path != new_path {
+                            let _ = std::fs::rename(&old_path, &new_path);
+                        }
+                        *stem = new_stem;
+                    }
+                }
+                state.save_current();
+                state.next_field(field);
+                Action::None
+            }
+            KeyCode::Backspace => {
+                state.input_backspace();
+                Action::None
+            }
+            KeyCode::Delete => {
+                state.input_delete();
+                Action::None
+            }
+            KeyCode::Left => {
+                state.input_left();
+                Action::None
+            }
+            KeyCode::Right => {
+                state.input_right();
+                Action::None
+            }
+            KeyCode::Home => {
+                state.input_cursor = 0;
+                Action::None
+            }
+            KeyCode::End => {
+                state.input_cursor = state.input_buf.len();
+                Action::None
+            }
+            KeyCode::Char(ch) => {
+                state.input_insert(ch);
+                Action::None
+            }
+            _ => Action::None,
+        },
+
+        PersonalitiesFocus::EditSlider(field) => match key {
+            KeyCode::Esc => {
+                state.focus = PersonalitiesFocus::List;
+                Action::None
+            }
+            KeyCode::Enter | KeyCode::Tab => {
+                state.save_current();
+                state.next_field(field);
+                Action::None
+            }
+            KeyCode::Left => {
+                if let Some((p, _)) = state.entries.get_mut(state.selected) {
+                    let val = match field {
+                        PersonalityField::Aggression => &mut p.aggression,
+                        PersonalityField::Cooperation => &mut p.cooperation,
+                        _ => return Action::None,
+                    };
+                    *val = (*val - 0.1).max(0.0);
+                    // Round to avoid floating-point drift.
+                    *val = (*val * 10.0).round() / 10.0;
+                    state.dirty = true;
+                }
+                Action::None
+            }
+            KeyCode::Right => {
+                if let Some((p, _)) = state.entries.get_mut(state.selected) {
+                    let val = match field {
+                        PersonalityField::Aggression => &mut p.aggression,
+                        PersonalityField::Cooperation => &mut p.cooperation,
+                        _ => return Action::None,
+                    };
+                    *val = (*val + 0.1).min(1.0);
+                    *val = (*val * 10.0).round() / 10.0;
+                    state.dirty = true;
+                }
+                Action::None
+            }
+            _ => Action::None,
+        },
+
+        PersonalitiesFocus::EditCatchphrases => match key {
+            KeyCode::Esc | KeyCode::Tab => {
+                state.save_current();
+                state.focus = PersonalitiesFocus::List;
+                Action::None
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if state.catchphrase_selected > 0 {
+                    state.catchphrase_selected -= 1;
+                }
+                Action::None
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if let Some((p, _)) = state.entries.get(state.selected) {
+                    if state.catchphrase_selected + 1 < p.catchphrases.len() {
+                        state.catchphrase_selected += 1;
+                    }
+                }
+                Action::None
+            }
+            KeyCode::Char('a') => {
+                // Add new catchphrase.
+                if let Some((p, _)) = state.entries.get(state.selected) {
+                    state.catchphrase_selected = p.catchphrases.len();
+                }
+                state.input_buf.clear();
+                state.input_cursor = 0;
+                state.focus = PersonalitiesFocus::EditCatchphraseText;
+                Action::None
+            }
+            KeyCode::Char('d') => {
+                // Delete selected catchphrase.
+                if let Some((p, _)) = state.entries.get_mut(state.selected) {
+                    if state.catchphrase_selected < p.catchphrases.len() {
+                        p.catchphrases.remove(state.catchphrase_selected);
+                        if state.catchphrase_selected >= p.catchphrases.len()
+                            && state.catchphrase_selected > 0
+                        {
+                            state.catchphrase_selected -= 1;
+                        }
+                        state.dirty = true;
+                        state.save_current();
+                    }
+                }
+                Action::None
+            }
+            KeyCode::Enter => {
+                // Edit selected catchphrase.
+                if let Some((p, _)) = state.entries.get(state.selected) {
+                    if let Some(phrase) = p.catchphrases.get(state.catchphrase_selected) {
+                        state.input_buf = phrase.clone();
+                        state.input_cursor = state.input_buf.len();
+                        state.focus = PersonalitiesFocus::EditCatchphraseText;
+                    }
+                }
+                Action::None
+            }
+            _ => Action::None,
+        },
+
+        PersonalitiesFocus::EditCatchphraseText => match key {
+            KeyCode::Esc => {
+                state.focus = PersonalitiesFocus::EditCatchphrases;
+                Action::None
+            }
+            KeyCode::Enter => {
+                if !state.input_buf.is_empty() {
+                    if let Some((p, _)) = state.entries.get_mut(state.selected) {
+                        if state.catchphrase_selected < p.catchphrases.len() {
+                            p.catchphrases[state.catchphrase_selected] = state.input_buf.clone();
+                        } else {
+                            p.catchphrases.push(state.input_buf.clone());
+                        }
+                        state.dirty = true;
+                        state.save_current();
+                    }
+                }
+                state.focus = PersonalitiesFocus::EditCatchphrases;
+                Action::None
+            }
+            KeyCode::Backspace => {
+                state.input_backspace();
+                Action::None
+            }
+            KeyCode::Delete => {
+                state.input_delete();
+                Action::None
+            }
+            KeyCode::Left => {
+                state.input_left();
+                Action::None
+            }
+            KeyCode::Right => {
+                state.input_right();
+                Action::None
+            }
+            KeyCode::Char(ch) => {
+                state.input_insert(ch);
+                Action::None
+            }
+            _ => Action::None,
+        },
+
+        PersonalitiesFocus::ConfirmDelete => match key {
+            KeyCode::Char('y') => {
+                state.delete_current();
+                state.focus = PersonalitiesFocus::List;
+                Action::None
+            }
+            KeyCode::Char('n') | KeyCode::Esc => {
+                state.focus = PersonalitiesFocus::List;
+                Action::None
+            }
+            _ => Action::None,
+        },
+    }
+}
+
+/// Find a unique filename stem in a directory, appending -2, -3, etc. if needed.
+fn find_unique_stem(dir: &str, base: &str) -> String {
+    let path = format!("{}/{}.toml", dir, base);
+    if !std::path::Path::new(&path).exists() {
+        return base.to_string();
+    }
+    for i in 2..100 {
+        let candidate = format!("{}-{}", base, i);
+        let path = format!("{}/{}.toml", dir, candidate);
+        if !std::path::Path::new(&path).exists() {
+            return candidate;
+        }
+    }
+    base.to_string()
+}
+
+/// Find a unique stem, excluding a specific existing stem (for renames).
+fn find_unique_stem_excluding(dir: &str, base: &str, exclude: &str) -> String {
+    if base == exclude {
+        return base.to_string();
+    }
+    let path = format!("{}/{}.toml", dir, base);
+    if !std::path::Path::new(&path).exists() {
+        return base.to_string();
+    }
+    for i in 2..100 {
+        let candidate = format!("{}-{}", base, i);
+        if candidate == exclude {
+            return candidate;
+        }
+        let path = format!("{}/{}.toml", dir, candidate);
+        if !std::path::Path::new(&path).exists() {
+            return candidate;
+        }
+    }
+    base.to_string()
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────

@@ -215,6 +215,32 @@ pub fn llamafile_setup_app() -> App {
     make_test_app(Screen::LlamafileSetup(setup))
 }
 
+/// Create an `App` on the Personalities screen (built-in only, temp dir for I/O).
+pub fn personalities_app() -> App {
+    // Build state manually to avoid reading from ./personalities/ on disk.
+    // Use a temp directory so create/duplicate/delete tests don't pollute the repo.
+    let entries: Vec<(Personality, PersonalitySource)> = Personality::built_in_all()
+        .into_iter()
+        .map(|p| (p, PersonalitySource::BuiltIn))
+        .collect();
+    let temp_dir = std::env::temp_dir()
+        .join("settl_test_personalities")
+        .to_string_lossy()
+        .to_string();
+    let state = PersonalitiesState {
+        entries,
+        selected: 0,
+        focus: PersonalitiesFocus::List,
+        input_buf: String::new(),
+        input_cursor: 0,
+        detail_scroll: 0,
+        catchphrase_selected: 0,
+        dirty: false,
+        base_dir: temp_dir,
+    };
+    make_test_app(Screen::Personalities(state))
+}
+
 /// Create a NewGame app with Llamafile players (for testing kind cycling).
 pub fn new_game_llamafile_app() -> App {
     let mut ng = NewGameState::new(&[], &crate::config::Config::default());

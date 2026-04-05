@@ -382,6 +382,46 @@ impl Personality {
             .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
         toml::from_str(&contents).map_err(|e| format!("Failed to parse {}: {}", path.display(), e))
     }
+
+    /// Write a personality to a TOML file.
+    pub fn to_toml_file(&self, path: &std::path::Path) -> Result<(), String> {
+        let toml = toml::to_string_pretty(self).map_err(|e| format!("serialize: {e}"))?;
+        std::fs::write(path, toml).map_err(|e| format!("write: {e}"))?;
+        Ok(())
+    }
+
+    /// All five built-in personalities in display order.
+    pub fn built_in_all() -> Vec<Self> {
+        vec![
+            Self::default_personality(),
+            Self::aggressive(),
+            Self::grudge_holder(),
+            Self::builder(),
+            Self::chaos_agent(),
+        ]
+    }
+
+    /// Generate a filename stem from a personality name (lowercase, hyphens).
+    pub fn filename_from_name(name: &str) -> String {
+        let slug: String = name
+            .to_lowercase()
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+            .collect();
+        // Collapse consecutive hyphens and trim.
+        let mut result = String::new();
+        for ch in slug.chars() {
+            if ch == '-' && result.ends_with('-') {
+                continue;
+            }
+            result.push(ch);
+        }
+        let trimmed = result.trim_matches('-');
+        if trimmed.is_empty() {
+            return "untitled".to_string();
+        }
+        trimmed.to_string()
+    }
 }
 
 impl Default for Personality {
@@ -524,5 +564,43 @@ cooperation = 0.5
             !prompt.contains("DECISION RULES"),
             "should not include strategy guide when None"
         );
+    }
+
+    #[test]
+    fn built_in_all_returns_five() {
+        let all = Personality::built_in_all();
+        assert_eq!(all.len(), 5);
+        assert_eq!(all[0].name, "Balanced Strategist");
+        assert_eq!(all[4].name, "The Wild Card");
+    }
+
+    #[test]
+    fn filename_from_name_slugifies() {
+        assert_eq!(
+            Personality::filename_from_name("The Merchant"),
+            "the-merchant"
+        );
+        assert_eq!(
+            Personality::filename_from_name("Copy of Builder"),
+            "copy-of-builder"
+        );
+        assert_eq!(Personality::filename_from_name("  A  B  "), "a-b");
+        assert_eq!(Personality::filename_from_name(""), "untitled");
+        assert_eq!(Personality::filename_from_name("   "), "untitled");
+    }
+
+    #[test]
+    fn to_toml_file_round_trip() {
+        let p = Personality::aggressive();
+        let dir = std::env::temp_dir().join("settl_test_personality");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test-aggressive.toml");
+        p.to_toml_file(&path).unwrap();
+        let loaded = Personality::from_toml_file(&path).unwrap();
+        assert_eq!(loaded.name, p.name);
+        assert_eq!(loaded.aggression, p.aggression);
+        assert_eq!(loaded.cooperation, p.cooperation);
+        assert_eq!(loaded.catchphrases, p.catchphrases);
+        let _ = std::fs::remove_file(&path);
     }
 }
