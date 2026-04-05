@@ -173,11 +173,13 @@ fn snapshot_playing_fullscreen_chat() {
             player: "Alice".into(),
             player_id: 0,
             text: "I should build a settlement near the wheat hex to secure early resources.".into(),
+            kind: chat_panel::ChatMessageKind::Reasoning,
         },
         chat_panel::ChatMessage {
             player: "Bob".into(),
             player_id: 1,
             text: "Looking at the board, the ore-wheat combo on vertex (1,0) North is the strongest opening. I will place there.".into(),
+            kind: chat_panel::ChatMessageKind::Reasoning,
         },
     ];
     let mut app = make_test_app(Screen::Playing(ps));

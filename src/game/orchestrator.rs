@@ -1,4 +1,4 @@
-//! Game orchestrator — drives the game loop, calling Player trait methods
+//! Game orchestrator -- drives the game loop, calling Player trait methods
 //! for each decision point and applying actions through the rules engine.
 
 use std::sync::Arc;
@@ -98,6 +98,13 @@ impl GameOrchestrator {
                     reasoning: reasoning.to_string(),
                 });
             }
+        }
+    }
+
+    /// Send a narration line to the AI Reasoning panel.
+    fn send_narration(&self, message: String) {
+        if let Some(tx) = &self.ui_tx {
+            let _ = tx.send(UiEvent::Narration { message });
         }
     }
 
@@ -211,6 +218,11 @@ impl GameOrchestrator {
                 ));
             }
 
+            self.send_narration(format!(
+                "{} is placing settlement (round {})...",
+                self.player_names[player_id], round
+            ));
+
             let (v_idx, v_reasoning) = self
                 .with_timeout(
                     self.players[player_id].choose_settlement(
@@ -283,6 +295,11 @@ impl GameOrchestrator {
     /// Run a single player's turn. Returns Some(winner) if the game ends.
     async fn run_turn(&mut self) -> Result<Option<PlayerId>, OrchestratorError> {
         let player_id = self.state.current_player();
+        let name = self.player_names[player_id].clone();
+        let turn_num = self.state.turn_number + 1;
+
+        // Turn start narration.
+        self.send_narration(format!("-- Turn {} -- {}'s turn --", turn_num, name));
 
         // Inject enriched game context for LLM decisions.
         let strategic =
@@ -326,21 +343,18 @@ impl GameOrchestrator {
             total: roll,
         };
         self.record_event(dice_event.clone());
+        self.send_narration(format!("{} rolled {} ({} + {})", name, roll, d1, d2));
         self.send_ui(
             format!(
-                "Turn {} — P{} ({}) rolled {} ({} + {})",
-                self.state.turn_number + 1,
-                player_id,
-                self.player_names[player_id],
-                roll,
-                d1,
-                d2
+                "Turn {} -- {} rolled {} ({} + {})",
+                turn_num, name, roll, d1, d2
             ),
             Some(dice_event),
         );
 
         // Step 2: Handle the roll.
         if roll == 7 {
+            self.send_narration(format!("{} rolled 7! Robber activates.", name));
             self.handle_seven(player_id).await?;
         } else {
             self.distribute_resources(roll);
@@ -352,7 +366,7 @@ impl GameOrchestrator {
             has_rolled: true,
         };
 
-        // Step 3: Action loop — player takes actions until EndTurn.
+        // Step 3: Action loop -- player takes actions until EndTurn.
         let max_actions_per_turn = 50; // safety valve
         for _ in 0..max_actions_per_turn {
             let choices = self.build_choices();
@@ -361,6 +375,8 @@ impl GameOrchestrator {
                 // This shouldn't happen (EndTurn should always be available).
                 break;
             }
+
+            self.send_narration(format!("{} is thinking...", name));
 
             let (choice_idx, reasoning) = self
                 .with_timeout(
@@ -375,6 +391,7 @@ impl GameOrchestrator {
             let action_result = match choice {
                 PlayerChoice::GameAction(action) => {
                     if matches!(action, Action::EndTurn) {
+                        self.send_narration(format!("{} ends their turn.", name));
                         self.end_turn(player_id);
                         return Ok(None);
                     }
@@ -395,19 +412,14 @@ impl GameOrchestrator {
 
             match action_result {
                 Ok(()) => {
-                    self.send_ui(
-                        format!(
-                            "{}: {} — {}",
-                            self.player_names[player_id], choice, reasoning
-                        ),
-                        None,
-                    );
+                    self.send_narration(self.narrate_choice(player_id, choice));
+                    self.send_ui(format!("{}: {}", name, choice), None);
                     if let Some(winner) = rules::check_victory(&self.state) {
                         return Ok(Some(winner));
                     }
                 }
                 Err(OrchestratorError::RuleViolation(_msg)) => {
-                    // Action was invalid — skip it and let the player try again.
+                    // Action was invalid -- skip it and let the player try again.
                 }
                 Err(e) => return Err(e),
             }
@@ -513,7 +525,7 @@ impl GameOrchestrator {
 
     /// Handle rolling a 7: discard phase + robber placement + steal.
     async fn handle_seven(&mut self, roller: PlayerId) -> Result<(), OrchestratorError> {
-        // Step 1: Discard phase — any player with >7 cards must discard half.
+        // Step 1: Discard phase -- any player with >7 cards must discard half.
         let players_needing_discard: Vec<PlayerId> = (0..self.state.num_players)
             .filter(|&p| self.state.players[p].total_resources() > 7)
             .collect();
@@ -528,6 +540,11 @@ impl GameOrchestrator {
         for &p in &players_needing_discard {
             let total = self.state.players[p].total_resources();
             let discard_count = (total / 2) as usize;
+
+            self.send_narration(format!(
+                "{} must discard {} cards...",
+                self.player_names[p], discard_count
+            ));
 
             let (cards, discard_reasoning) = self
                 .with_timeout(
@@ -555,6 +572,11 @@ impl GameOrchestrator {
             .into_iter()
             .filter(|&h| h != self.state.robber_hex)
             .collect();
+
+        self.send_narration(format!(
+            "{} is placing the robber...",
+            self.player_names[roller]
+        ));
 
         let (h_idx, robber_reasoning) = self
             .with_timeout(
@@ -585,6 +607,11 @@ impl GameOrchestrator {
                     .await;
                 self.send_reasoning(roller, &steal_reasoning);
                 let target = targets[t_idx.min(targets.len() - 1)];
+
+                self.send_narration(format!(
+                    "{} stole from {}!",
+                    self.player_names[roller], self.player_names[target]
+                ));
 
                 rules::apply_steal(&mut self.state, target)
                     .map_err(|e| OrchestratorError::RuleViolation(format!("Steal: {}", e)))?;
@@ -967,9 +994,13 @@ impl GameOrchestrator {
             .collect::<Vec<_>>()
             .join(", ");
 
+        self.send_narration(format!(
+            "{} proposes: {} for {}",
+            self.player_names[player_id], offering, requesting
+        ));
         self.send_reasoning(
             player_id,
-            &format!("Trade: {} for {} — {}", offering, requesting, reasoning),
+            &format!("Trade: {} for {} -- {}", offering, requesting, reasoning),
         );
 
         self.record_event(GameEvent::TradeProposed {
@@ -995,6 +1026,11 @@ impl GameOrchestrator {
                 continue;
             }
 
+            self.send_narration(format!(
+                "{} is considering the trade...",
+                self.player_names[other_id]
+            ));
+
             let (response, resp_reasoning) = self
                 .with_timeout(
                     self.players[other_id].respond_to_trade(
@@ -1014,6 +1050,10 @@ impl GameOrchestrator {
 
             match response {
                 TradeResponse::Accept => {
+                    self.send_narration(format!(
+                        "{} accepted the trade!",
+                        self.player_names[other_id]
+                    ));
                     self.record_event(GameEvent::TradeAccepted {
                         by: other_id,
                         reasoning: resp_reasoning,
@@ -1022,6 +1062,10 @@ impl GameOrchestrator {
                     break; // First acceptance wins.
                 }
                 TradeResponse::Reject { reason: _ } => {
+                    self.send_narration(format!(
+                        "{} rejected the trade.",
+                        self.player_names[other_id]
+                    ));
                     self.record_event(GameEvent::TradeRejected {
                         by: other_id,
                         reasoning: resp_reasoning,
@@ -1051,10 +1095,14 @@ impl GameOrchestrator {
                         .map(|(r, n)| format!("{} {}", n, r))
                         .collect::<Vec<_>>()
                         .join(", ");
+                    self.send_narration(format!(
+                        "{} counters: {} for {}",
+                        self.player_names[other_id], counter_offering, counter_requesting
+                    ));
                     self.send_reasoning(
                         other_id,
                         &format!(
-                            "Counter: {} for {} — {}",
+                            "Counter: {} for {} -- {}",
                             counter_offering, counter_requesting, resp_reasoning
                         ),
                     );
@@ -1151,6 +1199,44 @@ impl GameOrchestrator {
         }
 
         Ok(())
+    }
+
+    /// Produce a short narration string describing a player's action choice.
+    fn narrate_choice(&self, player_id: PlayerId, choice: &PlayerChoice) -> String {
+        let name = &self.player_names[player_id];
+        match choice {
+            PlayerChoice::GameAction(action) => match action {
+                Action::BuildSettlement(v) => {
+                    format!(
+                        "{} built a settlement at ({},{},{:?}).",
+                        name, v.hex.q, v.hex.r, v.dir
+                    )
+                }
+                Action::BuildCity(v) => {
+                    format!(
+                        "{} upgraded to a city at ({},{},{:?}).",
+                        name, v.hex.q, v.hex.r, v.dir
+                    )
+                }
+                Action::BuildRoad(e) => format!("{} built a road at {}.", name, e),
+                Action::BuyDevCard => format!("{} bought a development card.", name),
+                Action::PlayDevCard(card, _) => format!("{} played {:?}.", name, card),
+                Action::BankTrade { give, get } => {
+                    format!("{} traded {} for {} with the bank.", name, give, get)
+                }
+                Action::EndTurn => format!("{} ends their turn.", name),
+                Action::ProposeTrade => format!("{} is proposing a trade.", name),
+            },
+            PlayerChoice::PlayKnight => format!("{} played a Knight.", name),
+            PlayerChoice::PlayMonopoly => format!("{} played Monopoly.", name),
+            PlayerChoice::PlayYearOfPlenty => format!("{} played Year of Plenty.", name),
+            PlayerChoice::PlayRoadBuilding => format!("{} played Road Building.", name),
+            PlayerChoice::ProposeTrade => format!("{} is proposing a trade...", name),
+            PlayerChoice::BuildRoadIntent => format!("{} built a road.", name),
+            PlayerChoice::BuildSettlementIntent => format!("{} built a settlement.", name),
+            PlayerChoice::BuildCityIntent => format!("{} upgraded to a city.", name),
+            PlayerChoice::BankTradeIntent => format!("{} traded with the bank.", name),
+        }
     }
 
     /// Advance to the next player's turn.

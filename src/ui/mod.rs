@@ -69,6 +69,8 @@ pub enum UiEvent {
         player_name: String,
         chunk: String,
     },
+    /// Game event narration for the AI Reasoning panel (turn markers, dice, actions).
+    Narration { message: String },
     /// The game has ended.
     GameOver { winner: usize, message: String },
 }
@@ -403,23 +405,21 @@ impl PlayingState {
                 player_name,
                 reasoning,
             } => {
-                // If the last message is from the same player (streaming in-progress),
-                // replace its text with the final clean version.
-                if let Some(last) = self.chat_messages.last_mut() {
-                    if last.player_id == player_id {
-                        last.text = reasoning;
-                    } else {
-                        self.chat_messages.push(chat_panel::ChatMessage {
-                            player: player_name,
-                            player_id,
-                            text: reasoning,
-                        });
-                    }
+                // If the last message is a Reasoning from the same player
+                // (streaming in-progress), replace its text with the final
+                // clean version.
+                let is_continuation = self.chat_messages.last().is_some_and(|last| {
+                    last.player_id == player_id
+                        && last.kind == chat_panel::ChatMessageKind::Reasoning
+                });
+                if is_continuation {
+                    self.chat_messages.last_mut().unwrap().text = reasoning;
                 } else {
                     self.chat_messages.push(chat_panel::ChatMessage {
                         player: player_name,
                         player_id,
                         text: reasoning,
+                        kind: chat_panel::ChatMessageKind::Reasoning,
                     });
                 }
                 const MAX_CHAT: usize = 500;
@@ -434,23 +434,41 @@ impl PlayingState {
                 player_name,
                 chunk,
             } => {
-                // Append to the last message if from the same player, otherwise start a new one.
-                if let Some(last) = self.chat_messages.last_mut() {
-                    if last.player_id == player_id {
+                // Append to the last message if it is a Reasoning from the
+                // same player, otherwise start a new one.
+                let appended = if let Some(last) = self.chat_messages.last_mut() {
+                    if last.player_id == player_id
+                        && last.kind == chat_panel::ChatMessageKind::Reasoning
+                    {
                         last.text.push_str(&chunk);
+                        true
                     } else {
-                        self.chat_messages.push(chat_panel::ChatMessage {
-                            player: player_name,
-                            player_id,
-                            text: chunk,
-                        });
+                        false
                     }
                 } else {
+                    false
+                };
+                if !appended {
                     self.chat_messages.push(chat_panel::ChatMessage {
                         player: player_name,
                         player_id,
                         text: chunk,
+                        kind: chat_panel::ChatMessageKind::Reasoning,
                     });
+                }
+                self.chat_scroll = u16::MAX; // Auto-scroll to bottom.
+            }
+            UiEvent::Narration { message } => {
+                self.chat_messages.push(chat_panel::ChatMessage {
+                    player: String::new(),
+                    player_id: usize::MAX,
+                    text: message,
+                    kind: chat_panel::ChatMessageKind::Narration,
+                });
+                const MAX_CHAT: usize = 500;
+                if self.chat_messages.len() > MAX_CHAT {
+                    self.chat_messages
+                        .drain(..self.chat_messages.len() - MAX_CHAT);
                 }
                 self.chat_scroll = u16::MAX; // Auto-scroll to bottom.
             }

@@ -455,10 +455,6 @@ impl LlmPlayer {
                                 .map(|s| s.to_string())
                             {
                                 if !analysis.is_empty() {
-                                    // Send to the reasoning UI channel.
-                                    if let Some(tx) = &self.reasoning_tx {
-                                        let _ = tx.send(analysis.clone());
-                                    }
                                     reasoning = analysis;
                                 }
                             }
