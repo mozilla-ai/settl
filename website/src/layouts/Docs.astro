@@ -13,6 +13,7 @@ interface Props {
   };
 }
 
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const { frontmatter } = Astro.props;
 const currentPath = Astro.url.pathname;
 
@@ -20,8 +21,12 @@ function normalize(path: string): string {
   return path.replace(/\/index\.html$/, '/').replace(/\.html$/, '/').replace(/\/$/, '') || '/';
 }
 
+function stripBase(path: string): string {
+  return base && path.startsWith(base) ? path.slice(base.length) || '/' : path;
+}
+
 const flatItems = getFlatNavItems();
-const currentIndex = flatItems.findIndex((item) => normalize(currentPath) === normalize(item.href));
+const currentIndex = flatItems.findIndex((item) => normalize(stripBase(currentPath)) === normalize(item.href));
 
 const prev = currentIndex > 0 ? flatItems[currentIndex - 1] : undefined;
 const next = currentIndex < flatItems.length - 1 ? flatItems[currentIndex + 1] : undefined;
@@ -42,8 +47,8 @@ const next = currentIndex < flatItems.length - 1 ? flatItems[currentIndex + 1] :
         <slot />
       </div>
       <GuideNav
-        prev={prev ? { label: prev.title, href: prev.href } : undefined}
-        next={next ? { label: next.title, href: next.href } : undefined}
+        prev={prev ? { label: prev.title, href: `${base}${prev.href}` } : undefined}
+        next={next ? { label: next.title, href: `${base}${next.href}` } : undefined}
       />
     </main>
   </div>

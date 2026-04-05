@@ -2,6 +2,8 @@
 import Base from '../layouts/Base.astro';
 import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 
 <Base
@@ -50,7 +52,7 @@ import Footer from '../components/Footer.astro';
       </div>
 
       <div class="flex flex-col sm:flex-row gap-4 justify-start mb-16">
-        <a href="/docs/getting-started/" class="btn-primary text-base px-8 py-3.5 inline-flex items-center justify-center">
+        <a href={`${base}/docs/getting-started/`} class="btn-primary text-base px-8 py-3.5 inline-flex items-center justify-center">
           Get Started
         </a>
         <a href="https://github.com/Brake-Labs/settl" target="_blank" rel="noopener" class="btn-secondary text-base px-8 py-3.5 group inline-flex items-center justify-center gap-2" title="Star on GitHub">
