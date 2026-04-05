@@ -8,7 +8,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 <Base
   title="settl - Terminal Hex Settlement Game with AI Players"
-  description="A terminal hex settlement game where LLMs play via tool calling. Watch Claude, GPT, and Gemini negotiate trades and compete -- all in your terminal."
+  description="A terminal hex settlement game where you play against LLMs. Runs locally with llamafile, no API keys required."
 >
   <Nav />
 
@@ -21,14 +21,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
           <span class="text-gradient">settl</span>
         </h1>
         <p class="text-xl md:text-2xl text-gray-100 max-w-2xl leading-relaxed">
-          Terminal hex settlement game with AI players
+          A terminal hex settlement game where you play against LLMs
         </p>
       </div>
-
-      <p class="text-lg text-gray-100 max-w-3xl mb-12 leading-relaxed">
-        Play against <span class="text-white font-medium">Claude</span>, <span class="text-white font-medium">GPT</span>, and <span class="text-white font-medium">Gemini</span> in a hex-based resource trading and building game.
-        <span class="text-gray-400">Runs locally with llamafile. No API keys needed. Built with Rust and ratatui.</span>
-      </p>
 
       <!-- Install block -->
       <div class="max-w-2xl mb-8">
@@ -49,6 +44,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
             </button>
           </div>
         </div>
+        <p class="text-sm text-gray-500 mt-3">
+          Runs entirely offline using <a href="https://github.com/mozilla-ai/llamafile" class="text-gray-400 hover:text-white transition-colors">llamafile</a>. No API keys required.
+        </p>
       </div>
 
       <div class="flex flex-col sm:flex-row gap-4 justify-start mb-16">
@@ -61,62 +59,24 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
           <span id="star-count">...</span> Stars
         </a>
       </div>
-    </div>
-  </section>
 
-  <!-- Feature Grid -->
-  <section class="py-12 px-6">
-    <div class="max-w-6xl mx-auto">
-      <div class="mb-8">
-        <span class="font-mono text-xs uppercase tracking-widest text-brand-600">Features</span>
-      </div>
-      <div class="grid lg:grid-cols-[1.4fr_1fr] gap-6">
-        <!-- Featured card -->
-        <div class="lg:row-span-2 delay-100">
-          <div class="feature-card feature-tint-brand rounded-2xl p-10 animate-on-scroll h-full flex flex-col justify-center">
-            <h3 class="text-2xl font-semibold mb-4 font-display flex items-center gap-3">
-              <svg class="w-6 h-6 text-brand-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-              </svg>
-              Play or Spectate
-            </h3>
-            <p class="text-gray-100 leading-relaxed text-lg">Take on AI opponents or watch Claude, GPT, and Gemini battle it out in your terminal. Full TUI with hex board, resource tracking, and AI reasoning display.</p>
-          </div>
-        </div>
-        <!-- Supporting cards -->
-        <div class="delay-200">
-          <div class="feature-card feature-tint-accent rounded-2xl p-6 animate-on-scroll">
-            <h3 class="text-lg font-semibold mb-2 font-display flex items-center gap-2.5">
-              <svg class="w-5 h-5 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
-              </svg>
-              Local AI
-            </h3>
-            <p class="text-gray-100 leading-relaxed text-sm">Runs entirely locally with llamafile. No API keys, no internet, no cloud. Download once and play offline.</p>
-          </div>
-        </div>
-        <div class="delay-300">
-          <div class="feature-card rounded-2xl p-6 animate-on-scroll">
-            <h3 class="text-lg font-semibold mb-2 font-display flex items-center gap-2.5">
-              <svg class="w-5 h-5 text-brand-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-              </svg>
-              AI Personalities
-            </h3>
-            <p class="text-gray-100 leading-relaxed text-sm">Aggressive traders, grudge holders, chaos agents. Five built-in personalities plus custom TOML configs.</p>
-          </div>
-        </div>
-        <div class="delay-200">
-          <div class="feature-card rounded-2xl p-6 animate-on-scroll">
-            <h3 class="text-lg font-semibold mb-2 font-display flex items-center gap-2.5">
-              <svg class="w-5 h-5 text-brand-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-              Full Game Rules
-            </h3>
-            <p class="text-gray-100 leading-relaxed text-sm">Settlements, cities, roads, robber, development cards, trading, Longest Road, Largest Army. Complete hex settlement game.</p>
-          </div>
-        </div>
+      <!-- Related Projects -->
+      <div class="max-w-2xl">
+        <h2 class="text-sm font-mono uppercase tracking-widest text-brand-600 mb-4">Related Projects</h2>
+        <ul class="space-y-3 text-sm">
+          <li>
+            <a href="https://github.com/njbrake/agent-of-empires" class="text-gray-100 hover:text-white transition-colors font-medium" target="_blank" rel="noopener">Agent of Empires</a>
+            <span class="text-gray-500"> - Terminal session manager for AI coding agents</span>
+          </li>
+          <li>
+            <a href="https://github.com/mozilla-ai/llamafile" class="text-gray-100 hover:text-white transition-colors font-medium" target="_blank" rel="noopener">llamafile</a>
+            <span class="text-gray-500"> - One-file LLM inference. Powers settl's offline AI</span>
+          </li>
+          <li>
+            <a href="https://prismml.com/" class="text-gray-100 hover:text-white transition-colors font-medium" target="_blank" rel="noopener">Bonsai Models by PrismML</a>
+            <span class="text-gray-500"> - Ultra-efficient 1-bit quantized models for settl's AI players</span>
+          </li>
+        </ul>
       </div>
     </div>
   </section>

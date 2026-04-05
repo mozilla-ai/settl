@@ -4,10 +4,10 @@ expression: buffer_to_string(&buf)
 ---
 ┌ Docs ────────────────┐┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ > Getting Started    ││ Getting Started                                                                                                                                │
-│   How to Play        ││                                                                                                                                                │
 │   Controls           ││                                                                                                                                                │
-│   AI Players         ││ settl is a terminal hex settlement game where AI players compete using tool-calling LLMs. You can play against them, spectate, or run headless │
-│   Development        ││ simulations.                                                                                                                                   │
+│                      ││                                                                                                                                                │
+│                      ││ settl is a terminal hex settlement game where AI players compete using tool-calling LLMs. You can play against them, spectate, or run headless │
+│                      ││ simulations.                                                                                                                                   │
 │                      ││                                                                                                                                                │
 │                      ││                                                                                                                                                │
 │                      ││ Installation                                                                                                                                   │

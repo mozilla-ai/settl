@@ -233,10 +233,7 @@ fn parse_doc(raw: &'static str) -> DocsPage {
 pub fn docs_pages() -> Vec<DocsPage> {
     vec![
         parse_doc(include_str!("../../docs/getting-started.md")),
-        parse_doc(include_str!("../../docs/how-to-play.md")),
         parse_doc(include_str!("../../docs/controls.md")),
-        parse_doc(include_str!("../../docs/ai-players.md")),
-        parse_doc(include_str!("../../docs/development.md")),
     ]
 }
 

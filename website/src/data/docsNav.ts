@@ -10,18 +10,10 @@ export interface NavSection {
 
 export const docsNav: NavSection[] = [
   {
-    title: "Getting Started",
+    title: "Docs",
     items: [
       { title: "Getting Started", href: "/docs/getting-started/" },
-      { title: "How to Play", href: "/docs/how-to-play/" },
       { title: "Controls", href: "/docs/controls/" },
-    ],
-  },
-  {
-    title: "Advanced",
-    items: [
-      { title: "AI Players", href: "/docs/ai-players/" },
-      { title: "Development", href: "/docs/development/" },
     ],
   },
 ];
