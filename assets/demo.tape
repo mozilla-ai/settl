@@ -26,39 +26,39 @@ Type "./target/release/settl"
 Enter
 
 # Wait for title screen
-Sleep 5s
+Sleep 4s
 
 # Admire the SETTL logo and menu
-Sleep 2s
+Sleep 1s
 
 # Select "New Game" (already highlighted)
 Enter
-Sleep 2s
+Sleep 1500ms
 
 # Navigate down from Start Button to Friendly Robber
 # Focus: StartButton -> PlayerCount -> Player1 -> Player2 -> Player3 -> FriendlyRobber
 Down
-Sleep 300ms
+Sleep 200ms
 Down
-Sleep 300ms
+Sleep 200ms
 Down
-Sleep 300ms
+Sleep 200ms
 Down
-Sleep 300ms
+Sleep 200ms
 Down
-Sleep 500ms
+Sleep 400ms
 
 # Now on Friendly Robber -- toggle it on
 Right
-Sleep 700ms
+Sleep 500ms
 
 # Down to Board Layout
 Down
-Sleep 500ms
+Sleep 400ms
 
 # Toggle to Random
 Right
-Sleep 1s
+Sleep 700ms
 
 # Start the game (Enter works from any row, model stays Bonsai 1.7B)
 Enter
@@ -66,8 +66,25 @@ Enter
 # Wait for llamafile setup to complete (model already cached)
 Sleep 10s
 
-# Admire the board
-Sleep 4s
+# Board is now visible with settlement placement cursor.
+# Browse a few legal positions then place.
+Sleep 1s
+Type "n"
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Enter
+Sleep 2s
+
+# Road placement prompt appears -- browse and place.
+Type "n"
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Enter
+Sleep 3s
 
 # Quit
 Type "q"
