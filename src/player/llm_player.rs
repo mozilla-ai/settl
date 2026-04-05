@@ -17,8 +17,11 @@ use crate::player::personality::Personality;
 use crate::player::prompt;
 use crate::player::{Player, PlayerChoice};
 
-/// Maximum conversation history pairs before trimming.
+/// Maximum conversation history pairs before trimming (large context models).
 const MAX_HISTORY_PAIRS: usize = 30;
+
+/// Reduced history limit for small local models (e.g. Bonsai 1.7B with 8K context).
+const MAX_HISTORY_PAIRS_SMALL: usize = 3;
 
 /// Default model name for llamafile (Bonsai-8B).
 pub const LLAMAFILE_MODEL: &str = "bonsai";
@@ -96,6 +99,10 @@ pub struct LlmPlayer {
     reasoning_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
     /// Optional reasoning effort level (e.g. "low", "medium", "high", "max").
     effort: Option<String>,
+    /// When true, inject an `analysis` field into tool schemas so the model
+    /// must write reasoning before its answer. Used for small models (1B)
+    /// that skip text content blocks entirely.
+    force_tool_reasoning: bool,
 }
 
 impl LlmPlayer {
@@ -107,16 +114,27 @@ impl LlmPlayer {
         slot_id: Option<usize>,
     ) -> Self {
         let system_prompt = prompt::system_prompt_compact(&name, &personality.to_system_prompt());
+        // Local llamafile models have limited context per KV cache slot
+        // (typically 8K tokens with --parallel 4). Use a small history
+        // window to avoid context overflow errors.
+        let history_limit = if slot_id.is_some() {
+            MAX_HISTORY_PAIRS_SMALL
+        } else {
+            MAX_HISTORY_PAIRS
+        };
+        let mut conversation = Conversation::new(system_prompt);
+        conversation.max_history_pairs = history_limit;
         Self {
             name,
             client,
             personality,
             slot_id,
             max_retries: 2,
-            conversation: tokio::sync::Mutex::new(Conversation::new(system_prompt)),
+            conversation: tokio::sync::Mutex::new(conversation),
             extra_context: tokio::sync::Mutex::new(String::new()),
             reasoning_tx: None,
             effort: None,
+            force_tool_reasoning: false,
         }
     }
 
@@ -130,41 +148,83 @@ impl LlmPlayer {
         self.effort = Some(effort);
     }
 
-    // -- Tool definitions (same schemas as before, new ToolDef type) --
+    /// Force the model to include reasoning inside tool call arguments.
+    /// Used for small models (1B) that skip text content blocks.
+    pub fn set_force_tool_reasoning(&mut self, force: bool) {
+        self.force_tool_reasoning = force;
+    }
 
-    fn index_tool(max_index: usize) -> ToolDef {
+    // -- Tool definitions --
+    //
+    // When `force_reasoning` is true an `analysis` field is prepended so the
+    // model must write its reasoning before the answer. This is essential for
+    // small models (1B) that skip text content blocks entirely.
+
+    fn index_tool(max_index: usize, force_reasoning: bool) -> ToolDef {
+        let mut props = serde_json::Map::new();
+        let mut required = Vec::new();
+        if force_reasoning {
+            props.insert(
+                "analysis".into(),
+                serde_json::json!({
+                    "type": "string",
+                    "description": "Brief strategic reasoning for your choice (1-2 sentences)"
+                }),
+            );
+            required.push(serde_json::Value::String("analysis".into()));
+        }
+        props.insert(
+            "index".into(),
+            serde_json::json!({
+                "type": "integer",
+                "description": format!("Index of your choice (0 to {})", max_index.saturating_sub(1)),
+                "minimum": 0,
+                "maximum": max_index.saturating_sub(1)
+            }),
+        );
+        required.push(serde_json::Value::String("index".into()));
+
         ToolDef {
             name: "choose_index".into(),
             description: "Choose an option by its index number.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
-                "properties": {
-                    "index": {
-                        "type": "integer",
-                        "description": format!("Index of your choice (0 to {})", max_index.saturating_sub(1)),
-                        "minimum": 0,
-                        "maximum": max_index.saturating_sub(1)
-                    }
-                },
-                "required": ["index"]
+                "properties": serde_json::Value::Object(props),
+                "required": required,
             }),
         }
     }
 
-    fn resource_tool() -> ToolDef {
+    fn resource_tool(force_reasoning: bool) -> ToolDef {
+        let mut props = serde_json::Map::new();
+        let mut required = Vec::new();
+        if force_reasoning {
+            props.insert(
+                "analysis".into(),
+                serde_json::json!({
+                    "type": "string",
+                    "description": "Brief reasoning for choosing this resource (1-2 sentences)"
+                }),
+            );
+            required.push(serde_json::Value::String("analysis".into()));
+        }
+        props.insert(
+            "resource".into(),
+            serde_json::json!({
+                "type": "string",
+                "enum": ["Wood", "Brick", "Sheep", "Wheat", "Ore"],
+                "description": "The resource to choose"
+            }),
+        );
+        required.push(serde_json::Value::String("resource".into()));
+
         ToolDef {
             name: "choose_resource".into(),
             description: "Choose a resource type.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
-                "properties": {
-                    "resource": {
-                        "type": "string",
-                        "enum": ["Wood", "Brick", "Sheep", "Wheat", "Ore"],
-                        "description": "The resource to choose"
-                    }
-                },
-                "required": ["resource"]
+                "properties": serde_json::Value::Object(props),
+                "required": required,
             }),
         }
     }
@@ -192,7 +252,67 @@ impl LlmPlayer {
         }
     }
 
-    fn propose_trade_tool() -> ToolDef {
+    fn propose_trade_tool(force_reasoning: bool) -> ToolDef {
+        let mut props = serde_json::Map::new();
+        let mut required = Vec::new();
+        if force_reasoning {
+            props.insert(
+                "analysis".into(),
+                serde_json::json!({
+                    "type": "string",
+                    "description": "Why this trade helps your strategy (1-2 sentences)"
+                }),
+            );
+            required.push(serde_json::Value::String("analysis".into()));
+        }
+        props.insert(
+            "give_resource".into(),
+            serde_json::json!({
+                "type": "string",
+                "enum": ["Wood", "Brick", "Sheep", "Wheat", "Ore"],
+                "description": "Resource you are offering"
+            }),
+        );
+        props.insert(
+            "give_count".into(),
+            serde_json::json!({
+                "type": "integer",
+                "description": "How many of that resource to offer",
+                "minimum": 1,
+                "maximum": 10
+            }),
+        );
+        props.insert(
+            "want_resource".into(),
+            serde_json::json!({
+                "type": "string",
+                "enum": ["Wood", "Brick", "Sheep", "Wheat", "Ore"],
+                "description": "Resource you want in return"
+            }),
+        );
+        props.insert(
+            "want_count".into(),
+            serde_json::json!({
+                "type": "integer",
+                "description": "How many of that resource you want",
+                "minimum": 1,
+                "maximum": 10
+            }),
+        );
+        props.insert(
+            "message".into(),
+            serde_json::json!({
+                "type": "string",
+                "description": "A short message to other players about this trade"
+            }),
+        );
+        required.extend([
+            serde_json::Value::String("give_resource".into()),
+            serde_json::Value::String("give_count".into()),
+            serde_json::Value::String("want_resource".into()),
+            serde_json::Value::String("want_count".into()),
+        ]);
+
         ToolDef {
             name: "propose_trade".into(),
             description:
@@ -200,57 +320,48 @@ impl LlmPlayer {
                     .into(),
             input_schema: serde_json::json!({
                 "type": "object",
-                "properties": {
-                    "give_resource": {
-                        "type": "string",
-                        "enum": ["Wood", "Brick", "Sheep", "Wheat", "Ore"],
-                        "description": "Resource you are offering"
-                    },
-                    "give_count": {
-                        "type": "integer",
-                        "description": "How many of that resource to offer",
-                        "minimum": 1,
-                        "maximum": 10
-                    },
-                    "want_resource": {
-                        "type": "string",
-                        "enum": ["Wood", "Brick", "Sheep", "Wheat", "Ore"],
-                        "description": "Resource you want in return"
-                    },
-                    "want_count": {
-                        "type": "integer",
-                        "description": "How many of that resource you want",
-                        "minimum": 1,
-                        "maximum": 10
-                    },
-                    "message": {
-                        "type": "string",
-                        "description": "A short message to other players about this trade"
-                    }
-                },
-                "required": ["give_resource", "give_count", "want_resource", "want_count"]
+                "properties": serde_json::Value::Object(props),
+                "required": required,
             }),
         }
     }
 
-    fn trade_response_tool() -> ToolDef {
+    fn trade_response_tool(force_reasoning: bool) -> ToolDef {
+        let mut props = serde_json::Map::new();
+        let mut required = Vec::new();
+        if force_reasoning {
+            props.insert(
+                "analysis".into(),
+                serde_json::json!({
+                    "type": "string",
+                    "description": "Why you accept or reject this trade (1-2 sentences)"
+                }),
+            );
+        }
+        props.insert(
+            "response".into(),
+            serde_json::json!({
+                "type": "string",
+                "enum": ["accept", "reject"],
+                "description": "Accept or reject the trade"
+            }),
+        );
+        props.insert(
+            "reject_reason".into(),
+            serde_json::json!({
+                "type": "string",
+                "description": "If rejecting, why (optional)"
+            }),
+        );
+        required.push(serde_json::Value::String("response".into()));
+
         ToolDef {
             name: "respond_to_trade".into(),
             description: "Respond to a trade offer: accept or reject.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
-                "properties": {
-                    "response": {
-                        "type": "string",
-                        "enum": ["accept", "reject"],
-                        "description": "Accept or reject the trade"
-                    },
-                    "reject_reason": {
-                        "type": "string",
-                        "description": "If rejecting, why (optional)"
-                    }
-                },
-                "required": ["response"]
+                "properties": serde_json::Value::Object(props),
+                "required": required,
             }),
         }
     }
@@ -331,9 +442,33 @@ impl LlmPlayer {
                         }
                     }
 
-                    if let Some((args, reasoning)) =
+                    if let Some((mut args, mut reasoning)) =
                         AnthropicClient::extract_tool_call(&response, &tool_name)
                     {
+                        // When force_tool_reasoning is enabled, the model writes
+                        // its reasoning inside the tool args as `analysis`. Pull
+                        // it out so it shows in the UI and doesn't bloat history.
+                        if self.force_tool_reasoning {
+                            if let Some(analysis) = args
+                                .get("analysis")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                            {
+                                if !analysis.is_empty() {
+                                    // Send to the reasoning UI channel.
+                                    if let Some(tx) = &self.reasoning_tx {
+                                        let _ = tx.send(analysis.clone());
+                                    }
+                                    reasoning = analysis;
+                                }
+                            }
+                            // Strip `analysis` from args before recording in
+                            // history (saves context tokens).
+                            if let Some(obj) = args.as_object_mut() {
+                                obj.remove("analysis");
+                            }
+                        }
+
                         log::debug!(
                             "[{}] success: tool={} args={} reasoning={}",
                             self.name,
@@ -357,6 +492,42 @@ impl LlmPlayer {
                         return Ok((args, reasoning));
                     }
 
+                    // If the model produced text but no tool call, try to extract
+                    // an index from the text itself (small models sometimes write
+                    // "I choose option 2" instead of calling the tool).
+                    if tool_name == "choose_index" {
+                        if let Some(idx) = extract_index_from_text(&response) {
+                            let reasoning = response
+                                .content
+                                .iter()
+                                .filter_map(|b| {
+                                    if let ContentBlock::Text { text } = b {
+                                        Some(text.as_str())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            log::debug!(
+                                "[{}] extracted index {} from text response",
+                                self.name,
+                                idx,
+                            );
+                            let args = serde_json::json!({"index": idx});
+                            let assistant_msg = Message::assistant_tool_use(
+                                format!("call-{}", attempt),
+                                &tool_name,
+                                args.clone(),
+                            );
+                            self.conversation
+                                .lock()
+                                .await
+                                .record_exchange(current_user, assistant_msg);
+                            return Ok((args, reasoning));
+                        }
+                    }
+
                     log::warn!(
                         "[{}] attempt {}: no {} tool call in response",
                         self.name,
@@ -365,7 +536,45 @@ impl LlmPlayer {
                     );
                 }
                 Err(e) => {
-                    log::warn!("[{}] attempt {}: API error: {}", self.name, attempt + 1, e);
+                    let err_msg = e.to_string();
+                    log::warn!(
+                        "[{}] attempt {}: API error: {}",
+                        self.name,
+                        attempt + 1,
+                        err_msg
+                    );
+
+                    // Context overflow: trim history aggressively and retry
+                    // immediately rather than waiting.
+                    if err_msg.contains("context")
+                        || err_msg.contains("too many tokens")
+                        || err_msg.contains("exceed")
+                    {
+                        let mut conv = self.conversation.lock().await;
+                        let before = conv.messages.len();
+                        // Drop all but the most recent pair (or clear entirely).
+                        if conv.messages.len() > 2 {
+                            let keep = 2.min(conv.messages.len());
+                            let start = conv.messages.len() - keep;
+                            conv.messages = conv.messages.split_off(start);
+                        } else {
+                            conv.messages.clear();
+                        }
+                        // Also reduce the limit to prevent future overflow.
+                        conv.max_history_pairs =
+                            conv.max_history_pairs.min(MAX_HISTORY_PAIRS_SMALL);
+                        log::info!(
+                            "[{}] context overflow: trimmed history {}->{}, limit now {}",
+                            self.name,
+                            before,
+                            conv.messages.len(),
+                            conv.max_history_pairs,
+                        );
+                        drop(conv);
+                        // Retry immediately -- no backoff needed for context overflow.
+                        continue;
+                    }
+
                     if attempt < self.max_retries {
                         let delay = std::time::Duration::from_secs(1 << attempt);
                         tokio::time::sleep(delay).await;
@@ -476,7 +685,7 @@ impl Player for LlmPlayer {
                 choices = prompt::format_choices(choices),
             )
         };
-        let tool = Self::index_tool(choices.len());
+        let tool = Self::index_tool(choices.len(), self.force_tool_reasoning);
 
         match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
@@ -515,7 +724,7 @@ impl Player for LlmPlayer {
             player_names,
         );
         let user = format!("SETUP STRATEGY:\n{strategy}\n\n{user}");
-        let tool = Self::index_tool(filtered_vertices.len());
+        let tool = Self::index_tool(filtered_vertices.len(), self.force_tool_reasoning);
 
         match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
@@ -541,7 +750,7 @@ impl Player for LlmPlayer {
         player_names: &[String],
     ) -> (usize, String) {
         let user = prompt::setup_road_prompt(state, player_id, legal_edges, player_names);
-        let tool = Self::index_tool(legal_edges.len());
+        let tool = Self::index_tool(legal_edges.len(), self.force_tool_reasoning);
 
         match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
@@ -569,7 +778,7 @@ impl Player for LlmPlayer {
              You must move the robber. Choose a hex:\n{hex_list}\n\n\
              Choose by calling the choose_index tool."
         );
-        let tool = Self::index_tool(legal_hexes.len());
+        let tool = Self::index_tool(legal_hexes.len(), self.force_tool_reasoning);
 
         match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
@@ -610,7 +819,7 @@ impl Player for LlmPlayer {
             "Choose a player to steal from:\n{target_list}\n\n\
              Choose by calling the choose_index tool."
         );
-        let tool = Self::index_tool(targets.len());
+        let tool = Self::index_tool(targets.len(), self.force_tool_reasoning);
 
         match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
@@ -681,7 +890,7 @@ impl Player for LlmPlayer {
              {context}\n\n\
              Choose by calling the choose_resource tool."
         );
-        let tool = Self::resource_tool();
+        let tool = Self::resource_tool(self.force_tool_reasoning);
 
         match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
@@ -720,7 +929,7 @@ impl Player for LlmPlayer {
              Think about what you have in excess and what you lack.\n\n\
              Call the propose_trade tool to make an offer."
         );
-        let tool = Self::propose_trade_tool();
+        let tool = Self::propose_trade_tool(self.force_tool_reasoning);
 
         match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
@@ -796,7 +1005,7 @@ impl Player for LlmPlayer {
              Choose by calling the respond_to_trade tool.",
             offering, requesting, offer.message,
         );
-        let tool = Self::trade_response_tool();
+        let tool = Self::trade_response_tool(self.force_tool_reasoning);
 
         match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
@@ -857,6 +1066,76 @@ pub(crate) fn fallback_discard(
         }
     }
     result
+}
+
+/// Try to extract a chosen index from free-text response content.
+///
+/// Small models sometimes write "I choose option 5" or "Vertex 5" instead of
+/// calling the tool. This lets us recover a valid answer from the text.
+fn extract_index_from_text(
+    response: &crate::player::anthropic_client::MessagesResponse,
+) -> Option<usize> {
+    let text: String = response
+        .content
+        .iter()
+        .filter_map(|b| {
+            if let ContentBlock::Text { text } = b {
+                Some(text.as_str())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if text.is_empty() {
+        return None;
+    }
+
+    let lower = text.to_lowercase();
+
+    // Look for patterns like "index": 5, index: 5, index = 5
+    for keyword in &["index", "choose", "option", "vertex", "pick", "select"] {
+        if let Some(pos) = lower.find(keyword) {
+            let after = &text[pos + keyword.len()..];
+            // Skip non-digit chars (whitespace, quotes, colons, equals)
+            if let Some(num) = extract_first_number(after) {
+                return Some(num);
+            }
+        }
+    }
+
+    // Last resort: look for the last standalone number in the text.
+    // This catches "Final Decision: Alice should place at **Vertex 5**."
+    let mut last_num = None;
+    for word in text.split(|c: char| !c.is_ascii_digit()) {
+        if let Ok(n) = word.parse::<usize>() {
+            if n < 100 {
+                last_num = Some(n);
+            }
+        }
+    }
+    last_num
+}
+
+/// Extract the first number from a string, skipping leading punctuation/whitespace.
+fn extract_first_number(s: &str) -> Option<usize> {
+    let mut skipped = 0;
+    for (i, c) in s.char_indices() {
+        if c.is_ascii_digit() {
+            // Found start of number, collect consecutive digits.
+            let num_str: String = s[i..]
+                .chars()
+                .take_while(|ch| ch.is_ascii_digit())
+                .collect();
+            return num_str.parse().ok();
+        }
+        skipped += 1;
+        if skipped > 10 {
+            return None;
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -1009,14 +1288,38 @@ mod tests {
 
     #[test]
     fn index_tool_schema_valid() {
-        let tool = LlmPlayer::index_tool(5);
+        let tool = LlmPlayer::index_tool(5, false);
         assert_eq!(tool.name, "choose_index");
         assert!(tool.input_schema["properties"]["index"].is_object());
+        // Without force_reasoning, no analysis field.
+        assert!(tool.input_schema["properties"]["analysis"].is_null());
+    }
+
+    #[test]
+    fn index_tool_schema_with_analysis() {
+        let tool = LlmPlayer::index_tool(5, true);
+        assert_eq!(tool.name, "choose_index");
+        assert!(tool.input_schema["properties"]["analysis"].is_object());
+        assert!(tool.input_schema["properties"]["index"].is_object());
+        // analysis should come before index in the serialized JSON.
+        let json = serde_json::to_string(&tool.input_schema).unwrap();
+        let analysis_pos = json.find("analysis").unwrap();
+        let index_pos = json.find("\"index\"").unwrap();
+        assert!(
+            analysis_pos < index_pos,
+            "analysis ({}) should appear before index ({}) in JSON: {}",
+            analysis_pos,
+            index_pos,
+            json,
+        );
+        // analysis should be required.
+        let required = tool.input_schema["required"].as_array().unwrap();
+        assert!(required.contains(&serde_json::json!("analysis")));
     }
 
     #[test]
     fn resource_tool_schema_valid() {
-        let tool = LlmPlayer::resource_tool();
+        let tool = LlmPlayer::resource_tool(false);
         assert_eq!(tool.name, "choose_resource");
     }
 
@@ -1028,13 +1331,13 @@ mod tests {
 
     #[test]
     fn trade_response_tool_schema_valid() {
-        let tool = LlmPlayer::trade_response_tool();
+        let tool = LlmPlayer::trade_response_tool(false);
         assert_eq!(tool.name, "respond_to_trade");
     }
 
     #[test]
     fn propose_trade_tool_schema_valid() {
-        let tool = LlmPlayer::propose_trade_tool();
+        let tool = LlmPlayer::propose_trade_tool(false);
         assert_eq!(tool.name, "propose_trade");
     }
 
@@ -1088,5 +1391,127 @@ mod tests {
                 median,
             );
         }
+    }
+
+    #[test]
+    fn extract_first_number_basic() {
+        assert_eq!(extract_first_number(": 5"), Some(5));
+        assert_eq!(extract_first_number("= 3}"), Some(3));
+        assert_eq!(extract_first_number(" 12"), Some(12));
+        assert_eq!(extract_first_number("\"7\""), Some(7));
+    }
+
+    #[test]
+    fn extract_first_number_skips_too_far() {
+        assert_eq!(extract_first_number("a very long string before 5"), None);
+    }
+
+    #[test]
+    fn extract_first_number_empty() {
+        assert_eq!(extract_first_number(""), None);
+        assert_eq!(extract_first_number("no numbers"), None);
+    }
+
+    #[test]
+    fn extract_index_from_text_with_keyword() {
+        use crate::player::anthropic_client::{ContentBlock, MessagesResponse};
+
+        let response = MessagesResponse {
+            id: String::new(),
+            content: vec![ContentBlock::Text {
+                text: "I choose option 5 because it has the best pips.".into(),
+            }],
+            model: String::new(),
+            stop_reason: Some("end_turn".into()),
+            usage: None,
+        };
+        assert_eq!(extract_index_from_text(&response), Some(5));
+    }
+
+    #[test]
+    fn extract_index_from_text_with_index_keyword() {
+        use crate::player::anthropic_client::{ContentBlock, MessagesResponse};
+
+        let response = MessagesResponse {
+            id: String::new(),
+            content: vec![ContentBlock::Text {
+                text: "After analysis, index: 3 is the best.".into(),
+            }],
+            model: String::new(),
+            stop_reason: Some("end_turn".into()),
+            usage: None,
+        };
+        assert_eq!(extract_index_from_text(&response), Some(3));
+    }
+
+    #[test]
+    fn extract_index_from_text_vertex() {
+        use crate::player::anthropic_client::{ContentBlock, MessagesResponse};
+
+        let response = MessagesResponse {
+            id: String::new(),
+            content: vec![ContentBlock::Text {
+                text: "Alice should place at **Vertex 5**.".into(),
+            }],
+            model: String::new(),
+            stop_reason: Some("end_turn".into()),
+            usage: None,
+        };
+        assert_eq!(extract_index_from_text(&response), Some(5));
+    }
+
+    #[test]
+    fn extract_index_from_text_empty() {
+        use crate::player::anthropic_client::{ContentBlock, MessagesResponse};
+
+        let response = MessagesResponse {
+            id: String::new(),
+            content: vec![],
+            model: String::new(),
+            stop_reason: Some("end_turn".into()),
+            usage: None,
+        };
+        assert_eq!(extract_index_from_text(&response), None);
+    }
+
+    #[test]
+    fn extract_index_from_text_last_number_fallback() {
+        use crate::player::anthropic_client::{ContentBlock, MessagesResponse};
+
+        let response = MessagesResponse {
+            id: String::new(),
+            content: vec![ContentBlock::Text {
+                text: "The best location with 12 pips and 3 resources is number 5".into(),
+            }],
+            model: String::new(),
+            stop_reason: Some("end_turn".into()),
+            usage: None,
+        };
+        assert_eq!(extract_index_from_text(&response), Some(5));
+    }
+
+    #[test]
+    fn small_context_history_limit() {
+        let mut conv = Conversation::new("system".into());
+        conv.max_history_pairs = MAX_HISTORY_PAIRS_SMALL;
+
+        for i in 0..10 {
+            conv.record_exchange(
+                Message::user(format!("turn {}", i)),
+                Message::assistant_tool_use(
+                    format!("call-{}", i),
+                    "choose_index",
+                    json!({"index": i}),
+                ),
+            );
+        }
+
+        let pair_count = conv.messages.len() / 2;
+        assert!(
+            pair_count <= MAX_HISTORY_PAIRS_SMALL,
+            "should have at most {} pairs, got {}",
+            MAX_HISTORY_PAIRS_SMALL,
+            pair_count,
+        );
     }
 }

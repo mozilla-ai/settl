@@ -1549,6 +1549,13 @@ fn launch_game(
                     llm.set_effort(level.to_string());
                 }
 
+                // Enable forced tool reasoning for small models (e.g. 1.7B).
+                if let Some(entry) = config.models.get(ng.model_index) {
+                    if entry.needs_forced_reasoning() {
+                        llm.set_force_tool_reasoning(true);
+                    }
+                }
+
                 // Set up streaming reasoning bridge: LlmPlayer -> String chunks -> UiEvent.
                 let (reasoning_tx, mut reasoning_rx) = mpsc::unbounded_channel::<String>();
                 llm.set_reasoning_sender(reasoning_tx);
@@ -1688,6 +1695,11 @@ fn resume_game(
 
             // Set reasoning effort from config default.
             llm.set_effort(config.default_effort.clone());
+
+            // Enable forced tool reasoning for small models (e.g. 1.7B).
+            if save.model_name.contains("1.7B") {
+                llm.set_force_tool_reasoning(true);
+            }
 
             let (reasoning_tx, mut reasoning_rx) = mpsc::unbounded_channel::<String>();
             llm.set_reasoning_sender(reasoning_tx);

@@ -65,6 +65,16 @@ impl ModelEntry {
             ModelBackend::Api { .. } => None,
         }
     }
+
+    /// Whether this is a small local model that benefits from forced tool
+    /// reasoning (the `analysis` field hack). Currently true for the 1.7B
+    /// Bonsai model.
+    pub fn needs_forced_reasoning(&self) -> bool {
+        match &self.backend {
+            ModelBackend::Llamafile { filename, .. } => filename.contains("1.7B"),
+            ModelBackend::Api { .. } => false,
+        }
+    }
 }
 
 /// Valid effort levels for the Anthropic Messages API.

@@ -10,12 +10,10 @@ use crate::player::prompt;
 use crate::player::{Player, PlayerChoice};
 
 /// A human player who makes decisions via terminal input.
-#[allow(dead_code)]
 pub struct HumanPlayer {
     name: String,
 }
 
-#[allow(dead_code)]
 impl HumanPlayer {
     pub fn new(name: String) -> Self {
         Self { name }
@@ -98,7 +96,7 @@ impl Player for HumanPlayer {
     async fn choose_settlement(
         &self,
         _state: &GameState,
-        player_id: PlayerId,
+        _player_id: PlayerId,
         legal_vertices: &[VertexCoord],
         _round: u8,
         _player_names: &[String],
@@ -120,7 +118,7 @@ impl Player for HumanPlayer {
     async fn choose_road(
         &self,
         _state: &GameState,
-        player_id: PlayerId,
+        _player_id: PlayerId,
         legal_edges: &[EdgeCoord],
         _player_names: &[String],
     ) -> (usize, String) {
@@ -137,7 +135,7 @@ impl Player for HumanPlayer {
     async fn choose_robber_hex(
         &self,
         _state: &GameState,
-        player_id: PlayerId,
+        _player_id: PlayerId,
         legal_hexes: &[HexCoord],
     ) -> (usize, String) {
         println!("\n--- Move Robber ({}) ---", self.name);
@@ -150,7 +148,7 @@ impl Player for HumanPlayer {
     async fn choose_steal_target(
         &self,
         state: &GameState,
-        player_id: PlayerId,
+        _player_id: PlayerId,
         targets: &[PlayerId],
         player_names: &[String],
     ) -> (usize, String) {
@@ -254,7 +252,7 @@ impl Player for HumanPlayer {
     async fn respond_to_trade(
         &self,
         _state: &GameState,
-        player_id: PlayerId,
+        _player_id: PlayerId,
         offer: &TradeOffer,
         player_names: &[String],
     ) -> (TradeResponse, String) {

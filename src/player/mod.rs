@@ -1,5 +1,4 @@
 pub mod anthropic_client;
-#[cfg(test)]
 pub mod human;
 pub mod llm_player;
 pub mod personality;

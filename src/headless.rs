@@ -35,6 +35,10 @@ pub struct HeadlessCli {
     /// Reasoning effort level: low, medium, high, or max.
     #[arg(long, default_value = "low")]
     pub effort: String,
+
+    /// Play as a human (player 0 reads from stdin).
+    #[arg(long)]
+    pub human: bool,
 }
 
 pub async fn run(cli: HeadlessCli) {
@@ -50,7 +54,7 @@ pub async fn run(cli: HeadlessCli) {
     let state = game::state::GameState::new(board.clone(), cli.players);
 
     // Resolve the AI client: either from --model (API) or local llamafile.
-    let (client, _llamafile_process) = setup_ai_client(&cli).await;
+    let (client, _llamafile_process, force_reasoning) = setup_ai_client(&cli).await;
 
     let custom_personality = cli.personality.as_ref().map(|path| {
         player::personality::Personality::from_toml_file(std::path::Path::new(path)).unwrap_or_else(
@@ -71,17 +75,25 @@ pub async fn run(cli: HeadlessCli) {
     let name_list = ["Alice", "Bob", "Charlie", "Diana"];
     let players: Vec<Box<dyn player::Player>> = (0..cli.players)
         .map(|i| {
-            let personality = custom_personality
-                .clone()
-                .unwrap_or_else(|| default_personalities[i % default_personalities.len()].clone());
-            let mut llm = player::llm_player::LlmPlayer::new(
-                name_list[i].into(),
-                Arc::clone(&client),
-                personality,
-                Some(i),
-            );
-            llm.set_effort(cli.effort.clone());
-            Box::new(llm) as Box<dyn player::Player>
+            if i == 0 && cli.human {
+                Box::new(player::human::HumanPlayer::new(name_list[i].into()))
+                    as Box<dyn player::Player>
+            } else {
+                let personality = custom_personality.clone().unwrap_or_else(|| {
+                    default_personalities[i % default_personalities.len()].clone()
+                });
+                let mut llm = player::llm_player::LlmPlayer::new(
+                    name_list[i].into(),
+                    Arc::clone(&client),
+                    personality,
+                    Some(i),
+                );
+                llm.set_effort(cli.effort.clone());
+                if force_reasoning {
+                    llm.set_force_tool_reasoning(true);
+                }
+                Box::new(llm) as Box<dyn player::Player>
+            }
         })
         .collect();
 
@@ -122,11 +134,13 @@ pub async fn run(cli: HeadlessCli) {
 ///
 /// Returns the client and an optional llamafile process handle (caller must keep
 /// it alive to prevent the process from being killed).
+/// Returns `(client, optional_process, force_tool_reasoning)`.
 async fn setup_ai_client(
     cli: &HeadlessCli,
 ) -> (
     Arc<player::anthropic_client::AnthropicClient>,
     Option<crate::llamafile::LlamafileProcess>,
+    bool,
 ) {
     let mut config = crate::config::load_config();
 
@@ -152,25 +166,44 @@ async fn setup_ai_client(
             .find(|m| m.name.to_lowercase().contains(&model_name.to_lowercase()));
 
         match entry {
-            Some(crate::config::ModelEntry {
-                name,
-                backend:
-                    crate::config::ModelBackend::Api {
-                        base_url,
-                        api_key,
-                        model,
-                    },
-            }) => {
-                eprintln!("Using API model: {name}");
+            Some(
+                entry @ crate::config::ModelEntry {
+                    backend: crate::config::ModelBackend::Api { .. },
+                    ..
+                },
+            ) => {
+                let crate::config::ModelBackend::Api {
+                    base_url,
+                    api_key,
+                    model,
+                } = &entry.backend
+                else {
+                    unreachable!()
+                };
+                eprintln!("Using API model: {}", entry.name);
                 let client =
                     player::anthropic_client::AnthropicClient::new(base_url, api_key, model);
-                return (client, None);
+                return (client, None, false);
             }
-            Some(entry) => {
-                eprintln!(
-                    "Warning: Model '{}' is a llamafile, not an API model. Falling back to llamafile.",
-                    entry.name
+            Some(
+                entry @ crate::config::ModelEntry {
+                    backend: crate::config::ModelBackend::Llamafile { .. },
+                    ..
+                },
+            ) => {
+                let crate::config::ModelBackend::Llamafile { url, filename } = &entry.backend
+                else {
+                    unreachable!()
+                };
+                let force_reasoning = entry.needs_forced_reasoning();
+                eprintln!("Using llamafile model: {}", entry.name);
+                let (port, process) = setup_llamafile_headless_custom(url, filename).await;
+                let client = player::anthropic_client::AnthropicClient::new(
+                    format!("http://127.0.0.1:{}", port),
+                    "no-key",
+                    player::llm_player::LLAMAFILE_MODEL,
                 );
+                return (client, Some(process), force_reasoning);
             }
             None => {
                 let available: Vec<&str> = config.models.iter().map(|m| m.name.as_str()).collect();
@@ -181,26 +214,42 @@ async fn setup_ai_client(
         }
     }
 
-    // Fallback: start local llamafile.
-    let (port, process) = setup_llamafile_headless().await;
+    // Fallback: start local Bonsai-8B llamafile.
+    let (port, process) =
+        setup_llamafile_headless_builtin(crate::llamafile::LlamafileModel::Bonsai8B).await;
     let client = player::anthropic_client::AnthropicClient::new(
         format!("http://127.0.0.1:{}", port),
         "no-key",
         player::llm_player::LLAMAFILE_MODEL,
     );
-    (client, Some(process))
+    (client, Some(process), false)
+}
+
+/// Download (if needed) and start a built-in llamafile model.
+async fn setup_llamafile_headless_builtin(
+    model: crate::llamafile::LlamafileModel,
+) -> (u16, crate::llamafile::LlamafileProcess) {
+    let url = model.url().to_string();
+    let filename = model.filename().to_string();
+    setup_llamafile_headless_custom(&url, &filename).await
 }
 
 /// Download (if needed) and start a local llamafile, printing progress to stderr.
 /// Returns the port and the process handle (caller must keep it alive).
-async fn setup_llamafile_headless() -> (u16, crate::llamafile::LlamafileProcess) {
+async fn setup_llamafile_headless_custom(
+    url: &str,
+    filename: &str,
+) -> (u16, crate::llamafile::LlamafileProcess) {
     use crate::llamafile::{format_bytes, LlamafileStatus};
 
     let (status_tx, mut status_rx) = tokio::sync::mpsc::unbounded_channel();
 
+    let url_owned = url.to_string();
+    let filename_owned = filename.to_string();
     let handle = tokio::spawn(async move {
-        let path = crate::llamafile::ensure_llamafile(
-            crate::llamafile::LlamafileModel::Bonsai8B,
+        let path = crate::llamafile::ensure_llamafile_custom(
+            &url_owned,
+            &filename_owned,
             status_tx.clone(),
         )
         .await
@@ -220,14 +269,14 @@ async fn setup_llamafile_headless() -> (u16, crate::llamafile::LlamafileProcess)
     loop {
         match status_rx.recv().await {
             Some(LlamafileStatus::Checking) => {
-                eprint!("Checking for Bonsai-8B...");
+                eprint!("Checking for llamafile...");
             }
             Some(LlamafileStatus::Downloading { bytes, total }) => {
                 if total > 0 {
                     let pct = (bytes as f64 / total as f64 * 100.0) as u16;
                     if pct != last_pct {
                         eprint!(
-                            "\rDownloading Bonsai-8B... {} / {} ({}%)",
+                            "\rDownloading llamafile... {} / {} ({}%)",
                             format_bytes(bytes),
                             format_bytes(total),
                             pct
@@ -235,7 +284,7 @@ async fn setup_llamafile_headless() -> (u16, crate::llamafile::LlamafileProcess)
                         last_pct = pct;
                     }
                 } else {
-                    eprint!("\rDownloading Bonsai-8B... {}", format_bytes(bytes));
+                    eprint!("\rDownloading llamafile... {}", format_bytes(bytes));
                 }
             }
             Some(LlamafileStatus::Preparing) => {
