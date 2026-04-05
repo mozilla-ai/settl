@@ -25,8 +25,9 @@ Show
 Type "./target/release/settl"
 Enter
 
-# Wait for title screen to render
-Sleep 3s
+# Wait for title screen to render, then pause briefly to show it
+Wait+Screen /New Game/
+Sleep 1500ms
 
 # Select "New Game" (already highlighted)
 Enter
@@ -60,10 +61,10 @@ Sleep 700ms
 # Start the game (Enter works from any row, model stays Bonsai 1.7B)
 Enter
 
-# Wait for llamafile setup to complete (model already cached)
-Sleep 2s
+# Wait for the board to appear (llamafile downloads/starts in the background)
+Wait+Screen /Place settlement/
+Sleep 500ms
 
-# Board is now visible with settlement placement cursor.
 # Browse a few legal positions then place.
 Type "n"
 Sleep 400ms
@@ -72,9 +73,12 @@ Sleep 400ms
 Type "n"
 Sleep 400ms
 Enter
-Sleep 1500ms
 
-# Road placement prompt appears -- browse and place.
+# Wait for road placement prompt to appear.
+Wait+Screen /Place road/
+Sleep 500ms
+
+# Browse and place.
 Type "n"
 Sleep 400ms
 Type "n"
