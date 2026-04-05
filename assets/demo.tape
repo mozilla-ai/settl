@@ -25,11 +25,8 @@ Show
 Type "./target/release/settl"
 Enter
 
-# Wait for title screen
-Sleep 4s
-
-# Admire the SETTL logo and menu
-Sleep 1s
+# Wait for title screen to render
+Sleep 3s
 
 # Select "New Game" (already highlighted)
 Enter
@@ -64,25 +61,24 @@ Sleep 700ms
 Enter
 
 # Wait for llamafile setup to complete (model already cached)
-Sleep 10s
+Sleep 6s
 
 # Board is now visible with settlement placement cursor.
 # Browse a few legal positions then place.
-Sleep 1s
 Type "n"
-Sleep 500ms
+Sleep 400ms
 Type "n"
-Sleep 500ms
+Sleep 400ms
 Type "n"
-Sleep 500ms
+Sleep 400ms
 Enter
-Sleep 2s
+Sleep 1500ms
 
 # Road placement prompt appears -- browse and place.
 Type "n"
-Sleep 500ms
+Sleep 400ms
 Type "n"
-Sleep 500ms
+Sleep 400ms
 Enter
 Sleep 3s
 
