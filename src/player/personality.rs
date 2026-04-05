@@ -416,7 +416,11 @@ impl Personality {
             }
             result.push(ch);
         }
-        result.trim_matches('-').to_string()
+        let trimmed = result.trim_matches('-');
+        if trimmed.is_empty() {
+            return "untitled".to_string();
+        }
+        trimmed.to_string()
     }
 }
 
@@ -581,6 +585,8 @@ cooperation = 0.5
             "copy-of-builder"
         );
         assert_eq!(Personality::filename_from_name("  A  B  "), "a-b");
+        assert_eq!(Personality::filename_from_name(""), "untitled");
+        assert_eq!(Personality::filename_from_name("   "), "untitled");
     }
 
     #[test]
