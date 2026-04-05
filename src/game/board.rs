@@ -597,13 +597,13 @@ fn standard_ports() -> Vec<Port> {
         // Right upper, E edge of (2,-1) -- Ore 2:1
         (
             VertexCoord::new(HexCoord::new(3, -2), VertexDirection::South),
-            VertexCoord::new(HexCoord::new(3, -1), VertexDirection::North),
+            VertexCoord::new(HexCoord::new(2, 0), VertexDirection::North),
             PortType::Specific(Resource::Ore),
         ),
         // Right lower, E edge of (2,0) -- Generic 3:1
         (
             VertexCoord::new(HexCoord::new(3, -1), VertexDirection::South),
-            VertexCoord::new(HexCoord::new(3, 0), VertexDirection::North),
+            VertexCoord::new(HexCoord::new(2, 1), VertexDirection::North),
             PortType::Generic,
         ),
         // Bottom-right, SE edge of (1,1) -- Sheep 2:1
@@ -627,7 +627,7 @@ fn standard_ports() -> Vec<Port> {
         // Left lower, W edge of (-2,1) -- Brick 2:1
         (
             VertexCoord::new(HexCoord::new(-3, 2), VertexDirection::North),
-            VertexCoord::new(HexCoord::new(-3, 1), VertexDirection::South),
+            VertexCoord::new(HexCoord::new(-2, 0), VertexDirection::South),
             PortType::Specific(Resource::Brick),
         ),
         // Left upper, NW edge of (-1,-1) -- Wood 2:1
@@ -1034,6 +1034,33 @@ mod tests {
         assert!(!is_board_hex(HexCoord::new(3, 0)));
         assert!(!is_board_hex(HexCoord::new(0, 3)));
         assert!(!is_board_hex(HexCoord::new(-3, 0)));
+    }
+
+    #[test]
+    fn port_vertices_are_reachable_from_board_hexes() {
+        let board = make_board();
+        let coords = board_hex_coords();
+        // Collect all vertex coords computed from on-board hexes.
+        let mut known: HashSet<VertexCoord> = HashSet::new();
+        for c in &coords {
+            for v in &hex_vertices(*c) {
+                known.insert(*v);
+            }
+        }
+        for (i, port) in board.ports.iter().enumerate() {
+            assert!(
+                known.contains(&port.vertices.0),
+                "Port {} vertex 0 {:?} not reachable from any board hex",
+                i,
+                port.vertices.0
+            );
+            assert!(
+                known.contains(&port.vertices.1),
+                "Port {} vertex 1 {:?} not reachable from any board hex",
+                i,
+                port.vertices.1
+            );
+        }
     }
 
     #[test]

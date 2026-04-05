@@ -2278,6 +2278,39 @@ mod tests {
         assert_eq!(trade_rate(&state, 0, Resource::Brick), 4);
     }
 
+    #[test]
+    fn both_port_vertices_grant_trade_rate() {
+        let state = make_state(4);
+        // Every port vertex should grant the correct rate when a settlement is placed.
+        for port in &state.board.ports {
+            for v in [port.vertices.0, port.vertices.1] {
+                let mut s = make_state(4);
+                place_settlement(&mut s, 0, v);
+                match port.port_type {
+                    PortType::Generic => {
+                        for &r in Resource::all() {
+                            assert_eq!(
+                                trade_rate(&s, 0, r),
+                                3,
+                                "Generic port vertex {:?} should give 3:1",
+                                v
+                            );
+                        }
+                    }
+                    PortType::Specific(res) => {
+                        assert_eq!(
+                            trade_rate(&s, 0, res),
+                            2,
+                            "Specific {:?} port vertex {:?} should give 2:1",
+                            res,
+                            v
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     // -- Dev card validation-before-consume --
 
     #[test]

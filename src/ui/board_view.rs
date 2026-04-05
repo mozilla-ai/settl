@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders};
 
-use crate::game::board::{self, EdgeCoord, EdgeDirection, HexCoord, Terrain, VertexCoord};
+use crate::game::board::{
+    self, EdgeCoord, EdgeDirection, HexCoord, PortType, Resource, Terrain, VertexCoord,
+};
 use crate::game::state::{Building, GameState};
 
 use super::{CursorLegal, InputMode, PLAYER_COLORS};
@@ -497,12 +499,14 @@ pub fn render_board(
         }
     }
 
-    // Layer 6: Draw ports.
+    // Layer 6: Draw ports (vertex markers + labels).
     for port in &state.board.ports {
+        let mut positions: Vec<(i16, i16)> = Vec::new();
         for v in [&port.vertices.0, &port.vertices.1] {
             if let Some(&(vx, vy)) = grid.vertex_pos.get(v) {
                 let scr_col = off_col as i16 + vx;
                 let scr_row = off_row as i16 + vy;
+                positions.push((scr_col, scr_row));
                 if !state.buildings.contains_key(v) {
                     set_cell(
                         scr_col,
@@ -514,6 +518,26 @@ pub fn render_board(
                     );
                 }
             }
+        }
+        // Draw port type label at the midpoint, offset outward from board center.
+        if positions.len() == 2 {
+            let mid_col = (positions[0].0 + positions[1].0) / 2;
+            let mid_row = (positions[0].1 + positions[1].1) / 2;
+            // Push label away from board center.
+            let center_col = off_col as i16 + grid.width as i16 / 2;
+            let center_row = off_row as i16 + grid.height as i16 / 2;
+            let dx = mid_col - center_col;
+            let dy = mid_row - center_row;
+            let nudge_col = if dx.abs() > dy.abs() {
+                dx.signum() * 2
+            } else {
+                dx.signum()
+            };
+            let nudge_row = if dy.abs() > dx.abs() { dy.signum() } else { 0 };
+            let label_col = mid_col + nudge_col;
+            let label_row = mid_row + nudge_row;
+            let (label, style) = port_label(port.port_type);
+            draw_str(label_col, label_row, &label, style, inner, buf);
         }
     }
 
@@ -830,6 +854,31 @@ fn set_cell(col: i16, row: i16, ch: char, style: Style, area: Rect, buf: &mut Bu
         if let Some(cell) = buf.cell_mut(ratatui::layout::Position::new(col, row)) {
             cell.set_char(ch);
             cell.set_style(style);
+        }
+    }
+}
+
+/// Draw a short string starting at (col, row), centered horizontally on the position.
+fn draw_str(col: i16, row: i16, s: &str, style: Style, area: Rect, buf: &mut Buffer) {
+    let half = s.len() as i16 / 2;
+    for (i, ch) in s.chars().enumerate() {
+        set_cell(col - half + i as i16, row, ch, style, area, buf);
+    }
+}
+
+/// Return the label text and style for a port type.
+fn port_label(pt: PortType) -> (String, Style) {
+    match pt {
+        PortType::Generic => ("3:1".into(), Style::default().fg(Color::Yellow)),
+        PortType::Specific(r) => {
+            let (abbr, color) = match r {
+                Resource::Wood => ("W", Color::Green),
+                Resource::Brick => ("B", Color::Red),
+                Resource::Sheep => ("S", Color::LightGreen),
+                Resource::Wheat => ("H", Color::Yellow),
+                Resource::Ore => ("O", Color::Gray),
+            };
+            (format!("2:{}", abbr), Style::default().fg(color).bold())
         }
     }
 }

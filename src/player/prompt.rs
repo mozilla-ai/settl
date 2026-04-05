@@ -120,6 +120,29 @@ pub fn game_state_json(state: &GameState, viewer: PlayerId) -> serde_json::Value
         })
         .collect();
 
+    let ports: Vec<serde_json::Value> = state
+        .board
+        .ports
+        .iter()
+        .map(|port| {
+            let fmt_v = |v: &VertexCoord| {
+                let d = match v.dir {
+                    VertexDirection::North => "N",
+                    VertexDirection::South => "S",
+                };
+                format!("({},{},{})", v.hex.q, v.hex.r, d)
+            };
+            let port_type_str = match port.port_type {
+                PortType::Generic => "3:1".to_string(),
+                PortType::Specific(r) => format!("2:1 {}", r),
+            };
+            serde_json::json!({
+                "type": port_type_str,
+                "vertices": [fmt_v(&port.vertices.0), fmt_v(&port.vertices.1)],
+            })
+        })
+        .collect();
+
     serde_json::json!({
         "turn_number": state.turn_number,
         "phase": format!("{:?}", state.phase),
@@ -136,6 +159,7 @@ pub fn game_state_json(state: &GameState, viewer: PlayerId) -> serde_json::Value
         "players": players,
         "buildings": buildings,
         "roads": roads,
+        "ports": ports,
     })
 }
 
