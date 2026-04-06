@@ -610,6 +610,28 @@ fn action_bar_esc_selects_end_turn() {
     );
 }
 
+#[test]
+fn action_bar_esc_selects_roll_dice() {
+    // Pre-roll knight screen: [RollDice=0, PlayKnight=1]
+    let choices = vec![
+        crate::player::PlayerChoice::RollDice,
+        crate::player::PlayerChoice::PlayKnight,
+    ];
+    let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
+        choices,
+        selected: 1,
+    });
+    let mut app = make_test_app(Screen::Playing(ps));
+
+    handle_input(&mut app, KeyCode::Esc);
+
+    let resp = rx.try_recv().unwrap();
+    assert!(
+        matches!(resp, HumanResponse::Index(0)),
+        "Esc should select Roll Dice on pre-roll knight screen"
+    );
+}
+
 // ── TradeBuilder ─────────────────────────────────────────────────────
 
 #[test]
