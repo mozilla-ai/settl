@@ -1179,11 +1179,29 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                 }
 
                 InputMode::BoardCursor {
+                    legal,
                     positions,
                     selected,
-                    ..
                 } => {
                     let len = positions.len();
+
+                    // Road quick-select: j/k/l/m directly pick and confirm
+                    if matches!(legal, CursorLegal::Roads(_)) {
+                        let road_idx = match key {
+                            KeyCode::Char('j') => Some(0),
+                            KeyCode::Char('k') => Some(1),
+                            KeyCode::Char('l') => Some(2),
+                            KeyCode::Char('m') => Some(3),
+                            _ => None,
+                        };
+                        if let Some(idx) = road_idx {
+                            if idx < len {
+                                ps.respond_index(idx);
+                            }
+                            return Action::None;
+                        }
+                    }
+
                     match key {
                         KeyCode::Left
                         | KeyCode::Right

@@ -673,6 +673,7 @@ fn draw_cursor_overlay(
             }
         }
         CursorLegal::Roads(edges) => {
+            const ROAD_LABELS: [char; 4] = ['j', 'k', 'l', 'm'];
             for (i, e) in edges.iter().enumerate() {
                 if let Some(&(ex, ey)) = grid.edge_pos.get(e) {
                     let sx = off_col as i16 + ex;
@@ -682,20 +683,22 @@ fn draw_cursor_overlay(
                     } else {
                         legal_style
                     };
+                    let label = ROAD_LABELS.get(i).copied();
                     match e.dir {
                         EdgeDirection::NorthEast => {
                             set_cell(sx - 2, sy - 1, '=', style, area, buf);
-                            set_cell(sx, sy, '=', style, area, buf);
+                            set_cell(sx, sy, label.unwrap_or('='), style, area, buf);
                             set_cell(sx + 2, sy + 1, '=', style, area, buf);
                         }
                         EdgeDirection::SouthEast => {
                             set_cell(sx - 2, sy + 1, '=', style, area, buf);
-                            set_cell(sx, sy, '=', style, area, buf);
+                            set_cell(sx, sy, label.unwrap_or('='), style, area, buf);
                             set_cell(sx + 2, sy - 1, '=', style, area, buf);
                         }
                         EdgeDirection::East => {
                             for dy in -2..=2i16 {
-                                set_cell(sx, sy + dy, '=', style, area, buf);
+                                let ch = if dy == 0 { label.unwrap_or('=') } else { '=' };
+                                set_cell(sx, sy + dy, ch, style, area, buf);
                             }
                         }
                     }
