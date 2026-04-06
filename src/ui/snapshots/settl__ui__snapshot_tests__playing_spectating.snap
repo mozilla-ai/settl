@@ -25,7 +25,7 @@ expression: buffer_to_string(&buf)
 │                        2:Wood ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲                                ││────────────────────────────────────│
 │                             ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲                              ││Game started -- your turn will show │
 │                        *  ╱             ╲     ╱             ╲     ╱             ╲     ╱             ╲  *                         ││a prompt                            │
-│                          ╱     Wheat     ╲   ╱     Brick     ╲   ╱     Sheep     ╲   ╱     Brick     ╲                           ││q:quit  Space:pause  j/k:scroll     │
+│                          ╱     Wheat     ╲   ╱     Brick     ╲   ╱     Sheep     ╲   ╱     Brick     ╲                           ││q:quit  ?:help  j/k:scroll          │
 │                                 12                   6                   4                  10         2:Ore                     ││Tab:Game/AI                         │
 │                          ╲               ╱   ╲               ╱   ╲               ╱   ╲               ╱                           ││                                    │
 │                           ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱  *                         ││                                    │
@@ -66,4 +66,4 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                  ││                                    │
 │                                                                                                                                  ││                                    │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘└────────────────────────────────────┘
- | q:quit  ?:help  Tab:Game/AI  Space:pause
+ | q:quit  ?:help  Tab:Game/AI
