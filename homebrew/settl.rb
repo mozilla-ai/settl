@@ -9,7 +9,7 @@
 
 class Settl < Formula
   desc "Terminal hex-based settlement game with LLM players"
-  homepage "https://settl.dev"
+  homepage "https://mozilla-ai.github.io/settl/"
   version "VERSION"
   license "Apache-2.0"
 

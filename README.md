@@ -5,7 +5,7 @@
     <br><br>
     <a href="https://github.com/mozilla-ai/settl/actions/workflows/ci.yml"><img src="https://github.com/mozilla-ai/settl/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
-    <a href="https://settl.dev"><img src="https://img.shields.io/badge/docs-settl.dev-green" alt="Docs"></a>
+    <a href="https://mozilla-ai.github.io/settl/"><img src="https://img.shields.io/badge/docs-mozilla--ai.github.io%2Fsettl-green" alt="Docs"></a>
     <br>
   </p>
 </p>
@@ -22,7 +22,7 @@ cd settl
 cargo run
 ```
 
-Runs entirely offline using [llamafile](https://github.com/mozilla-ai/llamafile), no API keys required. Full docs at [settl.dev](https://settl.dev).
+Runs entirely offline using [llamafile](https://github.com/mozilla-ai/llamafile), no API keys required. Full docs at [mozilla-ai.github.io/settl](https://mozilla-ai.github.io/settl/).
 
 ## Related Projects
 
