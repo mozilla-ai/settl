@@ -56,7 +56,7 @@ pub fn render_app_to_buffer(app: &mut App, width: u16, height: u16) -> Buffer {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|f| {
-            draw_screen(f, &app.screen);
+            draw_screen(f, &app.screen, app.update_info.as_ref());
             if app.show_size_warning {
                 draw_size_warning(f);
             }
@@ -130,6 +130,8 @@ pub fn make_test_app(screen: Screen) -> App {
         llamafile_process: None,
         show_size_warning: false,
         config: crate::config::Config::default(),
+        update_info: None,
+        update_rx: None,
     }
 }
 
