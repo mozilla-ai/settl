@@ -2,7 +2,7 @@
 source: src/ui/snapshot_tests.rs
 expression: buffer_to_string(&buf)
 ---
-┌ AI Reasoning (2) ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+┌ AI Thoughts (2) ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │Alice: I should build a settlement near the wheat hex to secure early resources.                                                                                        │
 │Bob: Looking at the board, the ore-wheat combo on vertex (1,0) North is the strongest opening. I will place there.                                                      │
 │                                                                                                                                                                        │
@@ -66,4 +66,4 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                                                        │
 │                                                                                                                                                                        │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- | q:quit  ?:help  Tab:AI  Space:pause
+ | q:quit  ?:help  Tab:AI thoughts  Space:pause

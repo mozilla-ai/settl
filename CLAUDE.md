@@ -70,6 +70,7 @@ Use `log::debug!()` / `log::info!()` etc. from any module.
 - **Never write to stdout/stderr** (`println!`, `eprintln!`, `dbg!`) in code that runs under the TUI. Raw terminal output corrupts the alternate screen. Use the TUI's own status/error display (e.g. `LlamafileStatus::Error`) or log to a file instead.
 - Rust naming: `snake_case` for modules/functions, `CamelCase` for types, `SCREAMING_SNAKE_CASE` for constants.
 - Add comments where they aid understanding, but remove obvious ones (section headers restating the next line, comments that just name what the code does).
+- **Renaming user-facing terms**: When changing a UI label, panel name, or key description, grep the entire codebase for the old term (case-insensitive) and update all occurrences: UI strings, comments, docs, DESIGN.md, help overlay, status bar hints. User-visible strings like placeholder text are easy to miss.
 
 ## Testing
 

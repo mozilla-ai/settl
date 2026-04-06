@@ -26,7 +26,7 @@ expression: buffer_to_string(&buf)
 │                                 12                   6                   4                  10          2:O                      ││   1| Game started -- your turn will│
 │                          ╲               ╱   ╲               ╱   ╲               ╱   ╲               ╱                           ││show a prompt                       │
 │                           ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱  *                         ││   2| q:quit  Space:pause           │
-│                             ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱                              ││j/k:scroll  Tab:AI panel            │
+│                             ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱                              ││j/k:scroll  Tab:AI thoughts         │
 │                     ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲                      ││                                    │
 │                   ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲                    ││                                    │
 │                 ╱             ╲     ╱             ╲     ╱             ╲     ╱             ╲     ╱             ╲  *               ││                                    │
@@ -66,4 +66,4 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                                                        │
 │ [w]ood  [b]rick  [s]heep  [h]arvest(wheat)  [o]re                                                                                                                      │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- PICK RESOURCE  | q:quit  ?:help  Tab:AI  Space:pause
+ PICK RESOURCE  | q:quit  ?:help  Tab:AI thoughts  Space:pause

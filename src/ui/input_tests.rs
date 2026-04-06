@@ -1,6 +1,6 @@
 //! Tests for TUI input handling across all screens and input modes.
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, MouseEventKind};
 
 use crate::game::actions::TradeOffer;
 use crate::game::board::Resource;
@@ -1152,6 +1152,64 @@ fn spectating_q_returns_to_main_menu() {
     let action = handle_input(&mut app, KeyCode::Char('q'));
 
     assert!(matches!(action, Action::Transition(Screen::MainMenu(_))));
+}
+
+// ── Mouse Scroll ─────────────────────────────────────────────────────
+
+#[test]
+fn mouse_scroll_down_scrolls_chat_when_ai_panel_visible() {
+    let (mut ps, _rx) = make_test_playing_state(InputMode::Spectating);
+    ps.show_ai_panel = true;
+    ps.chat_scroll = 0;
+
+    handle_mouse_scroll(&mut ps, MouseEventKind::ScrollDown);
+    assert_eq!(ps.chat_scroll, MOUSE_SCROLL_LINES);
+
+    handle_mouse_scroll(&mut ps, MouseEventKind::ScrollDown);
+    assert_eq!(ps.chat_scroll, MOUSE_SCROLL_LINES * 2);
+}
+
+#[test]
+fn mouse_scroll_up_scrolls_chat_when_ai_panel_visible() {
+    let (mut ps, _rx) = make_test_playing_state(InputMode::Spectating);
+    ps.show_ai_panel = true;
+    ps.chat_scroll = 10;
+
+    handle_mouse_scroll(&mut ps, MouseEventKind::ScrollUp);
+    assert_eq!(ps.chat_scroll, 10 - MOUSE_SCROLL_LINES);
+}
+
+#[test]
+fn mouse_scroll_affects_game_log_when_ai_panel_hidden() {
+    let (mut ps, _rx) = make_test_playing_state(InputMode::Spectating);
+    ps.show_ai_panel = false;
+    ps.log_scroll = 0;
+
+    handle_mouse_scroll(&mut ps, MouseEventKind::ScrollDown);
+    assert_eq!(ps.log_scroll, MOUSE_SCROLL_LINES);
+}
+
+#[test]
+fn mouse_scroll_affects_llamafile_log_when_visible() {
+    let (mut ps, _rx) = make_test_playing_state(InputMode::Spectating);
+    ps.show_llamafile_log = true;
+    ps.llamafile_log_scroll = 10;
+
+    handle_mouse_scroll(&mut ps, MouseEventKind::ScrollDown);
+    assert_eq!(ps.llamafile_log_scroll, 10 + MOUSE_SCROLL_LINES);
+
+    handle_mouse_scroll(&mut ps, MouseEventKind::ScrollUp);
+    assert_eq!(ps.llamafile_log_scroll, 10);
+}
+
+#[test]
+fn mouse_scroll_up_does_not_underflow() {
+    let (mut ps, _rx) = make_test_playing_state(InputMode::Spectating);
+    ps.show_ai_panel = true;
+    ps.chat_scroll = 1;
+
+    handle_mouse_scroll(&mut ps, MouseEventKind::ScrollUp);
+    assert_eq!(ps.chat_scroll, 0);
 }
 
 // ── PostGame ─────────────────────────────────────────────────────────

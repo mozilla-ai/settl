@@ -31,4 +31,4 @@ expression: buffer_to_string(&buf)
 │                                                                              │
 │ [Arrow/Enter] select  [s]ettlement  [r]oad  [c]ity  [d]ev card  [b]ank trade │
 └──────────────────────────────────────────────────────────────────────────────┘
- YOUR TURN  | q:quit  ?:help  Tab:AI  Space:pause
+ YOUR TURN  | q:quit  ?:help  Tab:AI thoughts  Space:pause

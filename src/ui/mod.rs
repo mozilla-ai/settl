@@ -19,7 +19,10 @@ use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+    MouseEventKind,
+};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -69,7 +72,7 @@ pub enum UiEvent {
         player_name: String,
         chunk: String,
     },
-    /// Game event narration for the AI Reasoning panel (turn markers, dice, actions).
+    /// Game event narration for the AI Thoughts panel (turn markers, dice, actions).
     Narration { message: String },
     /// The game has ended.
     GameOver { winner: usize, message: String },
@@ -196,7 +199,7 @@ pub struct PlayingState {
     pub log_scroll: u16,
     pub chat_scroll: u16,
     pub paused: bool,
-    /// Whether to show AI reasoning panel (Tab toggle).
+    /// Whether to show AI thoughts panel (Tab toggle).
     pub show_ai_panel: bool,
     /// Whether to show the help overlay (? toggle).
     pub show_help: bool,
@@ -236,7 +239,7 @@ impl PlayingState {
             state: None,
             messages: vec![
                 start_msg,
-                "q:quit  Space:pause  j/k:scroll  Tab:AI panel".into(),
+                "q:quit  Space:pause  j/k:scroll  Tab:AI thoughts".into(),
             ],
             chat_messages: Vec::new(),
             player_names,
@@ -513,6 +516,7 @@ pub async fn run_app() -> io::Result<()> {
 
     enable_raw_mode()?;
     io::stdout().execute(EnterAlternateScreen)?;
+    io::stdout().execute(EnableMouseCapture)?;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
@@ -520,6 +524,7 @@ pub async fn run_app() -> io::Result<()> {
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
+        let _ = io::stdout().execute(DisableMouseCapture);
         let _ = io::stdout().execute(LeaveAlternateScreen);
         original_hook(info);
     }));
@@ -555,6 +560,7 @@ pub async fn run_app() -> io::Result<()> {
 
     // Restore terminal.
     disable_raw_mode()?;
+    io::stdout().execute(DisableMouseCapture)?;
     io::stdout().execute(LeaveAlternateScreen)?;
 
     result
@@ -587,7 +593,16 @@ async fn run_event_loop(
         // only rebuild once.
         if event::poll(timeout)? {
             loop {
-                if let Event::Key(key) = event::read()? {
+                let raw_event = event::read()?;
+
+                // Handle mouse scroll events for the playing screen.
+                if let Event::Mouse(mouse) = &raw_event {
+                    if let Screen::Playing(ps) = &mut app.screen {
+                        handle_mouse_scroll(ps, mouse.kind);
+                    }
+                }
+
+                if let Event::Key(key) = raw_event {
                     if key.kind == KeyEventKind::Press {
                         if key.modifiers.contains(KeyModifiers::CONTROL)
                             && key.code == KeyCode::Char('c')
@@ -834,6 +849,37 @@ fn draw_size_warning(f: &mut Frame) {
     f.render_widget(para, inner);
 }
 
+// ── Mouse Scroll ──────────────────────────────────────────────────────
+
+/// Scroll step per mouse wheel tick (3 lines matches common terminal defaults).
+const MOUSE_SCROLL_LINES: u16 = 3;
+
+fn handle_mouse_scroll(ps: &mut PlayingState, kind: MouseEventKind) {
+    match kind {
+        MouseEventKind::ScrollUp => {
+            if ps.show_llamafile_log {
+                ps.llamafile_log_scroll =
+                    ps.llamafile_log_scroll.saturating_sub(MOUSE_SCROLL_LINES);
+            } else if ps.show_ai_panel {
+                ps.chat_scroll = ps.chat_scroll.saturating_sub(MOUSE_SCROLL_LINES);
+            } else {
+                ps.log_scroll = ps.log_scroll.saturating_sub(MOUSE_SCROLL_LINES);
+            }
+        }
+        MouseEventKind::ScrollDown => {
+            if ps.show_llamafile_log {
+                ps.llamafile_log_scroll =
+                    ps.llamafile_log_scroll.saturating_add(MOUSE_SCROLL_LINES);
+            } else if ps.show_ai_panel {
+                ps.chat_scroll = ps.chat_scroll.saturating_add(MOUSE_SCROLL_LINES);
+            } else {
+                ps.log_scroll = ps.log_scroll.saturating_add(MOUSE_SCROLL_LINES);
+            }
+        }
+        _ => {}
+    }
+}
+
 // ── Input Dispatch ─────────────────────────────────────────────────────
 
 #[allow(clippy::large_enum_variant)]
@@ -1029,8 +1075,8 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                         }
                     }
                 }
-                // Tab toggles AI panel ONLY when not in TradeBuilder (where Tab
-                // switches give/get sides).
+                // Tab toggles AI thoughts panel ONLY when not in TradeBuilder
+                // (where Tab switches give/get sides).
                 KeyCode::Tab if !matches!(ps.input_mode, InputMode::TradeBuilder { .. }) => {
                     ps.show_ai_panel = !ps.show_ai_panel;
                     return Action::None;

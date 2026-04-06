@@ -71,7 +71,7 @@ pub fn render_chat(messages: &[ChatMessage], scroll: u16, area: Rect, buf: &mut 
 
     if lines.is_empty() {
         lines.push(Line::from(Span::styled(
-            "Waiting for AI reasoning...",
+            "Waiting for AI thoughts...",
             Style::default().fg(Color::DarkGray).italic(),
         )));
     }
@@ -95,7 +95,7 @@ pub fn render_chat(messages: &[ChatMessage], scroll: u16, area: Rect, buf: &mut 
     let effective_scroll = scroll.min(max_scroll);
 
     let block = Block::default()
-        .title(format!(" AI Reasoning ({}) ", lines.len()))
+        .title(format!(" AI Thoughts ({}) ", lines.len()))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Magenta));
 
@@ -238,7 +238,7 @@ mod tests {
         let text = crate::ui::testing::buffer_to_string(&buf);
         // Panel title should show total count of 2 (both kinds).
         assert!(
-            text.contains("AI Reasoning (2)"),
+            text.contains("AI Thoughts (2)"),
             "title should count all message kinds"
         );
     }

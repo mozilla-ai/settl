@@ -435,7 +435,7 @@ fn draw_status_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
             Style::default().fg(Color::Black).bg(Color::Cyan).bold(),
         ),
         Span::styled(
-            " | q:quit  ?:help  Tab:AI  Space:pause ",
+            " | q:quit  ?:help  Tab:AI thoughts  Space:pause ",
             Style::default().fg(Color::DarkGray),
         ),
         Span::styled(
@@ -529,9 +529,9 @@ fn draw_help_overlay(f: &mut Frame, area: Rect) {
         )),
         Line::from("  q        Quit / back to menu"),
         Line::from("  ?        Toggle this help"),
-        Line::from("  Tab      Toggle AI reasoning panel"),
+        Line::from("  Tab      Toggle AI thoughts panel"),
         Line::from("  Space    Pause / unpause AI turns"),
-        Line::from("  j / k    Scroll game log"),
+        Line::from("  j / k    Scroll active panel"),
         Line::from(""),
         Line::from(Span::styled(
             "Your Turn (action bar)",

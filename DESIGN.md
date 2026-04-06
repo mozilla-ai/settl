@@ -131,7 +131,7 @@ The bottom panel is context-sensitive -- it shows different content based on gam
 | **Trade interface** | Two-column give/get with resource selectors | Proposing or responding to trade |
 | **Discard interface** | Multi-select resource checklist with counter | Discarding on 7 roll |
 | **Game log** | Scrollable event history | AI players' turns, spectating |
-| **AI reasoning** | Current AI player's reasoning text | When toggled on with Tab |
+| **AI thoughts** | Current AI player's reasoning text | When toggled on with Tab |
 
 ## Board Rendering Specification
 
@@ -277,11 +277,12 @@ These work in trade targeting, steal targeting, and any player-selection context
 | Key | Action |
 |-----|--------|
 | `q` | Quit (with confirm prompt) |
-| `Tab` | Toggle AI reasoning panel |
+| `Tab` | Toggle AI thoughts panel |
 | `Space` | Pause/unpause (during AI turns) |
 | `+` / `-` | Speed up/slow down AI play |
 | `?` | Help overlay |
-| `j` / `k` | Scroll game log (when visible) |
+| `j` / `k` | Scroll active panel (game log or AI thoughts) |
+| Scroll wheel | Scroll active panel (3 lines per tick) |
 
 #### Action Selection (during your turn)
 | Key | Action | Frequency |
@@ -380,7 +381,7 @@ Two keys. Fast response keeps the game moving.
 3. **Status bar** with turn info, speed, pause state, key hints
 
 ### On Demand
-4. **AI reasoning** (Tab toggle)
+4. **AI thoughts** (Tab toggle)
 5. **Full game log** (shown during AI turns, scrollable)
 6. **Help overlay** (? key)
 
@@ -417,7 +418,7 @@ Two keys. Fast response keeps the game moving.
 | 2026-04-01 | Full TUI redesign | Board was illegible, human controls used raw coordinates, game was unplayable |
 | 2026-04-01 | Board-cursor interaction over popups | Spatial game needs spatial interaction; coordinate lists are hostile UX |
 | 2026-04-01 | Context-sensitive bottom panel | Fixed panels waste space; dynamic panel gives more room to the board |
-| 2026-04-01 | AI reasoning hidden by default | Spectator feature that hurts playability; still accessible via Tab |
+| 2026-04-01 | AI thoughts hidden by default | Spectator feature that hurts playability; still accessible via Tab |
 | 2026-04-01 | Multi-select discard | One-at-a-time discard of 4+ cards is tedious; batch selection is standard |
 | 2026-04-01 | True color with 256-color fallback | Modern terminals support RGB; graceful degradation for older terminals |
 | 2026-04-01 | Universal resource keys (w/b/s/h/o) | Same keys everywhere (trade, discard, dev cards) for muscle memory |

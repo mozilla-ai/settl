@@ -16,10 +16,11 @@ These work on any screen during gameplay:
 |-----|--------|
 | `q` | Quit (with confirm) |
 | `?` | Toggle help overlay |
-| `Tab` | Toggle AI reasoning panel |
+| `Tab` | Toggle AI thoughts panel |
 | `Space` | Pause/unpause AI turns |
 | `+` / `-` | Speed up / slow down AI play |
-| `j` / `k` | Scroll game log |
+| `j` / `k` | Scroll active panel (game log or AI thoughts) |
+| Scroll wheel | Scroll active panel (3 lines per tick) |
 
 ## Action Bar (Your Turn)
 
