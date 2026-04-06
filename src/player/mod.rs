@@ -38,6 +38,8 @@ pub enum PlayerChoice {
     BuildCityIntent,
     /// Intent to do a bank trade — specific give/get collected in a follow-up step.
     BankTradeIntent,
+    /// Roll the dice (used in pre-roll knight prompt as alternative to playing a knight).
+    RollDice,
 }
 
 impl PlayerChoice {
@@ -49,6 +51,7 @@ impl PlayerChoice {
             PlayerChoice::GameAction(Action::BuildRoad(_)) => "Build Road".into(),
             PlayerChoice::GameAction(Action::BuyDevCard) => "Buy Development Card".into(),
             PlayerChoice::GameAction(Action::EndTurn) => "End Turn".into(),
+            PlayerChoice::RollDice => "Roll Dice".into(),
             PlayerChoice::GameAction(Action::ProposeTrade) => "Propose Trade".into(),
             PlayerChoice::GameAction(Action::BankTrade { give, get }) => {
                 format!("{} -> {}", give, get)
@@ -83,6 +86,7 @@ impl PlayerChoice {
             PlayerChoice::BuildSettlementIntent => Some('s'),
             PlayerChoice::BuildCityIntent => Some('c'),
             PlayerChoice::BankTradeIntent => Some('b'),
+            PlayerChoice::RollDice => Some('r'),
             _ => None,
         }
     }
@@ -117,6 +121,7 @@ impl std::fmt::Display for PlayerChoice {
             PlayerChoice::BuildSettlementIntent => write!(f, "Build Settlement"),
             PlayerChoice::BuildCityIntent => write!(f, "Build City"),
             PlayerChoice::BankTradeIntent => write!(f, "Bank Trade"),
+            PlayerChoice::RollDice => write!(f, "Roll Dice"),
         }
     }
 }

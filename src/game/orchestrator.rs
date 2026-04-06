@@ -416,6 +416,7 @@ impl GameOrchestrator {
                 }
                 PlayerChoice::BuildCityIntent => self.handle_build_city(player_id).await,
                 PlayerChoice::BankTradeIntent => self.handle_bank_trade(player_id).await,
+                PlayerChoice::RollDice => Ok(()),
             };
 
             match action_result {
@@ -706,13 +707,7 @@ impl GameOrchestrator {
         }
 
         // Build a minimal choice set: Roll Dice or Play Knight.
-        let choices = vec![
-            PlayerChoice::GameAction(Action::EndTurn), // Repurposed as "Roll Dice" (index 0)
-            PlayerChoice::PlayKnight,                  // Play Knight pre-roll (index 1)
-        ];
-
-        // Override the label: the first choice means "Roll Dice", not literally EndTurn.
-        // The orchestrator will roll dice regardless if they pick index 0.
+        let choices = vec![PlayerChoice::RollDice, PlayerChoice::PlayKnight];
         let (choice_idx, reasoning) = self
             .with_timeout(
                 self.players[player_id].choose_action(&self.state, player_id, &choices),
@@ -1177,6 +1172,7 @@ impl GameOrchestrator {
             PlayerChoice::BuildSettlementIntent => format!("{} built a settlement.", name),
             PlayerChoice::BuildCityIntent => format!("{} upgraded to a city.", name),
             PlayerChoice::BankTradeIntent => format!("{} traded with the bank.", name),
+            PlayerChoice::RollDice => format!("{} rolls the dice.", name),
         }
     }
 
