@@ -768,7 +768,11 @@ impl PersonalitiesState {
 // ── Drawing Functions ──────────────────────────────────────────────────
 
 /// Draw the main menu.
-pub fn draw_main_menu(f: &mut Frame, state: &MainMenuState) {
+pub fn draw_main_menu(
+    f: &mut Frame,
+    state: &MainMenuState,
+    update_info: Option<&crate::update_check::UpdateInfo>,
+) {
     let area = f.area();
     f.render_widget(Clear, area);
 
@@ -776,7 +780,10 @@ pub fn draw_main_menu(f: &mut Frame, state: &MainMenuState) {
     let art_lines = TITLE_ART.lines().count() as u16;
     let items = state.menu_items();
     let menu_height = items.len() as u16;
-    let total_height = art_lines + 4 + menu_height + 2; // art + subtitle + gaps + menu + hint
+    let has_update = update_info.is_some();
+    // Reserve an extra line for the update badge below the hint bar.
+    let update_height = if has_update { 2 } else { 0 };
+    let total_height = art_lines + 4 + menu_height + 2 + update_height;
     let y_start = area.y + area.height.saturating_sub(total_height) / 2;
 
     render_title_art(f, area, y_start, art_lines);
@@ -810,6 +817,22 @@ pub fn draw_main_menu(f: &mut Frame, state: &MainMenuState) {
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::DarkGray));
         f.render_widget(hint, hint_area);
+    }
+
+    // Update badge.
+    if let Some(info) = update_info {
+        let badge_y = hint_y + 2;
+        if badge_y < area.y + area.height {
+            let badge_area = Rect::new(area.x, badge_y, area.width, 1);
+            let text = format!(
+                "update available: v{} -> v{}",
+                info.current_version, info.latest_version
+            );
+            let badge = Paragraph::new(text)
+                .alignment(Alignment::Center)
+                .style(Style::default().fg(Color::Yellow));
+            f.render_widget(badge, badge_area);
+        }
     }
 }
 

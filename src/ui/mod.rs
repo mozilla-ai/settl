@@ -509,6 +509,10 @@ pub struct App {
     pub show_size_warning: bool,
     /// Model registry and app settings, loaded from `~/.settl/config.toml`.
     pub config: crate::config::Config,
+    /// Info about a newer version, if one is available.
+    pub update_info: Option<crate::update_check::UpdateInfo>,
+    /// Receiver for the background update check result.
+    update_rx: Option<tokio::sync::oneshot::Receiver<Option<crate::update_check::UpdateInfo>>>,
 }
 
 // ── Main Entry Point ───────────────────────────────────────────────────
@@ -551,12 +555,21 @@ pub async fn run_app() -> io::Result<()> {
         }
     }
 
+    // Spawn a background task to check for updates.
+    let (update_tx, update_rx) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        let result = crate::update_check::check_for_update().await;
+        let _ = update_tx.send(result);
+    });
+
     let mut app = App {
         screen: Screen::MainMenu(MainMenuState::new()),
         personalities,
         llamafile_process: None,
         show_size_warning,
         config,
+        update_info: None,
+        update_rx: Some(update_rx),
     };
 
     let result = run_event_loop(&mut terminal, &mut app).await;
@@ -577,7 +590,7 @@ async fn run_event_loop(
     loop {
         // Draw.
         terminal.draw(|f| {
-            draw_screen(f, &app.screen);
+            draw_screen(f, &app.screen, app.update_info.as_ref());
             if app.show_size_warning {
                 draw_size_warning(f);
             }
@@ -787,14 +800,26 @@ async fn run_event_loop(
                 }
             }
         }
+
+        // Poll for background update check result.
+        if let Some(ref mut rx) = app.update_rx {
+            if let Ok(result) = rx.try_recv() {
+                app.update_info = result;
+                app.update_rx = None;
+            }
+        }
     }
 }
 
 // ── Drawing Dispatch ───────────────────────────────────────────────────
 
-fn draw_screen(f: &mut Frame, screen: &Screen) {
+fn draw_screen(
+    f: &mut Frame,
+    screen: &Screen,
+    update_info: Option<&crate::update_check::UpdateInfo>,
+) {
     match screen {
-        Screen::MainMenu(state) => screens::draw_main_menu(f, state),
+        Screen::MainMenu(state) => screens::draw_main_menu(f, state, update_info),
         Screen::NewGame(state) => screens::draw_new_game(f, state),
         Screen::About(_) => screens::draw_about(f),
         Screen::Docs(state) => screens::draw_docs(f, state),
