@@ -6,9 +6,9 @@
 Output assets/demo.gif
 
 Set Shell "bash"
-Set FontSize 13
-Set Width 1400
-Set Height 1100
+Set FontSize 20
+Set Width 2000
+Set Height 1650
 Set LineHeight 1.1
 Set Padding 10
 Set TypingSpeed 50ms
