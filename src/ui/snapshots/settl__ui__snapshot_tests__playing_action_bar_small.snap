@@ -16,7 +16,7 @@ expression: buffer_to_string(&buf)
 │                        ╲               ││                                    │
 │                      *  ╲             ╱││ Diana 0VP                          │
 │                           ╲         ╱  ││  Cards: 0                          │
-│              2:W  ╱     ╲   ╲     ╱   ╱││                                    │
+│            2:Wood ╱     ╲   ╲     ╱   ╱││                                    │
 │                 ╱         ╲         ╱  ││Turn: 1                             │
 │            *  ╱             ╲     ╱    ││Phase: Setup                        │
 │              ╱     Wheat     ╲   ╱     ││Deck: 25 cards                      │

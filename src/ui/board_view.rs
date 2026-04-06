@@ -951,14 +951,14 @@ fn port_label(pt: PortType) -> (String, Style) {
     match pt {
         PortType::Generic => ("3:1".into(), Style::default().fg(Color::Yellow)),
         PortType::Specific(r) => {
-            let (abbr, color) = match r {
-                Resource::Wood => ("W", Color::Green),
-                Resource::Brick => ("B", Color::Red),
-                Resource::Sheep => ("S", Color::LightGreen),
-                Resource::Wheat => ("H", Color::Yellow),
-                Resource::Ore => ("O", Color::Gray),
+            let (name, color) = match r {
+                Resource::Wood => ("Wood", Color::Green),
+                Resource::Brick => ("Brick", Color::Red),
+                Resource::Sheep => ("Sheep", Color::LightGreen),
+                Resource::Wheat => ("Wheat", Color::Yellow),
+                Resource::Ore => ("Ore", Color::Gray),
             };
-            (format!("2:{}", abbr), Style::default().fg(color).bold())
+            (format!("2:{}", name), Style::default().fg(color).bold())
         }
     }
 }

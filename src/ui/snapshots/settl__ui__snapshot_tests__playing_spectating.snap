@@ -14,7 +14,7 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                  ││ Charlie 0VP                        │
 │                                            *                                       *                                             ││  Cards: 0                          │
 │                                               3:1                                                                                ││                                    │
-│                                         ╱     ╲             ╱     ╲             ╱     ╲  2:H                                     ││ Diana 0VP                          │
+│                                         ╱     ╲             ╱     ╲             ╱     ╲2:Wheat                                   ││ Diana 0VP                          │
 │                                       ╱         ╲         ╱         ╲         ╱         ╲                                        ││  Cards: 0                          │
 │                                     ╱             ╲  *  ╱             ╲     ╱             ╲  *                                   ││                                    │
 │                                    ╱      Ore      ╲   ╱     Sheep     ╲   ╱     Wood      ╲                                     ││Turn: 1                             │
@@ -22,11 +22,11 @@ expression: buffer_to_string(&buf)
 │                                    ╲               ╱   ╲               ╱   ╲               ╱                                     ││Deck: 25 cards                      │
 │                                  *  ╲             ╱     ╲             ╱     ╲             ╱                                      ││                                    │
 │                                       ╲         ╱         ╲         ╱         ╲         ╱                                        ││                                    │
-│                          2:W  ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲                                ││────────────────────────────────────│
+│                        2:Wood ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲                                ││────────────────────────────────────│
 │                             ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲                              ││   1| Game started -- your turn will│
 │                        *  ╱             ╲     ╱             ╲     ╱             ╲     ╱             ╲  *                         ││show a prompt                       │
 │                          ╱     Wheat     ╲   ╱     Brick     ╲   ╱     Sheep     ╲   ╱     Brick     ╲                           ││   2| q:quit  Space:pause           │
-│                                 12                   6                   4                  10          2:O                      ││j/k:scroll  Tab:Game/AI             │
+│                                 12                   6                   4                  10         2:Ore                     ││j/k:scroll  Tab:Game/AI             │
 │                          ╲               ╱   ╲               ╱   ╲               ╱   ╲               ╱                           ││                                    │
 │                           ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱  *                         ││                                    │
 │                             ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱                              ││                                    │
@@ -42,11 +42,11 @@ expression: buffer_to_string(&buf)
 │                             ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲                              ││                                    │
 │                        *  ╱             ╲     ╱             ╲     ╱             ╲     ╱             ╲                            ││                                    │
 │                          ╱     Wood      ╲   ╱      Ore      ╲   ╱     Wheat     ╲   ╱     Sheep     ╲                           ││                                    │
-│                     2:B          8                   3                   4                   5                                   ││                                    │
+│                   2:Brick        8                   3                   4                   5                                   ││                                    │
 │                          ╲               ╱   ╲               ╱   ╲               ╱   ╲               ╱                           ││                                    │
 │                        *  ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱  *                         ││                                    │
 │                             ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱                              ││                                    │
-│                               ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱  2:S                           ││                                    │
+│                               ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱2:Sheep                         ││                                    │
 │                                       ╱         ╲         ╱         ╲         ╱         ╲                                        ││                                    │
 │                                     ╱             ╲     ╱             ╲     ╱             ╲  *                                   ││                                    │
 │                                    ╱     Brick     ╲   ╱     Wheat     ╲   ╱     Sheep     ╲                                     ││                                    │
