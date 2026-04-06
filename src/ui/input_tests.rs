@@ -1026,24 +1026,6 @@ fn trade_response_esc_rejects() {
 // ── Spectating ───────────────────────────────────────────────────────
 
 #[test]
-fn spectating_space_toggles_pause() {
-    let (ps, _rx) = make_test_playing_state(InputMode::Spectating);
-    let mut app = make_test_app(Screen::Playing(ps));
-
-    assert!(!match &app.screen {
-        Screen::Playing(ps) => ps.paused,
-        _ => panic!(),
-    });
-
-    handle_input(&mut app, KeyCode::Char(' '));
-
-    assert!(match &app.screen {
-        Screen::Playing(ps) => ps.paused,
-        _ => panic!(),
-    });
-}
-
-#[test]
 fn spectating_tab_toggles_right_panel_tab() {
     let (ps, _rx) = make_test_playing_state(InputMode::Spectating);
     let mut app = make_test_app(Screen::Playing(ps));

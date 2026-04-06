@@ -17,7 +17,7 @@ These work on any screen during gameplay:
 | `q` | Quit (with confirm) |
 | `?` | Toggle help overlay |
 | `Tab` | Switch sidebar (Game/AI) |
-| `Space` | Pause/unpause AI turns |
+| `L` | Llamafile server log |
 | `+` / `-` | Speed up / slow down AI play |
 | `j` / `k` | Scroll sidebar (game log on Game tab, AI thoughts on AI tab) |
 | Scroll wheel | Scroll active panel (3 lines per tick) |

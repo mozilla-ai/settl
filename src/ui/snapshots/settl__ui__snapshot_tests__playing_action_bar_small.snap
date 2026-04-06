@@ -24,11 +24,11 @@ expression: buffer_to_string(&buf)
 │              ╲               ╱   ╲     ││────────────────────────────────────│
 │               ╲             ╱     ╲    ││Game started -- your turn will show │
 │                 ╲         ╱         ╲  ││a prompt                            │
-│         ╱     ╲   ╲     ╱   ╱     ╲   ╲││q:quit  Space:pause  j/k:scroll     │
+│         ╱     ╲   ╲     ╱   ╱     ╲   ╲││q:quit  ?:help  j/k:scroll          │
 └────────────────────────────────────────┘└────────────────────────────────────┘
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │Build Settlement[s]  Build Road[r]  Buy Development Card[d]  Propose Trade[t] │
 │                                                                              │
 │ [s]ettlement  [r]oad  [c]ity  [d]ev card  [b]ank trade  [t]rade  [e]nd turn  │
 └──────────────────────────────────────────────────────────────────────────────┘
- YOUR TURN  | q:quit  ?:help  Tab:Game/AI  Space:pause
+ YOUR TURN  | q:quit  ?:help  Tab:Game/AI
