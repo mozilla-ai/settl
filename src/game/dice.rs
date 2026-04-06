@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use rand::Rng;
+use rand::RngExt;
 
 use crate::game::actions::PlayerId;
 use crate::game::board::Resource;

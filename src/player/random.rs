@@ -1,7 +1,7 @@
 //! A random player for testing — picks uniformly at random from legal options.
 
 use async_trait::async_trait;
-use rand::Rng;
+use rand::RngExt;
 
 use crate::game::actions::{PlayerId, TradeOffer, TradeResponse};
 use crate::game::board::{EdgeCoord, HexCoord, Resource, VertexCoord};
@@ -137,7 +137,6 @@ impl Player for RandomPlayer {
             return None;
         }
 
-        use rand::Rng;
         let mut rng = rand::rng();
         let give = have[rng.random_range(0..have.len())];
         let get = want[rng.random_range(0..want.len())];

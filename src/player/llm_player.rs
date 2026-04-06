@@ -689,7 +689,7 @@ impl Player for LlmPlayer {
                 (idx, reasoning)
             }
             Err(_) => {
-                use rand::Rng;
+                use rand::RngExt;
                 let idx = rand::rng().random_range(0..choices.len());
                 (idx, "[AI was confused and acted randomly]".into())
             }
@@ -730,7 +730,7 @@ impl Player for LlmPlayer {
             }
             Err(_) => {
                 // Random fallback still picks from the filtered (good) set.
-                use rand::Rng;
+                use rand::RngExt;
                 let filtered_idx = rand::rng().random_range(0..filtered_vertices.len());
                 let original_idx = index_map[filtered_idx];
                 (original_idx, "[AI was confused and acted randomly]".into())
@@ -754,7 +754,7 @@ impl Player for LlmPlayer {
                 (idx, reasoning)
             }
             Err(_) => {
-                use rand::Rng;
+                use rand::RngExt;
                 let idx = rand::rng().random_range(0..legal_edges.len());
                 (idx, "[AI was confused and acted randomly]".into())
             }
@@ -782,7 +782,7 @@ impl Player for LlmPlayer {
                 (idx, reasoning)
             }
             Err(_) => {
-                use rand::Rng;
+                use rand::RngExt;
                 let idx = rand::rng().random_range(0..legal_hexes.len());
                 (idx, "[AI was confused and acted randomly]".into())
             }
@@ -823,7 +823,7 @@ impl Player for LlmPlayer {
                 (idx, reasoning)
             }
             Err(_) => {
-                use rand::Rng;
+                use rand::RngExt;
                 let idx = rand::rng().random_range(0..targets.len());
                 (idx, "[AI was confused and acted randomly]".into())
             }
