@@ -32,7 +32,7 @@ Runs entirely offline using [llamafile](https://github.com/mozilla-ai/llamafile)
 
 ## Related Projects
 
-- **[Agent of Empires](https://github.com/njbrake/agent-of-empires)** - A terminal session manager for AI coding agents. If settl is installed, AoE automatically detects it and lets you spin up a settl session alongside your coding agents. Settl has a hook system so you can know when the game is waiting for your action, just like Claude Code/OpenCode sessions
+- **[Agent of Empires](https://github.com/njbrake/agent-of-empires)** - A terminal session manager for AI coding agents. If settl is installed, AoE (versions 1.1.0 and higher) automatically detects it and lets you spin up a settl session alongside your coding agents. Settl has a hook system so you can know when the game is waiting for your action, just like Claude Code/OpenCode sessions
 - **[llamafile](https://github.com/mozilla-ai/llamafile)** - One-file LLM inference. settl downloads and runs a llamafile automatically so AI players work offline with zero setup. Since it's platform agnostic, we don't have to worry about which OS, every OS can run the same llamafile!
 - **[Bonsai Models by PrismML](https://prismml.com/)** - Ultra-efficient 1-bit quantized language models that power settl's default AI players.
 
