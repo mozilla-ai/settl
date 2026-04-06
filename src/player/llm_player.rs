@@ -23,7 +23,7 @@ const MAX_HISTORY_PAIRS: usize = 30;
 /// Reduced history limit for small local models (e.g. Bonsai 1.7B with 8K context).
 const MAX_HISTORY_PAIRS_SMALL: usize = 3;
 
-/// Default model name for llamafile (Bonsai-8B).
+/// Model name sent to the llamafile API (works for all local models).
 pub const LLAMAFILE_MODEL: &str = "bonsai";
 
 /// Per-player conversation state.

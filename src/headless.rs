@@ -214,9 +214,9 @@ async fn setup_ai_client(
         }
     }
 
-    // Fallback: start local Bonsai-8B llamafile.
+    // Fallback: start local llamafile with the default model.
     let (port, process) =
-        setup_llamafile_headless_builtin(crate::llamafile::LlamafileModel::Bonsai8B).await;
+        setup_llamafile_headless_builtin(crate::llamafile::LlamafileModel::default()).await;
     let client = player::anthropic_client::AnthropicClient::new(
         format!("http://127.0.0.1:{}", port),
         "no-key",

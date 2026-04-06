@@ -58,7 +58,22 @@ Sleep 400ms
 Right
 Sleep 700ms
 
-# Start the game (Enter works from any row, model stays Bonsai 1.7B)
+# Navigate back up to Start Button to start the game
+# (Enter only starts the game from the Start Button row)
+Up
+Sleep 150ms
+Up
+Sleep 150ms
+Up
+Sleep 150ms
+Up
+Sleep 150ms
+Up
+Sleep 150ms
+Up
+Sleep 400ms
+
+# Start the game
 Enter
 
 # Wait for the board to appear (llamafile downloads/starts in the background)
