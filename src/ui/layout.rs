@@ -430,7 +430,6 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
 
 /// Draw the status bar.
 fn draw_status_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
-    let pause_indicator = if ps.paused { " PAUSED " } else { "" };
     let mode_indicator = match &ps.input_mode {
         InputMode::Spectating => "",
         InputMode::ActionBar { .. } => " YOUR TURN ",
@@ -455,15 +454,11 @@ fn draw_status_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
     let status = Line::from(vec![
         roll_span,
         Span::styled(
-            pause_indicator,
-            Style::default().fg(Color::Black).bg(Color::Yellow).bold(),
-        ),
-        Span::styled(
             mode_indicator,
             Style::default().fg(Color::Black).bg(Color::Cyan).bold(),
         ),
         Span::styled(
-            " | q:quit  ?:help  Tab:Game/AI  Space:pause ",
+            " | q:quit  ?:help  Tab:Game/AI ",
             Style::default().fg(Color::DarkGray),
         ),
         Span::styled(
@@ -558,8 +553,8 @@ fn draw_help_overlay(f: &mut Frame, area: Rect) {
         Line::from("  q        Quit / back to menu"),
         Line::from("  ?        Toggle this help"),
         Line::from("  Tab      Switch sidebar (Game/AI)"),
-        Line::from("  Space    Pause / unpause AI turns"),
         Line::from("  j / k    Scroll active panel"),
+        Line::from("  L        Llamafile server log"),
         Line::from(""),
         Line::from(Span::styled(
             "Your Turn (action bar)",

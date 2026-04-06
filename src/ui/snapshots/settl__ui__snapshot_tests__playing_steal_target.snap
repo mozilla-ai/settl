@@ -25,7 +25,7 @@ expression: buffer_to_string(&buf)
 │────────────────────────────────────││                          ╱     Wheat     ╲   ╱     Brick     ╲   ╱     Sheep     ╲   ╱     Brick     ╲                           │
 │Game started -- your turn will show ││                                 12                   6                   4                  10         2:Ore                     │
 │a prompt                            ││                          ╲               ╱   ╲               ╱   ╲               ╱   ╲               ╱                           │
-│q:quit  Space:pause  j/k:scroll     ││                           ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱  *                         │
+│q:quit  ?:help  j/k:scroll          ││                           ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱  *                         │
 │Tab:Game/AI                         ││                             ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱                              │
 │                                    ││                     ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲                      │
 │                                    ││                   ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲                    │
@@ -66,4 +66,4 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                                                        │
 │ [Up/Down] select  [Enter] confirm  [1-4] pick player                                                                                                                   │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- STEAL  | q:quit  ?:help  Tab:Game/AI  Space:pause
+ STEAL  | q:quit  ?:help  Tab:Game/AI

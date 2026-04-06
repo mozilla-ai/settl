@@ -284,9 +284,9 @@ These work in trade targeting, steal targeting, and any player-selection context
 |-----|--------|
 | `q` | Quit (with confirm prompt) |
 | `Tab` | Switch sidebar (Game/AI) |
-| `Space` | Pause/unpause (during AI turns) |
-| `+` / `-` | Speed up/slow down AI play |
 | `?` | Help overlay |
+| `L` | Llamafile server log |
+| `+` / `-` | Speed up/slow down AI play |
 | `j` / `k` | Scroll sidebar (game log or AI thoughts) |
 | Scroll wheel | Scroll active panel (3 lines per tick) |
 
@@ -384,7 +384,7 @@ Two keys. Fast response keeps the game moving.
 ### Always Visible
 1. **Board** with all pieces, roads, robber, ports
 2. **Left sidebar** with tabbed content (Game tab or AI tab)
-3. **Status bar** with turn info, speed, pause state, key hints
+3. **Status bar** with turn info, speed, key hints
 
 ### Sidebar Tabs
 4. **Game tab** (default): Players info + Game log

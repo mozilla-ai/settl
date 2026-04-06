@@ -204,7 +204,6 @@ pub struct PlayingState {
     pub game_over_winner: Option<(usize, String)>,
     pub log_scroll: u16,
     pub chat_scroll: u16,
-    pub paused: bool,
     /// Which tab is showing in the sidebar (Game or AI).
     pub sidebar_tab: SidebarTab,
     /// Whether to show the help overlay (? toggle).
@@ -243,17 +242,13 @@ impl PlayingState {
         Self {
             rx,
             state: None,
-            messages: vec![
-                start_msg,
-                "q:quit  Space:pause  j/k:scroll  Tab:Game/AI".into(),
-            ],
+            messages: vec![start_msg, "q:quit  ?:help  j/k:scroll  Tab:Game/AI".into()],
             chat_messages: Vec::new(),
             player_names,
             game_over: false,
             game_over_winner: None,
             log_scroll: 0,
             chat_scroll: 0,
-            paused: false,
             sidebar_tab: SidebarTab::Game,
             show_help: false,
             show_llamafile_log: false,
@@ -785,10 +780,8 @@ async fn run_event_loop(
 
         // Drain game events for Playing screen.
         if let Screen::Playing(ref mut ps) = app.screen {
-            if !ps.paused {
-                while let Ok(ui_event) = ps.rx.try_recv() {
-                    ps.handle_game_event(ui_event);
-                }
+            while let Ok(ui_event) = ps.rx.try_recv() {
+                ps.handle_game_event(ui_event);
             }
 
             // Check for incoming human prompts.
@@ -1136,7 +1129,6 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                             let post = build_post_game(ps);
                             return Action::Transition(Screen::PostGame(post));
                         }
-                        KeyCode::Char(' ') => ps.paused = !ps.paused,
                         KeyCode::Up | KeyCode::Char('k') => {
                             if ps.show_llamafile_log {
                                 ps.llamafile_log_scroll = ps.llamafile_log_scroll.saturating_sub(1);

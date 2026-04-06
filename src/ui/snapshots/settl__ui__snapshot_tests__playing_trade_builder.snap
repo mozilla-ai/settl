@@ -25,7 +25,7 @@ expression: buffer_to_string(&buf)
 │────────────────────────────────────││                          ╱     Wheat     ╲   ╱     Brick     ╲   ╱     Sheep     ╲   ╱     Brick     ╲                           │
 │Game started -- your turn will show ││                                 12                   6                   4                  10         2:Ore                     │
 │a prompt                            ││                          ╲               ╱   ╲               ╱   ╲               ╱   ╲               ╱                           │
-│q:quit  Space:pause  j/k:scroll     ││                           ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱  *                         │
+│q:quit  ?:help  j/k:scroll          ││                           ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱  *                         │
 │Tab:Game/AI                         ││                             ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱                              │
 │                                    ││                     ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲                      │
 │                                    ││                   ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲                    │
@@ -66,4 +66,4 @@ expression: buffer_to_string(&buf)
 │ Have: W:3 B:2 S:1 H:4 O:2                                                                                                                                              │
 │ [w/b/s/h/o] add  [Tab] switch give/get  [Backspace] undo  [Enter] send  [Esc] cancel                                                                                   │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- TRADING  | q:quit  ?:help  Tab:Game/AI  Space:pause
+ TRADING  | q:quit  ?:help  Tab:Game/AI
