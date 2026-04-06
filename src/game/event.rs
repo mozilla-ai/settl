@@ -61,11 +61,6 @@ pub enum GameEvent {
         by: PlayerId,
         reasoning: String,
     },
-    TradeCountered {
-        by: PlayerId,
-        counter_offer: TradeOffer,
-        reasoning: String,
-    },
     TradeWithdrawn {
         by: PlayerId,
     },
@@ -214,31 +209,6 @@ pub fn format_event(event: &GameEvent, player_names: &[String]) -> String {
         }
         GameEvent::TradeRejected { by, reasoning } => {
             format!("{} rejected trade -- {}", name(*by), reasoning)
-        }
-        GameEvent::TradeCountered {
-            by,
-            counter_offer,
-            reasoning,
-        } => {
-            let offering: String = counter_offer
-                .offering
-                .iter()
-                .map(|(r, n)| format!("{} {}", n, r))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let requesting: String = counter_offer
-                .requesting
-                .iter()
-                .map(|(r, n)| format!("{} {}", n, r))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!(
-                "{} counter-offered: [{}] for [{}] -- {}",
-                name(*by),
-                offering,
-                requesting,
-                reasoning
-            )
         }
         GameEvent::TradeWithdrawn { by } => {
             format!("{} withdrew trade", name(*by))

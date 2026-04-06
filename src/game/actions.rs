@@ -120,6 +120,4 @@ pub enum TradeResponse {
     Accept,
     /// Reject the trade with an optional reason.
     Reject { reason: String },
-    /// Propose a counter-offer.
-    Counter(TradeOffer),
 }

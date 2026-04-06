@@ -367,9 +367,15 @@ impl GameOrchestrator {
         };
 
         // Step 3: Action loop -- player takes actions until EndTurn.
-        let max_actions_per_turn = 50; // safety valve
-        for _ in 0..max_actions_per_turn {
-            let choices = self.build_choices();
+        let max_actions_per_turn = 15;
+        let max_trades_per_turn = 3;
+        let max_attempts = max_actions_per_turn * 3; // hard ceiling including failed attempts
+        let mut action_count = 0;
+        let mut trade_count = 0;
+        let mut attempt_count = 0;
+        while action_count < max_actions_per_turn && attempt_count < max_attempts {
+            attempt_count += 1;
+            let choices = self.build_choices_with_trade_limit(trade_count < max_trades_per_turn);
 
             if choices.is_empty() {
                 // This shouldn't happen (EndTurn should always be available).
@@ -387,6 +393,8 @@ impl GameOrchestrator {
 
             let choice = &choices[choice_idx.min(choices.len() - 1)];
             self.send_reasoning(player_id, &reasoning);
+
+            let is_trade = matches!(choice, PlayerChoice::ProposeTrade);
 
             let action_result = match choice {
                 PlayerChoice::GameAction(action) => {
@@ -412,6 +420,10 @@ impl GameOrchestrator {
 
             match action_result {
                 Ok(()) => {
+                    action_count += 1;
+                    if is_trade {
+                        trade_count += 1;
+                    }
                     self.send_narration(self.narrate_choice(player_id, choice));
                     self.send_ui(format!("{}: {}", name, choice), None);
                     if let Some(winner) = rules::check_victory(&self.state) {
@@ -419,7 +431,7 @@ impl GameOrchestrator {
                     }
                 }
                 Err(OrchestratorError::RuleViolation(_msg)) => {
-                    // Action was invalid -- skip it and let the player try again.
+                    // Action was invalid -- don't count it against the limit.
                 }
                 Err(e) => return Err(e),
             }
@@ -428,6 +440,15 @@ impl GameOrchestrator {
         // If we hit the action limit, force end turn.
         self.end_turn(player_id);
         Ok(None)
+    }
+
+    /// Build the list of choices, optionally including the trade option.
+    fn build_choices_with_trade_limit(&self, allow_trade: bool) -> Vec<PlayerChoice> {
+        let mut choices = self.build_choices();
+        if !allow_trade {
+            choices.retain(|c| !matches!(c, PlayerChoice::ProposeTrade));
+        }
+        choices
     }
 
     /// Build the list of choices for the current player.
@@ -1070,100 +1091,6 @@ impl GameOrchestrator {
                         by: other_id,
                         reasoning: resp_reasoning,
                     });
-                }
-                TradeResponse::Counter(counter_offer) => {
-                    // Validate the counter-offer.
-                    if let Err(e) =
-                        trading::negotiation::validate_trade(&self.state, &counter_offer)
-                    {
-                        self.record_event(GameEvent::TradeRejected {
-                            by: other_id,
-                            reasoning: format!("invalid counter: {}", e),
-                        });
-                        continue;
-                    }
-
-                    let counter_offering: String = counter_offer
-                        .offering
-                        .iter()
-                        .map(|(r, n)| format!("{} {}", n, r))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let counter_requesting: String = counter_offer
-                        .requesting
-                        .iter()
-                        .map(|(r, n)| format!("{} {}", n, r))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    self.send_narration(format!(
-                        "{} counters: {} for {}",
-                        self.player_names[other_id], counter_offering, counter_requesting
-                    ));
-                    self.send_reasoning(
-                        other_id,
-                        &format!(
-                            "Counter: {} for {} -- {}",
-                            counter_offering, counter_requesting, resp_reasoning
-                        ),
-                    );
-
-                    self.record_event(GameEvent::TradeCountered {
-                        by: other_id,
-                        counter_offer: counter_offer.clone(),
-                        reasoning: resp_reasoning,
-                    });
-
-                    // Ask the original proposer if they accept the counter.
-                    let (counter_response, counter_reasoning) = self
-                        .with_timeout(
-                            self.players[player_id].respond_to_trade(
-                                &self.state,
-                                player_id,
-                                &counter_offer,
-                                &self.player_names,
-                            ),
-                            (
-                                TradeResponse::Reject {
-                                    reason: "timeout".into(),
-                                },
-                                "timeout fallback".into(),
-                            ),
-                        )
-                        .await;
-
-                    match counter_response {
-                        TradeResponse::Accept => {
-                            self.record_event(GameEvent::TradeAccepted {
-                                by: player_id,
-                                reasoning: counter_reasoning,
-                            });
-                            // Execute the counter-offer (from other_id's perspective).
-                            match trading::negotiation::execute_in_state(
-                                &mut self.state,
-                                &counter_offer,
-                                player_id,
-                            ) {
-                                Ok(()) => {
-                                    self.record_event(GameEvent::PlayerTradeExecuted {
-                                        proposer: other_id,
-                                        acceptor: player_id,
-                                        gave: counter_offer.offering.clone(),
-                                        got: counter_offer.requesting.clone(),
-                                    });
-                                }
-                                Err(_) => {
-                                    self.record_event(GameEvent::TradeWithdrawn { by: other_id });
-                                }
-                            }
-                            return Ok(());
-                        }
-                        _ => {
-                            self.record_event(GameEvent::TradeRejected {
-                                by: player_id,
-                                reasoning: counter_reasoning,
-                            });
-                        }
-                    }
                 }
             }
         }

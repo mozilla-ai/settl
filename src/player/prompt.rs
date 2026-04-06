@@ -765,7 +765,7 @@ pub fn trading_summary(
                     player_rejects[*by] += 1;
                 }
             }
-            GameEvent::TradeWithdrawn { .. } | GameEvent::TradeCountered { .. } => {
+            GameEvent::TradeWithdrawn { .. } => {
                 current_proposer = None;
             }
             _ => {}
