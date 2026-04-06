@@ -129,6 +129,10 @@ impl Player for TuiHumanPlayer {
         &self.name
     }
 
+    fn is_human(&self) -> bool {
+        true
+    }
+
     async fn choose_action(
         &self,
         _state: &GameState,

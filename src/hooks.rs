@@ -21,6 +21,8 @@ use crate::game::event::GameEvent;
 /// Determine the event name string for a `GameEvent` variant (e.g. "DiceRolled").
 fn event_name(event: &GameEvent) -> &'static str {
     match event {
+        GameEvent::TurnStarted { .. } => "TurnStarted",
+        GameEvent::WaitingForHuman { .. } => "WaitingForHuman",
         GameEvent::InitialSettlementPlaced { .. } => "InitialSettlementPlaced",
         GameEvent::InitialRoadPlaced { .. } => "InitialRoadPlaced",
         GameEvent::DiceRolled { .. } => "DiceRolled",
@@ -120,6 +122,14 @@ mod tests {
     fn event_name_covers_all_variants() {
         // Verify every variant has a name by constructing one of each.
         let events = vec![
+            GameEvent::TurnStarted {
+                player: 0,
+                is_human: false,
+            },
+            GameEvent::WaitingForHuman {
+                player: 0,
+                reason: crate::game::event::WaitingReason::YourTurn,
+            },
             GameEvent::InitialSettlementPlaced {
                 player: 0,
                 vertex: dummy_vertex(),
@@ -198,13 +208,13 @@ mod tests {
         ];
 
         let names: Vec<&str> = events.iter().map(event_name).collect();
-        assert_eq!(names.len(), 18);
+        assert_eq!(names.len(), 20);
         // All names should be non-empty and unique.
         for name in &names {
             assert!(!name.is_empty());
         }
         let unique: std::collections::HashSet<&&str> = names.iter().collect();
-        assert_eq!(unique.len(), 18, "all event names should be unique");
+        assert_eq!(unique.len(), 20, "all event names should be unique");
     }
 
     #[test]

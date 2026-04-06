@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use crate::game::actions::{Action, DevCard, DevCardAction, PlayerId, TradeResponse};
 use crate::game::board::{board_hex_coords, Resource};
 use crate::game::dice;
-use crate::game::event::GameEvent;
+use crate::game::event::{GameEvent, WaitingReason};
 use crate::game::rules;
 use crate::game::state::{GamePhase, GameState};
 use crate::player::{Player, PlayerChoice};
@@ -117,6 +117,16 @@ impl GameOrchestrator {
         match tokio::time::timeout(PLAYER_DECISION_TIMEOUT, future).await {
             Ok(result) => result,
             Err(_) => fallback,
+        }
+    }
+
+    /// Emit a `WaitingForHuman` event if the given player is human.
+    fn maybe_waiting_for_human(&mut self, player_id: PlayerId, reason: WaitingReason) {
+        if self.players[player_id].is_human() {
+            self.record_event(GameEvent::WaitingForHuman {
+                player: player_id,
+                reason,
+            });
         }
     }
 
@@ -295,8 +305,14 @@ impl GameOrchestrator {
     /// Run a single player's turn. Returns Some(winner) if the game ends.
     async fn run_turn(&mut self) -> Result<Option<PlayerId>, OrchestratorError> {
         let player_id = self.state.current_player();
+        let is_human = self.players[player_id].is_human();
         let name = self.player_names[player_id].clone();
         let turn_num = self.state.turn_number + 1;
+
+        self.record_event(GameEvent::TurnStarted {
+            player: player_id,
+            is_human,
+        });
 
         // Turn start narration.
         self.send_narration(format!("-- Turn {} -- {}'s turn --", turn_num, name));
@@ -380,6 +396,7 @@ impl GameOrchestrator {
             }
 
             self.send_narration(format!("{} is thinking...", name));
+            self.maybe_waiting_for_human(player_id, WaitingReason::YourTurn);
 
             let (choice_idx, reasoning) = self
                 .with_timeout(
@@ -564,6 +581,7 @@ impl GameOrchestrator {
                 "{} must discard {} cards...",
                 self.player_names[p], discard_count
             ));
+            self.maybe_waiting_for_human(p, WaitingReason::DiscardCards);
 
             let (cards, discard_reasoning) = self
                 .with_timeout(
@@ -596,6 +614,7 @@ impl GameOrchestrator {
             "{} is placing the robber...",
             self.player_names[roller]
         ));
+        self.maybe_waiting_for_human(roller, WaitingReason::PlaceRobber);
 
         let (h_idx, robber_reasoning) = self
             .with_timeout(
@@ -1043,6 +1062,7 @@ impl GameOrchestrator {
                 "{} is considering the trade...",
                 self.player_names[other_id]
             ));
+            self.maybe_waiting_for_human(other_id, WaitingReason::TradeResponse);
 
             let (response, resp_reasoning) = self
                 .with_timeout(
@@ -1255,6 +1275,16 @@ mod tests {
         assert_eq!(orch.max_turns, 500);
         assert!(orch.ui_tx.is_none());
         assert!(orch.events.is_empty());
+    }
+
+    #[test]
+    fn maybe_waiting_for_human_skips_non_human() {
+        let mut orch = make_orchestrator(3);
+        orch.maybe_waiting_for_human(0, WaitingReason::YourTurn);
+        assert!(
+            orch.events.is_empty(),
+            "Should not emit WaitingForHuman for RandomPlayer"
+        );
     }
 
     #[test]
@@ -1502,6 +1532,43 @@ mod tests {
             }
             _ => panic!("Expected BankTradeExecuted"),
         }
+    }
+
+    #[tokio::test]
+    async fn full_game_emits_turn_started_events() {
+        let mut orch = make_orchestrator(3);
+        orch.max_turns = 300;
+
+        let _ = orch.run().await;
+
+        let turn_started_count = orch
+            .events
+            .iter()
+            .filter(|e| matches!(e, GameEvent::TurnStarted { .. }))
+            .count();
+        assert!(
+            turn_started_count > 0,
+            "Should have at least one TurnStarted event"
+        );
+
+        // Random players are not human, so all TurnStarted events should
+        // have is_human = false.
+        for event in &orch.events {
+            if let GameEvent::TurnStarted { is_human, .. } = event {
+                assert!(!is_human, "RandomPlayer should not be human");
+            }
+        }
+
+        // No WaitingForHuman events should fire for random (non-human) players.
+        let waiting_count = orch
+            .events
+            .iter()
+            .filter(|e| matches!(e, GameEvent::WaitingForHuman { .. }))
+            .count();
+        assert_eq!(
+            waiting_count, 0,
+            "No WaitingForHuman events for non-human players"
+        );
     }
 
     #[tokio::test]

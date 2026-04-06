@@ -7,9 +7,29 @@ use serde::{Deserialize, Serialize};
 use crate::game::actions::{DevCard, PlayerId, TradeOffer};
 use crate::game::board::{EdgeCoord, HexCoord, Resource, VertexCoord};
 
+/// Reason the game is waiting for a human player.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WaitingReason {
+    YourTurn,
+    TradeResponse,
+    DiscardCards,
+    PlaceRobber,
+}
+
 /// Every discrete game event.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GameEvent {
+    // -- Lifecycle --
+    TurnStarted {
+        player: PlayerId,
+        is_human: bool,
+    },
+    WaitingForHuman {
+        player: PlayerId,
+        reason: WaitingReason,
+    },
+
     // -- Setup --
     InitialSettlementPlaced {
         player: PlayerId,
@@ -109,6 +129,13 @@ pub fn format_event(event: &GameEvent, player_names: &[String]) -> String {
     let name = |p: PlayerId| -> &str { player_names.get(p).map(|s| s.as_str()).unwrap_or("???") };
 
     match event {
+        GameEvent::TurnStarted { player, is_human } => {
+            let kind = if *is_human { "human" } else { "AI" };
+            format!("{}'s turn ({kind})", name(*player))
+        }
+        GameEvent::WaitingForHuman { player, reason } => {
+            format!("Waiting for {} ({:?})", name(*player), reason)
+        }
         GameEvent::InitialSettlementPlaced { player, vertex } => {
             format!(
                 "{} placed settlement at ({},{},{:?})",

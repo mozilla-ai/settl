@@ -67,6 +67,10 @@ impl Player for HumanPlayer {
         &self.name
     }
 
+    fn is_human(&self) -> bool {
+        true
+    }
+
     async fn choose_action(
         &self,
         state: &GameState,

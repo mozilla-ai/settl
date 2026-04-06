@@ -224,6 +224,12 @@ pub trait Player: Send + Sync {
         player_names: &[String],
     ) -> (TradeResponse, String);
 
+    /// Whether this player is a human (as opposed to an AI/random player).
+    /// Used to emit lifecycle events for external status detection.
+    fn is_human(&self) -> bool {
+        false
+    }
+
     /// Provide extra game context (recent history, trade log) for the player's
     /// next decision. Default is a no-op; LLM players use this to enrich prompts.
     async fn set_game_context(&self, _context: &str) {}
