@@ -26,13 +26,12 @@ pub fn message_color(msg: &str) -> Color {
 fn build_log_lines(messages: &[String]) -> Vec<Line<'static>> {
     messages
         .iter()
-        .enumerate()
-        .map(|(i, msg)| {
+        .map(|msg| {
             let mut style = Style::default().fg(message_color(msg));
             if msg.starts_with("GAME OVER") {
                 style = style.bold();
             }
-            Line::from(Span::styled(format!("{:>4}| {}", i + 1, msg), style))
+            Line::from(Span::styled(msg.clone(), style))
         })
         .collect()
 }

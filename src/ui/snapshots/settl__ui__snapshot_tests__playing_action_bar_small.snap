@@ -22,9 +22,9 @@ expression: buffer_to_string(&buf)
 │              ╱     Wheat     ╲   ╱     ││Deck: 25 cards                      │
 │                     12                 ││                                    │
 │              ╲               ╱   ╲     ││────────────────────────────────────│
-│               ╲             ╱     ╲    ││   1| Game started -- your turn will│
-│                 ╲         ╱         ╲  ││show a prompt                       │
-│         ╱     ╲   ╲     ╱   ╱     ╲   ╲││   2| q:quit  Space:pause           │
+│               ╲             ╱     ╲    ││Game started -- your turn will show │
+│                 ╲         ╱         ╲  ││a prompt                            │
+│         ╱     ╲   ╲     ╱   ╱     ╲   ╲││q:quit  Space:pause  j/k:scroll     │
 └────────────────────────────────────────┘└────────────────────────────────────┘
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │▸ Build Settlement[s]  Build Road[r]  Buy Development Card[d]  Propose Trade[t│

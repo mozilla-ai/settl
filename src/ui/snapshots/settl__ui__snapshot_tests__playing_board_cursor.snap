@@ -23,10 +23,10 @@ expression: buffer_to_string(&buf)
 │                             ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲                              ││                                    │
 │                        *  ╱             ╲     ╱             ╲     ╱             ╲     ╱             ╲  *                         ││                                    │
 │                          ╱     Wheat     ╲   ╱     Brick     ╲   ╱     Sheep     ╲   ╱     Brick     ╲                           ││────────────────────────────────────│
-│                                 12                   6                   4                  10          2:O                      ││   1| Game started -- your turn will│
-│                          ╲               ╱   ╲               ╱   ╲               ╱   ╲               ╱                           ││show a prompt                       │
-│                           ╲             ╱     ╲             ╱  ◆  ╲             ╱  ◇  ╲             ╱  *                         ││   2| q:quit  Space:pause           │
-│                             ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱                              ││j/k:scroll  Tab:Game/AI             │
+│                                 12                   6                   4                  10          2:O                      ││Game started -- your turn will show │
+│                          ╲               ╱   ╲               ╱   ╲               ╱   ╲               ╱                           ││a prompt                            │
+│                           ╲             ╱     ╲             ╱  ◆  ╲             ╱  ◇  ╲             ╱  *                         ││q:quit  Space:pause  j/k:scroll     │
+│                             ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱                              ││Tab:Game/AI                         │
 │                     ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲                      ││                                    │
 │                   ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲                    ││                                    │
 │                 ╱             ╲     ╱             ╲     ╱             ╲     ╱             ╲     ╱             ╲  *               ││                                    │
