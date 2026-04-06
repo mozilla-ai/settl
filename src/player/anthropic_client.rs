@@ -504,11 +504,27 @@ impl AnthropicClient {
 
         let mut processor = SseProcessor::new(reasoning_tx);
         let mut resp = resp;
-        while let Some(chunk) = resp.chunk().await.map_err(|e| ApiError {
-            status: None,
-            message: format!("Stream read error: {}", e),
-        })? {
-            processor.feed(&String::from_utf8_lossy(&chunk));
+        let chunk_timeout = std::time::Duration::from_secs(60);
+        loop {
+            let chunk_result = tokio::time::timeout(chunk_timeout, resp.chunk()).await;
+            match chunk_result {
+                Ok(Ok(Some(chunk))) => {
+                    processor.feed(&String::from_utf8_lossy(&chunk));
+                }
+                Ok(Ok(None)) => break,
+                Ok(Err(e)) => {
+                    return Err(ApiError {
+                        status: None,
+                        message: format!("Stream read error: {}", e),
+                    });
+                }
+                Err(_) => {
+                    return Err(ApiError {
+                        status: None,
+                        message: "Stream idle timeout: no data received for 60s".to_string(),
+                    });
+                }
+            }
         }
 
         let response = processor.finish();
