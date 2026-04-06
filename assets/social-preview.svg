@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a1628"/>
+      <stop offset="100%" stop-color="#050d1a"/>
+    </linearGradient>
+    <linearGradient id="title-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c8aa32"/>
+      <stop offset="50%" stop-color="#e0c050"/>
+      <stop offset="100%" stop-color="#c8aa32"/>
+    </linearGradient>
+    <linearGradient id="accent-line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#c8aa32"/>
+      <stop offset="50%" stop-color="#50b43c"/>
+      <stop offset="100%" stop-color="#50b43c" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="25%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#c8aa32" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#c8aa32" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="green-glow" cx="75%" cy="55%" r="45%">
+      <stop offset="0%" stop-color="#50b43c" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#50b43c" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Hex cell fills -->
+    <linearGradient id="forest" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#227822"/>
+      <stop offset="100%" stop-color="#1a5c1a"/>
+    </linearGradient>
+    <linearGradient id="hills" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#b26633"/>
+      <stop offset="100%" stop-color="#8a4f28"/>
+    </linearGradient>
+    <linearGradient id="pasture" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#50b43c"/>
+      <stop offset="100%" stop-color="#3d8a2e"/>
+    </linearGradient>
+    <linearGradient id="fields" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c8aa32"/>
+      <stop offset="100%" stop-color="#9a8428"/>
+    </linearGradient>
+    <linearGradient id="mountains" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8c8c96"/>
+      <stop offset="100%" stop-color="#6a6a72"/>
+    </linearGradient>
+    <linearGradient id="desert" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c29650"/>
+      <stop offset="100%" stop-color="#96743e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+  <rect width="1280" height="640" fill="url(#green-glow)"/>
+
+
+  <!-- Hex board decoration (right side) -->
+  <!-- Pointy-top hexagons: w=60, h=68; horizontal spacing ~52, vertical ~68 -->
+  <!-- Row 0: 3 hexes -->
+  <g opacity="0.55">
+    <!-- Helper: pointy-top hex centered at (cx, cy) with radius r=32 -->
+    <!-- Hex vertices: (cx+r*sin(i*60), cy-r*cos(i*60)) for i=0..5 -->
+
+    <!-- Row 0 (top): 3 hexes -->
+    <polygon points="980,144 996,116 1028,116 1044,144 1028,172 996,172" fill="url(#mountains)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1044,144 1060,116 1092,116 1108,144 1092,172 1060,172" fill="url(#forest)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1108,144 1124,116 1156,116 1172,144 1156,172 1124,172" fill="url(#pasture)" stroke="#1e293b" stroke-width="1"/>
+
+    <!-- Row 1: 4 hexes (offset left by half) -->
+    <polygon points="948,200 964,172 996,172 1012,200 996,228 964,228" fill="url(#fields)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1012,200 1028,172 1060,172 1076,200 1060,228 1028,228" fill="url(#hills)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1076,200 1092,172 1124,172 1140,200 1124,228 1092,228" fill="url(#forest)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1140,200 1156,172 1188,172 1204,200 1188,228 1156,228" fill="url(#mountains)" stroke="#1e293b" stroke-width="1"/>
+
+    <!-- Row 2 (middle): 5 hexes -->
+    <polygon points="916,256 932,228 964,228 980,256 964,284 932,284" fill="url(#pasture)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="980,256 996,228 1028,228 1044,256 1028,284 996,284" fill="url(#desert)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1044,256 1060,228 1092,228 1108,256 1092,284 1060,284" fill="url(#fields)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1108,256 1124,228 1156,228 1172,256 1156,284 1124,284" fill="url(#hills)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1172,256 1188,228 1220,228 1236,256 1220,284 1188,284" fill="url(#forest)" stroke="#1e293b" stroke-width="1"/>
+
+    <!-- Row 3: 4 hexes -->
+    <polygon points="948,312 964,284 996,284 1012,312 996,340 964,340" fill="url(#forest)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1012,312 1028,284 1060,284 1076,312 1060,340 1028,340" fill="url(#mountains)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1076,312 1092,284 1124,284 1140,312 1124,340 1092,340" fill="url(#pasture)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1140,312 1156,284 1188,284 1204,312 1188,340 1156,340" fill="url(#fields)" stroke="#1e293b" stroke-width="1"/>
+
+    <!-- Row 4 (bottom): 3 hexes -->
+    <polygon points="980,368 996,340 1028,340 1044,368 1028,396 996,396" fill="url(#hills)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1044,368 1060,340 1092,340 1108,368 1092,396 1060,396" fill="url(#fields)" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="1108,368 1124,340 1156,340 1172,368 1156,396 1124,396" fill="url(#mountains)" stroke="#1e293b" stroke-width="1"/>
+  </g>
+
+  <!-- Settlement markers on the hex board -->
+  <g opacity="0.8">
+    <!-- Player 0 (red) settlement -->
+    <text x="1012" y="178" font-family="'SF Mono', monospace" font-size="18" fill="#ff6b6b" text-anchor="middle">&#9650;</text>
+    <!-- Player 1 (blue) settlement -->
+    <text x="1076" y="234" font-family="'SF Mono', monospace" font-size="18" fill="#6bb5ff" text-anchor="middle">&#9650;</text>
+    <!-- Player 2 (green) settlement -->
+    <text x="1044" y="290" font-family="'SF Mono', monospace" font-size="18" fill="#6bff6b" text-anchor="middle">&#9650;</text>
+    <!-- Player 3 (magenta) city -->
+    <text x="1140" y="346" font-family="'SF Mono', monospace" font-size="16" fill="#ff6bff" text-anchor="middle">&#9632;</text>
+  </g>
+
+  <!-- Road segments -->
+  <g stroke-width="3" stroke-linecap="round" opacity="0.7">
+    <line x1="1012" y1="180" x2="1044" y2="210" stroke="#ff6b6b"/>
+    <line x1="1076" y1="236" x2="1044" y2="256" stroke="#6bb5ff"/>
+    <line x1="1044" y1="256" x2="1012" y2="276" stroke="#6bb5ff"/>
+    <line x1="1044" y1="292" x2="1076" y2="312" stroke="#6bff6b"/>
+  </g>
+
+  <!-- Dice decoration near board -->
+  <g transform="translate(910, 400)" opacity="0.4">
+    <rect x="0" y="0" width="28" height="28" rx="4" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    <circle cx="8" cy="8" r="2.5" fill="#94a3b8"/>
+    <circle cx="20" cy="8" r="2.5" fill="#94a3b8"/>
+    <circle cx="14" cy="14" r="2.5" fill="#94a3b8"/>
+    <circle cx="8" cy="20" r="2.5" fill="#94a3b8"/>
+    <circle cx="20" cy="20" r="2.5" fill="#94a3b8"/>
+  </g>
+  <g transform="translate(948, 400)" opacity="0.4">
+    <rect x="0" y="0" width="28" height="28" rx="4" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    <circle cx="8" cy="14" r="2.5" fill="#94a3b8"/>
+    <circle cx="20" cy="14" r="2.5" fill="#94a3b8"/>
+  </g>
+
+  <!-- Left side content -->
+
+  <!-- Category label -->
+  <text x="120" y="268" font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', monospace" font-size="14" fill="#64748b" letter-spacing="0.12em">TERMINAL HEX SETTLEMENT GAME</text>
+
+  <!-- Accent line -->
+  <rect x="120" y="285" width="180" height="2" fill="url(#accent-line)" rx="1"/>
+
+  <!-- Title -->
+  <text x="120" y="370" font-family="'Satoshi', 'DM Sans', 'Inter', system-ui, sans-serif" font-size="96" font-weight="900" fill="url(#title-grad)">settl</text>
+
+  <!-- Tagline -->
+  <text x="124" y="415" font-family="'DM Sans', 'Inter', system-ui, sans-serif" font-size="24" fill="#cbd5e1">Play against LLMs in your terminal</text>
+
+  <!-- Feature pills -->
+  <g font-family="'JetBrains Mono', 'SF Mono', monospace" font-size="13" fill="#94a3b8">
+    <text x="124" y="475">Offline AI</text>
+    <text x="124" y="475" dx="95" fill="#334155">|</text>
+    <text x="124" y="475" dx="110">llamafile</text>
+    <text x="124" y="475" dx="210" fill="#334155">|</text>
+    <text x="124" y="475" dx="225">Tool calling</text>
+    <text x="124" y="475" dx="345" fill="#334155">|</text>
+    <text x="124" y="475" dx="360">Rust + ratatui</text>
+  </g>
+
+  <!-- mozilla.ai attribution -->
+  <text x="124" y="530" font-family="'JetBrains Mono', 'SF Mono', monospace" font-size="12" fill="#475569">github.com/mozilla-ai/settl</text>
+
+  <!-- Bottom border gradient -->
+  <rect x="0" y="636" width="1280" height="4" fill="url(#accent-line)"/>
+</svg>
