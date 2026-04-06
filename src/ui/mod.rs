@@ -783,8 +783,23 @@ async fn run_event_loop(
 
         // Drain game events for Playing screen.
         if let Screen::Playing(ref mut ps) = app.screen {
-            while let Ok(ui_event) = ps.rx.try_recv() {
-                ps.handle_game_event(ui_event);
+            loop {
+                match ps.rx.try_recv() {
+                    Ok(ui_event) => ps.handle_game_event(ui_event),
+                    Err(mpsc::error::TryRecvError::Empty) => break,
+                    Err(mpsc::error::TryRecvError::Disconnected) => {
+                        if !ps.game_over {
+                            ps.game_over = true;
+                            ps.push_message(
+                                "Game engine stopped unexpectedly. \
+                                 Check ~/.settl/debug.log for details."
+                                    .into(),
+                            );
+                            log::error!("Game engine task disconnected unexpectedly");
+                        }
+                        break;
+                    }
+                }
             }
 
             // Check for incoming human prompts.
@@ -1730,7 +1745,9 @@ fn launch_game(
         orchestrator.player_configs = save_configs;
         orchestrator.model_name = model_name;
 
-        orchestrator.run().await
+        if let Err(e) = orchestrator.run().await {
+            log::error!("Game engine error: {}", e);
+        }
     });
 
     let human_player_index = active_players
@@ -1866,7 +1883,9 @@ fn resume_game(
         orchestrator.model_name = model_name;
         orchestrator.events = events;
 
-        orchestrator.run().await
+        if let Err(e) = orchestrator.run().await {
+            log::error!("Game engine error: {}", e);
+        }
     });
 
     let human_player_index = save.player_configs.iter().position(|p| p.is_human);

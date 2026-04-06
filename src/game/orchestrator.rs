@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::game::actions::{Action, DevCard, DevCardAction, PlayerId, TradeResponse};
-use crate::game::board::{board_hex_coords, Resource};
+use crate::game::board::Resource;
 use crate::game::dice;
 use crate::game::event::{GameEvent, WaitingReason};
 use crate::game::rules;
@@ -196,7 +196,16 @@ impl GameOrchestrator {
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             }
 
-            if let Some(winner) = self.run_turn().await? {
+            let turn_result = self.run_turn().await;
+            if let Err(ref e) = turn_result {
+                log::error!(
+                    "Turn {} error (player {}): {}",
+                    self.state.turn_number,
+                    self.state.current_player(),
+                    e
+                );
+            }
+            if let Some(winner) = turn_result? {
                 let vp = self.state.victory_points(winner);
                 let msg = format!("{} wins with {} VP!", self.player_names[winner], vp);
                 self.record_event(GameEvent::GameWon {
@@ -618,10 +627,7 @@ impl GameOrchestrator {
             current_player: roller,
         };
 
-        let legal_hexes: Vec<_> = board_hex_coords()
-            .into_iter()
-            .filter(|&h| h != self.state.robber_hex)
-            .collect();
+        let legal_hexes = rules::legal_robber_hexes(&self.state, roller);
 
         self.send_narration(format!(
             "{} is placing the robber...",
@@ -762,10 +768,7 @@ impl GameOrchestrator {
     /// Handle playing a Knight dev card (multi-step: remove card, move robber, steal).
     async fn handle_knight(&mut self, player_id: PlayerId) -> Result<(), OrchestratorError> {
         // Legal hexes for robber.
-        let legal_hexes: Vec<_> = board_hex_coords()
-            .into_iter()
-            .filter(|&h| h != self.state.robber_hex)
-            .collect();
+        let legal_hexes = rules::legal_robber_hexes(&self.state, player_id);
 
         let (h_idx, h_reasoning) = self
             .with_timeout(

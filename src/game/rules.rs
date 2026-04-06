@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::game::actions::{Action, DevCard, DevCardAction, PlayerId};
 use crate::game::board::{
-    adjacent_edges, adjacent_vertices, edge_neighbors, edge_vertices, vertex_neighbors, Board,
-    EdgeCoord, HexCoord, PortType, Resource, VertexCoord,
+    adjacent_edges, adjacent_vertices, board_hex_coords, edge_neighbors, edge_vertices,
+    vertex_neighbors, Board, EdgeCoord, HexCoord, PortType, Resource, VertexCoord,
 };
 use crate::game::dice::{total_in_circulation, BANK_SUPPLY_PER_RESOURCE};
 use crate::game::state::{Building, GamePhase, GameState, VP_TO_WIN};
@@ -944,6 +944,17 @@ fn friendly_robber_blocks(state: &GameState, hex: HexCoord, player: PlayerId) ->
         }
     }
     found_any
+}
+
+/// Return the hexes where `player` may legally place the robber.
+///
+/// Excludes the current robber position and any hex blocked by the
+/// friendly robber rule.
+pub fn legal_robber_hexes(state: &GameState, player: PlayerId) -> Vec<HexCoord> {
+    board_hex_coords()
+        .into_iter()
+        .filter(|&h| h != state.robber_hex && !friendly_robber_blocks(state, h, player))
+        .collect()
 }
 
 /// Move the robber to a new hex.
@@ -2177,6 +2188,30 @@ mod tests {
         )
         .unwrap();
         assert_eq!(state.robber_hex, target_hex);
+    }
+
+    #[test]
+    fn legal_robber_hexes_excludes_current_position() {
+        let state = make_state(3);
+        let hexes = legal_robber_hexes(&state, 0);
+        assert!(!hexes.contains(&state.robber_hex));
+    }
+
+    #[test]
+    fn legal_robber_hexes_excludes_friendly_robber_blocked() {
+        let mut state = make_friendly_robber_state(3);
+        // Place a low-VP opponent settlement adjacent to hex (1,0).
+        let target_hex = HexCoord::new(1, 0);
+        let vertex = target_hex.vertices()[0];
+        state.buildings.insert(vertex, Building::Settlement(1));
+        assert_eq!(state.victory_points(1), 1);
+
+        let hexes = legal_robber_hexes(&state, 0);
+        // Target hex should be excluded because player 1 has <= 2 VP.
+        assert!(
+            !hexes.contains(&target_hex),
+            "legal_robber_hexes should exclude hex blocked by friendly robber"
+        );
     }
 
     // -- Legal actions --
