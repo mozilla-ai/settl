@@ -276,6 +276,7 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
             get,
             side,
             available,
+            validation_msg,
             ..
         } => {
             let give_str = format_resource_counts(give);
@@ -284,7 +285,7 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
                 TradeSide::Give => "\u{25b8}GIVE",
                 TradeSide::Get => "\u{25b8}GET",
             };
-            let lines = vec![
+            let mut lines = vec![
                 Line::from(vec![
                     Span::styled(" GIVE: ", Style::default().fg(if *side == TradeSide::Give { Color::Yellow } else { Color::White }).bold()),
                     Span::styled(&give_str, Style::default().fg(Color::White)),
@@ -303,6 +304,12 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
                     Style::default().fg(Color::DarkGray),
                 )),
             ];
+            if let Some(msg) = validation_msg {
+                lines.push(Line::from(Span::styled(
+                    format!(" {}", msg),
+                    Style::default().fg(Color::Red),
+                )));
+            }
             let para = Paragraph::new(lines);
             f.render_widget(para, inner);
         }

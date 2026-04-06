@@ -661,6 +661,7 @@ fn trade_builder_resource_keys_add_to_give() {
         side: TradeSide::Give,
         available: [3, 2, 1, 4, 2],
         player_id: 0,
+        validation_msg: None,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -682,6 +683,7 @@ fn trade_builder_give_capped_at_available() {
         side: TradeSide::Give,
         available: [1, 0, 0, 0, 0],
         player_id: 0,
+        validation_msg: None,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -705,6 +707,7 @@ fn trade_builder_tab_switches_side() {
         side: TradeSide::Give,
         available: [3, 2, 1, 4, 2],
         player_id: 0,
+        validation_msg: None,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -725,6 +728,7 @@ fn trade_builder_backspace_removes_last() {
         side: TradeSide::Give,
         available: [3, 2, 1, 4, 2],
         player_id: 0,
+        validation_msg: None,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -747,6 +751,7 @@ fn trade_builder_enter_sends_trade_offer() {
         side: TradeSide::Give,
         available: [3, 2, 1, 4, 2],
         player_id: 0,
+        validation_msg: None,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -770,6 +775,7 @@ fn trade_builder_enter_requires_both_sides() {
         side: TradeSide::Give,
         available: [3, 2, 1, 4, 2],
         player_id: 0,
+        validation_msg: None,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -777,6 +783,43 @@ fn trade_builder_enter_requires_both_sides() {
 
     // Should not send anything since get side is empty.
     assert!(rx.try_recv().is_err());
+
+    // Should show a validation message.
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::TradeBuilder { validation_msg, .. } = &ps.input_mode {
+            assert!(
+                validation_msg.is_some(),
+                "should show validation hint when Enter pressed with incomplete trade"
+            );
+        } else {
+            panic!("expected TradeBuilder mode");
+        }
+    }
+}
+
+#[test]
+fn trade_builder_validation_msg_clears_on_input() {
+    let (ps, _rx) = make_test_playing_state(InputMode::TradeBuilder {
+        give: [1, 0, 0, 0, 0],
+        get: [0; 5],
+        side: TradeSide::Give,
+        available: [3, 2, 1, 4, 2],
+        player_id: 0,
+        validation_msg: Some("Both GIVE and GET sides are required"),
+    });
+    let mut app = make_test_app(Screen::Playing(ps));
+
+    // Any resource key should clear the validation message.
+    handle_input(&mut app, KeyCode::Char('o'));
+
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::TradeBuilder { validation_msg, .. } = &ps.input_mode {
+            assert!(
+                validation_msg.is_none(),
+                "validation message should clear on new input"
+            );
+        }
+    }
 }
 
 #[test]
@@ -787,6 +830,7 @@ fn trade_builder_esc_cancels() {
         side: TradeSide::Give,
         available: [3, 2, 1, 4, 2],
         player_id: 0,
+        validation_msg: None,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 

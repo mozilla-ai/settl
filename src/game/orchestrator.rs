@@ -1122,6 +1122,8 @@ impl GameOrchestrator {
                     self.record_event(GameEvent::TradeWithdrawn { by: player_id });
                 }
             }
+        } else {
+            self.send_narration("No player could fulfill the trade.".into());
         }
 
         Ok(())

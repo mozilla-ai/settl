@@ -175,6 +175,8 @@ pub enum InputMode {
         side: TradeSide,
         available: [u32; 5],
         player_id: usize,
+        /// Validation hint shown when user tries to send an incomplete trade.
+        validation_msg: Option<&'static str>,
     },
     /// Discarding cards with resource keys.
     Discard {
@@ -343,6 +345,7 @@ impl PlayingState {
                 side: TradeSide::Give,
                 available,
                 player_id: prompt.player_id,
+                validation_msg: None,
             },
             PromptKind::RespondToTrade { offer } => InputMode::TradeResponse { offer },
         };
@@ -1251,8 +1254,11 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                     side,
                     available,
                     player_id,
+                    validation_msg,
                 } => {
+                    // Clear validation message on any new input.
                     if let Some(idx) = resource_key_index(key) {
+                        *validation_msg = None;
                         match side {
                             TradeSide::Give => {
                                 if give[idx] < available[idx] {
@@ -1266,12 +1272,14 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                     }
                     match key {
                         KeyCode::Tab => {
+                            *validation_msg = None;
                             *side = match side {
                                 TradeSide::Give => TradeSide::Get,
                                 TradeSide::Get => TradeSide::Give,
                             };
                         }
                         KeyCode::Backspace => {
+                            *validation_msg = None;
                             let arr = match side {
                                 TradeSide::Give => give,
                                 TradeSide::Get => get,
@@ -1309,6 +1317,8 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                                 };
                                 ps.send_response(HumanResponse::Trade(Some(offer)));
                                 ps.input_mode = InputMode::Spectating;
+                            } else {
+                                *validation_msg = Some("Both GIVE and GET sides are required");
                             }
                         }
                         KeyCode::Esc => {

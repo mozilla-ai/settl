@@ -185,6 +185,7 @@ pub fn playing_trade_builder_app() -> App {
         side: TradeSide::Give,
         available: [3, 2, 1, 4, 2],
         player_id: 0,
+        validation_msg: None,
     });
     make_test_app(Screen::Playing(ps))
 }
