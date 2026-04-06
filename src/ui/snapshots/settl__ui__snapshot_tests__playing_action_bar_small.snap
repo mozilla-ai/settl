@@ -2,26 +2,26 @@
 source: src/ui/snapshot_tests.rs
 expression: buffer_to_string(&buf)
 ---
-┌ Board ─────────────────────────────────┐┌ Players ───────────────────────────┐
+┌ Board ─────────────────────────────────┐┌────────────────────────────────────┐
+│                                        ││ Game   AI                          │
 │                                        ││▸Alice 0VP                          │
 │                                        ││  Wood:0 Brick:0 Sheep:0            │
-│                                        ││  Wheat:0 Ore:0                     │
-│                                *       ││                                    │
-│                                   3:1  ││ Bob 0VP                            │
-│                             ╱     ╲    ││  Cards: 0                          │
-│                           ╱         ╲  ││                                    │
-│                         ╱             ╲││ Charlie 0VP                        │
-│                        ╱      Ore      ││  Cards: 0                          │
-│                               10       ││                                    │
-│                        ╲               ││ Diana 0VP                          │
-│                      *  ╲             ╱││  Cards: 0                          │
-│                           ╲         ╱  ││                                    │
-│              2:W  ╱     ╲   ╲     ╱   ╱││Turn: 1                             │
-│                 ╱         ╲         ╱  ││Phase: Setup                        │
-│            *  ╱             ╲     ╱    ││Deck: 25 cards                      │
-│              ╱     Wheat     ╲   ╱     ││                                    │
-│                     12                 │└────────────────────────────────────┘
-│              ╲               ╱   ╲     │┌ Game Log (2) ──────────────────────┐
+│                                *       ││  Wheat:0 Ore:0                     │
+│                                   3:1  ││                                    │
+│                             ╱     ╲    ││ Bob 0VP                            │
+│                           ╱         ╲  ││  Cards: 0                          │
+│                         ╱             ╲││                                    │
+│                        ╱      Ore      ││ Charlie 0VP                        │
+│                               10       ││  Cards: 0                          │
+│                        ╲               ││                                    │
+│                      *  ╲             ╱││ Diana 0VP                          │
+│                           ╲         ╱  ││  Cards: 0                          │
+│              2:W  ╱     ╲   ╲     ╱   ╱││                                    │
+│                 ╱         ╲         ╱  ││Turn: 1                             │
+│            *  ╱             ╲     ╱    ││Phase: Setup                        │
+│              ╱     Wheat     ╲   ╱     ││Deck: 25 cards                      │
+│                     12                 ││                                    │
+│              ╲               ╱   ╲     ││────────────────────────────────────│
 │               ╲             ╱     ╲    ││   1| Game started -- your turn will│
 │                 ╲         ╱         ╲  ││show a prompt                       │
 │         ╱     ╲   ╲     ╱   ╱     ╲   ╲││   2| q:quit  Space:pause           │
@@ -31,4 +31,4 @@ expression: buffer_to_string(&buf)
 │                                                                              │
 │ [Arrow/Enter] select  [s]ettlement  [r]oad  [c]ity  [d]ev card  [b]ank trade │
 └──────────────────────────────────────────────────────────────────────────────┘
- YOUR TURN  | q:quit  ?:help  Tab:AI thoughts  Space:pause
+ YOUR TURN  | q:quit  ?:help  Tab:Game/AI  Space:pause

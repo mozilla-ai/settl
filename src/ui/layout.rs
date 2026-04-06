@@ -9,15 +9,14 @@ use super::board_view;
 use super::chat_panel;
 use super::game_log;
 use super::resource_bar;
-use super::{InputMode, PlayingState, TradeSide};
+use super::{InputMode, PlayingState, RightPanelTab, TradeSide};
 
 // ── Shared layout ────────────────────────────────────────────────────
 
 /// Precomputed areas for the playing screen layout.
 struct PlayingLayout {
     board: Rect,
-    players: Rect,
-    game_log: Rect,
+    right_panel: Rect,
     context: Rect,
     status: Rect,
     full: Rect,
@@ -26,24 +25,28 @@ struct PlayingLayout {
 /// Compute the playing screen layout areas.
 ///
 /// ```text
-/// +------------------------------------------+------------------+
-/// |                                          |    PLAYERS       |
-/// |           BOARD VIEW                     |    P0: W:2 B:3   |
-/// |           (hex grid)                     |    P1: W:1 B:0   |
-/// |                                          |                  |
-/// +------------------------------------------+------------------+
-/// |  CONTEXT BAR (mode-dependent)                                |
-/// +--------------------------------------------------------------+
-/// |  Status bar                                                   |
-/// +--------------------------------------------------------------+
+/// +------------------------------------------+--------------+
+/// |                                          | [Game] AI    |
+/// |           BOARD VIEW                     |  (sidebar)   |
+/// |           (hex grid)                     |              |
+/// +------------------------------------------+--------------+
+/// |  CONTEXT BAR (mode-dependent, hidden when Spectating)    |
+/// +----------------------------------------------------------+
+/// |  Status bar                                               |
+/// +----------------------------------------------------------+
 /// ```
-fn compute_layout(size: Rect) -> PlayingLayout {
+fn compute_layout(size: Rect, input_mode: &InputMode) -> PlayingLayout {
+    let context_height: u16 = match input_mode {
+        InputMode::Spectating => 0,
+        _ => 5,
+    };
+
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(15),   // Board + players
-            Constraint::Length(5), // Context bar
-            Constraint::Length(1), // Status bar
+            Constraint::Min(15),                // Board + right panel
+            Constraint::Length(context_height), // Context bar (0 when spectating)
+            Constraint::Length(1),              // Status bar
         ])
         .split(size);
 
@@ -52,15 +55,9 @@ fn compute_layout(size: Rect) -> PlayingLayout {
         .constraints([Constraint::Fill(1), Constraint::Length(38)])
         .split(main_chunks[0]);
 
-    let right_split = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(20), Constraint::Min(5)])
-        .split(top_chunks[1]);
-
     PlayingLayout {
         board: top_chunks[0],
-        players: right_split[0],
-        game_log: right_split[1],
+        right_panel: top_chunks[1],
         context: main_chunks[1],
         status: main_chunks[2],
         full: size,
@@ -68,34 +65,102 @@ fn compute_layout(size: Rect) -> PlayingLayout {
 }
 
 /// Render the right panel, context bar, status bar, and help overlay.
-///
-/// Everything except the board area -- shared between text and pixel paths.
 fn draw_panels(f: &mut Frame, ps: &PlayingState, layout: &PlayingLayout) {
-    if let Some(state) = &ps.state {
-        resource_bar::render_players(
-            state,
-            &ps.player_names,
-            ps.human_player_index,
-            layout.players,
-            f.buffer_mut(),
-        );
-    } else {
-        let no_players = Paragraph::new("").block(
-            Block::default()
-                .title(" Players ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
-        );
-        f.render_widget(no_players, layout.players);
-    }
-    game_log::render_log(&ps.messages, u16::MAX, layout.game_log, f.buffer_mut());
+    draw_right_panel(f, ps, layout.right_panel);
 
-    draw_context_bar(f, ps, layout.context);
+    if layout.context.height > 0 {
+        draw_context_bar(f, ps, layout.context);
+    }
     draw_status_bar(f, ps, layout.status);
 
     if ps.show_help {
         draw_help_overlay(f, layout.full);
     }
+}
+
+/// Draw the right panel with tab bar and tab content.
+fn draw_right_panel(f: &mut Frame, ps: &PlayingState, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    if inner.height < 2 || inner.width < 4 {
+        return;
+    }
+
+    // Split inner into tab bar (1 row) and content (rest).
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
+
+    draw_tab_bar(f, ps.right_tab, chunks[0]);
+
+    match ps.right_tab {
+        RightPanelTab::Game => draw_game_tab(f, ps, chunks[1]),
+        RightPanelTab::Ai => {
+            chat_panel::render_chat_inner(
+                &ps.chat_messages,
+                ps.chat_scroll,
+                chunks[1],
+                f.buffer_mut(),
+            );
+        }
+    }
+}
+
+/// Render the tab selector line: [Game] AI  or  Game [AI]
+fn draw_tab_bar(f: &mut Frame, active: RightPanelTab, area: Rect) {
+    let game_style = if active == RightPanelTab::Game {
+        Style::default().fg(Color::Black).bg(Color::Cyan).bold()
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+    let ai_style = if active == RightPanelTab::Ai {
+        Style::default().fg(Color::Black).bg(Color::Cyan).bold()
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+
+    let line = Line::from(vec![
+        Span::styled(" Game ", game_style),
+        Span::raw(" "),
+        Span::styled(" AI ", ai_style),
+    ]);
+    f.render_widget(Paragraph::new(line), area);
+}
+
+/// Render the Game tab: players info on top, separator, game log on bottom.
+fn draw_game_tab(f: &mut Frame, ps: &PlayingState, area: Rect) {
+    // Split: players (fixed) + separator (1 row) + game log (rest).
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(18),
+            Constraint::Length(1),
+            Constraint::Min(3),
+        ])
+        .split(area);
+
+    if let Some(state) = &ps.state {
+        resource_bar::render_players_inner(
+            state,
+            &ps.player_names,
+            ps.human_player_index,
+            chunks[0],
+            f.buffer_mut(),
+        );
+    }
+
+    // Thin separator line.
+    let sep = Block::default()
+        .borders(Borders::TOP)
+        .border_style(Style::default().fg(Color::DarkGray));
+    f.render_widget(sep, chunks[1]);
+
+    game_log::render_log_inner(&ps.messages, ps.log_scroll, chunks[2], f.buffer_mut());
 }
 
 fn draw_board_placeholder(f: &mut Frame, area: Rect, msg: &str) {
@@ -130,23 +195,7 @@ pub fn draw_playing(f: &mut Frame, ps: &PlayingState) {
         return;
     }
 
-    // Fullscreen chat mode: chat takes everything except the status bar.
-    if ps.show_ai_panel {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(1), Constraint::Length(1)])
-            .split(f.area());
-
-        chat_panel::render_chat(&ps.chat_messages, ps.chat_scroll, chunks[0], f.buffer_mut());
-        draw_status_bar(f, ps, chunks[1]);
-
-        if ps.show_help {
-            draw_help_overlay(f, f.area());
-        }
-        return;
-    }
-
-    let layout = compute_layout(f.area());
+    let layout = compute_layout(f.area(), &ps.input_mode);
 
     if let Some(state) = &ps.state {
         if let Some(ref grid) = ps.hex_grid {
@@ -171,22 +220,8 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
 
     match &ps.input_mode {
         InputMode::Spectating => {
-            let lines: Vec<Line> = ps
-                .messages
-                .iter()
-                .map(|m| {
-                    let color = game_log::message_color(m);
-                    Line::from(Span::styled(m.as_str(), Style::default().fg(color)))
-                })
-                .collect();
-            let visible = inner.height as usize;
-            let total = lines.len();
-            let max_scroll = total.saturating_sub(visible) as u16;
-            let effective_scroll = ps.log_scroll.min(max_scroll);
-            let para = Paragraph::new(lines)
-                .wrap(Wrap { trim: true })
-                .scroll((effective_scroll, 0));
-            f.render_widget(para, inner);
+            // Context bar is collapsed to 0 height during Spectating;
+            // this arm is unreachable but required for exhaustive matching.
         }
 
         InputMode::ActionBar { choices, selected } => {
@@ -435,7 +470,7 @@ fn draw_status_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
             Style::default().fg(Color::Black).bg(Color::Cyan).bold(),
         ),
         Span::styled(
-            " | q:quit  ?:help  Tab:AI thoughts  Space:pause ",
+            " | q:quit  ?:help  Tab:Game/AI  Space:pause ",
             Style::default().fg(Color::DarkGray),
         ),
         Span::styled(
@@ -529,7 +564,7 @@ fn draw_help_overlay(f: &mut Frame, area: Rect) {
         )),
         Line::from("  q        Quit / back to menu"),
         Line::from("  ?        Toggle this help"),
-        Line::from("  Tab      Toggle AI thoughts panel"),
+        Line::from("  Tab      Switch sidebar (Game/AI)"),
         Line::from("  Space    Pause / unpause AI turns"),
         Line::from("  j / k    Scroll active panel"),
         Line::from(""),

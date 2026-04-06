@@ -29,18 +29,12 @@ fn resource_name(r: Resource) -> &'static str {
     }
 }
 
-/// Render the player info panel.
-///
-/// When `human_player_index` is set, that player sees their full resource
-/// breakdown (with full names). All other players show only a total card count.
-/// In spectator mode (None), all players show the full breakdown.
-pub fn render_players(
+/// Build player info lines (shared by bordered and borderless renderers).
+fn build_player_lines(
     state: &GameState,
     player_names: &[String],
     human_player_index: Option<usize>,
-    area: Rect,
-    buf: &mut Buffer,
-) {
+) -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
 
     for (i, ps) in state.players.iter().enumerate() {
@@ -182,11 +176,35 @@ pub fn render_players(
         ),
     ]));
 
+    lines
+}
+
+/// Render player info without a border (for use inside a shared panel).
+pub fn render_players_inner(
+    state: &GameState,
+    player_names: &[String],
+    human_player_index: Option<usize>,
+    area: Rect,
+    buf: &mut Buffer,
+) {
+    let lines = build_player_lines(state, player_names, human_player_index);
+    let paragraph = Paragraph::new(lines);
+    paragraph.render(area, buf);
+}
+
+/// Render the player info panel (with border).
+pub fn render_players(
+    state: &GameState,
+    player_names: &[String],
+    human_player_index: Option<usize>,
+    area: Rect,
+    buf: &mut Buffer,
+) {
+    let lines = build_player_lines(state, player_names, human_player_index);
     let block = Block::default()
         .title(" Players ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
-
     let paragraph = Paragraph::new(lines).block(block);
     paragraph.render(area, buf);
 }

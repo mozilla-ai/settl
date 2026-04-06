@@ -2,31 +2,31 @@
 source: src/ui/snapshot_tests.rs
 expression: buffer_to_string(&buf)
 ---
-┌ Board ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐┌ Players ───────────────────────────┐
+┌ Board ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐┌────────────────────────────────────┐
+│                                                                                                                                  ││ Game   AI                          │
 │                                                                                                                                  ││▸Alice 0VP                          │
 │                                                                                                                                  ││  Wood:0 Brick:0 Sheep:0            │
 │                                                                                                                                  ││  Wheat:0 Ore:0                     │
 │                                                                                                                                  ││                                    │
 │                                                                                                                                  ││ Bob 0VP                            │
-│                                                                                                                                  ││  Cards: 0                          │
-│                                            *                                       *                                             ││                                    │
-│                                               3:1                                                                                ││ Charlie 0VP                        │
-│                                         ╱     ╲             ╱     ╲             ╱     ╲  2:H                                     ││  Cards: 0                          │
-│                                       ╱         ╲         ╱         ╲         ╱         ╲                                        ││                                    │
-│                                     ╱             ╲  *  ╱             ╲     ╱             ╲  *                                   ││ Diana 0VP                          │
-│                                    ╱      Ore      ╲   ╱     Sheep     ╲   ╱     Wood      ╲                                     ││  Cards: 0                          │
-│                                           10                   2                   9                                             ││                                    │
-│                                    ╲               ╱   ╲               ╱   ╲               ╱                                     ││Turn: 1                             │
-│                                  *  ╲             ╱     ╲             ╱     ╲             ╱                                      ││Phase: Setup                        │
-│                                       ╲         ╱         ╲         ╱         ╲         ╱                                        ││Deck: 25 cards                      │
-│                          2:W  ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲                                ││                                    │
+│                                            *                                       *                                             ││  Cards: 0                          │
+│                                               3:1                                                                                ││                                    │
+│                                         ╱     ╲             ╱     ╲             ╱     ╲  2:H                                     ││ Charlie 0VP                        │
+│                                       ╱         ╲         ╱         ╲         ╱         ╲                                        ││  Cards: 0                          │
+│                                     ╱             ╲  *  ╱             ╲     ╱             ╲  *                                   ││                                    │
+│                                    ╱      Ore      ╲   ╱     Sheep     ╲   ╱     Wood      ╲                                     ││ Diana 0VP                          │
+│                                           10                   2                   9                                             ││  Cards: 0                          │
+│                                    ╲               ╱   ╲               ╱   ╲               ╱                                     ││                                    │
+│                                  *  ╲             ╱     ╲             ╱     ╲             ╱                                      ││Turn: 1                             │
+│                                       ╲         ╱         ╲         ╱         ╲         ╱                                        ││Phase: Setup                        │
+│                          2:W  ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲                                ││Deck: 25 cards                      │
 │                             ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲                              ││                                    │
-│                        *  ╱             ╲     ╱             ╲     ╱             ╲     ╱             ╲  *                         │└────────────────────────────────────┘
-│                          ╱     Wheat     ╲   ╱     Brick     ╲   ╱     Sheep     ╲   ╱     Brick     ╲                           │┌ Game Log (2) ──────────────────────┐
+│                        *  ╱             ╲     ╱             ╲     ╱             ╲     ╱             ╲  *                         ││                                    │
+│                          ╱     Wheat     ╲   ╱     Brick     ╲   ╱     Sheep     ╲   ╱     Brick     ╲                           ││────────────────────────────────────│
 │                                 12                   6                   4                  10          2:O                      ││   1| Game started -- your turn will│
 │                          ╲               ╱   ╲               ╱   ╲               ╱   ╲               ╱                           ││show a prompt                       │
 │                           ╲             ╱     ╲             ╱     ╲             ╱     ╲             ╱  *                         ││   2| q:quit  Space:pause           │
-│                             ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱                              ││j/k:scroll  Tab:AI thoughts         │
+│                             ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱                              ││j/k:scroll  Tab:Game/AI             │
 │                     ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲   ╲     ╱   ╱     ╲                      ││                                    │
 │                   ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲         ╱         ╲                    ││                                    │
 │                 ╱             ╲     ╱             ╲     ╱             ╲     ╱             ╲     ╱             ╲  *               ││                                    │
@@ -66,4 +66,4 @@ expression: buffer_to_string(&buf)
 │ Offering: 2 Wood  Wanting: 1 Ore                                                                                                                                       │
 │ [y]es accept  [n]o reject                                                                                                                                              │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- TRADE OFFER  | q:quit  ?:help  Tab:AI thoughts  Space:pause
+ TRADE OFFER  | q:quit  ?:help  Tab:Game/AI  Space:pause

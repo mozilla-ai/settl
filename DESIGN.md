@@ -98,22 +98,25 @@ Code uses `Light` variants for buildings/roads via `PLAYER_COLORS` constant. Sta
 ### Screen Regions
 ```
 ┌─────────────────────────────────┬──────────────────┐
-│                                 │                  │
-│         BOARD (~65%)            │  PLAYERS (22col) │
-│   Hex grid with pieces          │  Resources, VP   │
-│                                 │  Dev cards, etc. │
+│                                 │ [Game] AI        │
+│         BOARD (~65%)            │  Players, VP     │
+│   Hex grid with pieces          │  ────────────    │
+│                                 │  Game Log        │
 │                                 │                  │
 ├─────────────────────────────────┴──────────────────┤
-│  CONTEXT BAR (3-5 lines, content changes by mode)  │
+│  CONTEXT BAR (hidden when spectating)              │
 ├────────────────────────────────────────────────────┤
 │  STATUS BAR (1 line)                               │
 └────────────────────────────────────────────────────┘
 ```
 
+The right panel is a tabbed sidebar. Tab switches between Game (players + log) and AI (reasoning).
+The board is always visible, even when viewing AI thoughts.
+
 ### Layout Constraints (ratatui)
-- **Board panel:** `Constraint::Fill(1)` width (takes remaining space), `Constraint::Min(20)` height
-- **Right column:** `Constraint::Length(38)` width
-- **Context bar:** `Constraint::Length(5)` height
+- **Board panel:** `Constraint::Fill(1)` width (takes remaining space), `Constraint::Min(15)` height
+- **Right column:** `Constraint::Length(38)` width with tab bar (1 row) + content
+- **Context bar:** `Constraint::Length(5)` height (collapses to 0 during Spectating)
 - **Status bar:** `Constraint::Length(1)` height
 
 ### Minimum Terminal Size
@@ -122,7 +125,8 @@ Code uses `Light` variants for buildings/roads via `PLAYER_COLORS` constant. Sta
 - **Recommended:** 170x65 for comfortable play
 
 ### Context Bar Modes
-The bottom panel is context-sensitive -- it shows different content based on game state:
+The bottom panel is context-sensitive -- it shows different content based on game state.
+It collapses to zero height during Spectating mode, giving the board more vertical space.
 
 | Mode | Content | When Active |
 |------|---------|-------------|
@@ -130,8 +134,10 @@ The bottom panel is context-sensitive -- it shows different content based on gam
 | **Placement mode** | "Select position with arrow keys, Enter to confirm" + description of highlighted position | Placing settlement, road, or robber (mandatory) |
 | **Trade interface** | Two-column give/get with resource selectors | Proposing or responding to trade |
 | **Discard interface** | Multi-select resource checklist with counter | Discarding on 7 roll |
-| **Game log** | Scrollable event history | AI players' turns, spectating |
-| **AI thoughts** | Current AI player's reasoning text | When toggled on with Tab |
+| **Resource picker** | Resource key selector | Year of Plenty, Monopoly |
+| **Steal target** | Player selection | After robber placement |
+| **Trade response** | Accept/reject prompt | Incoming trade offer |
+| *(hidden)* | Context bar not shown | Spectating / AI turns |
 
 ## Board Rendering Specification
 
@@ -277,11 +283,11 @@ These work in trade targeting, steal targeting, and any player-selection context
 | Key | Action |
 |-----|--------|
 | `q` | Quit (with confirm prompt) |
-| `Tab` | Toggle AI thoughts panel |
+| `Tab` | Switch sidebar (Game/AI) |
 | `Space` | Pause/unpause (during AI turns) |
 | `+` / `-` | Speed up/slow down AI play |
 | `?` | Help overlay |
-| `j` / `k` | Scroll active panel (game log or AI thoughts) |
+| `j` / `k` | Scroll sidebar (game log or AI thoughts) |
 | Scroll wheel | Scroll active panel (3 lines per tick) |
 
 #### Action Selection (during your turn)
@@ -377,12 +383,14 @@ Two keys. Fast response keeps the game moving.
 
 ### Always Visible
 1. **Board** with all pieces, roads, robber, ports
-2. **Player panel** with resources, VP, dev cards, special cards
+2. **Right sidebar** with tabbed content (Game tab or AI tab)
 3. **Status bar** with turn info, speed, pause state, key hints
 
+### Sidebar Tabs
+4. **Game tab** (default): Players info + Game log
+5. **AI tab** (Tab key): AI reasoning / thoughts
+
 ### On Demand
-4. **AI thoughts** (Tab toggle)
-5. **Full game log** (shown during AI turns, scrollable)
 6. **Help overlay** (? key)
 
 ### Player Panel Layout
@@ -419,6 +427,8 @@ Two keys. Fast response keeps the game moving.
 | 2026-04-01 | Board-cursor interaction over popups | Spatial game needs spatial interaction; coordinate lists are hostile UX |
 | 2026-04-01 | Context-sensitive bottom panel | Fixed panels waste space; dynamic panel gives more room to the board |
 | 2026-04-01 | AI thoughts hidden by default | Spectator feature that hurts playability; still accessible via Tab |
+| 2026-04-06 | Right-panel tabs replace fullscreen AI toggle | Board should always be visible; AI thoughts in sidebar tab keeps game context |
+| 2026-04-06 | Context bar collapses during Spectating | No interactive controls during AI turns; extra rows for the board |
 | 2026-04-01 | Multi-select discard | One-at-a-time discard of 4+ cards is tedious; batch selection is standard |
 | 2026-04-01 | True color with 256-color fallback | Modern terminals support RGB; graceful degradation for older terminals |
 | 2026-04-01 | Universal resource keys (w/b/s/h/o) | Same keys everywhere (trade, discard, dev cards) for muscle memory |

@@ -30,14 +30,13 @@ pub struct ChatMessage {
     pub kind: ChatMessageKind,
 }
 
-/// Render the AI chat / reasoning panel.
-pub fn render_chat(messages: &[ChatMessage], scroll: u16, area: Rect, buf: &mut Buffer) {
+/// Build AI chat lines (shared helper).
+fn build_chat_lines(messages: &[ChatMessage]) -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
 
     for msg in messages {
         match msg.kind {
             ChatMessageKind::Narration => {
-                // Narration lines: dimmer, no player header.
                 lines.push(Line::from(Span::styled(
                     msg.text.clone(),
                     Style::default().fg(Color::DarkGray).italic(),
@@ -49,7 +48,6 @@ pub fn render_chat(messages: &[ChatMessage], scroll: u16, area: Rect, buf: &mut 
                     .copied()
                     .unwrap_or(Color::White);
 
-                // Player name header.
                 let mut spans: Vec<Span> = vec![Span::styled(
                     format!("{}: ", msg.player),
                     Style::default().fg(color).bold(),
@@ -76,20 +74,44 @@ pub fn render_chat(messages: &[ChatMessage], scroll: u16, area: Rect, buf: &mut 
         )));
     }
 
-    // Estimate total visual lines after wrapping for proper scroll behavior.
-    // Each Line wraps based on panel width; we approximate to keep the latest
-    // content visible during streaming.
-    let inner_width = area.width.saturating_sub(2).max(1) as usize;
-    let mut total_visual_lines: usize = 0;
-    for line in &lines {
+    lines
+}
+
+/// Estimate visual line count after wrapping.
+fn estimate_visual_lines(lines: &[Line], width: usize) -> usize {
+    let mut total: usize = 0;
+    for line in lines {
         let char_count: usize = line.spans.iter().map(|s| s.content.chars().count()).sum();
-        // A line with N chars wraps to ceil(N / width) visual lines, minimum 1.
-        total_visual_lines += if char_count == 0 {
+        total += if char_count == 0 {
             1
         } else {
-            char_count.div_ceil(inner_width)
+            char_count.div_ceil(width)
         };
     }
+    total
+}
+
+/// Render AI chat content without a border (for right-panel tab use).
+pub fn render_chat_inner(messages: &[ChatMessage], scroll: u16, area: Rect, buf: &mut Buffer) {
+    let lines = build_chat_lines(messages);
+    let inner_width = area.width.max(1) as usize;
+    let total_visual_lines = estimate_visual_lines(&lines, inner_width);
+    let visible_height = area.height as usize;
+    let max_scroll = total_visual_lines.saturating_sub(visible_height) as u16;
+    let effective_scroll = scroll.min(max_scroll);
+
+    let paragraph = Paragraph::new(lines)
+        .wrap(Wrap { trim: false })
+        .scroll((effective_scroll, 0));
+
+    paragraph.render(area, buf);
+}
+
+/// Render the AI chat / reasoning panel (with border).
+pub fn render_chat(messages: &[ChatMessage], scroll: u16, area: Rect, buf: &mut Buffer) {
+    let lines = build_chat_lines(messages);
+    let inner_width = area.width.saturating_sub(2).max(1) as usize;
+    let total_visual_lines = estimate_visual_lines(&lines, inner_width);
     let visible_height = area.height.saturating_sub(2) as usize;
     let max_scroll = total_visual_lines.saturating_sub(visible_height) as u16;
     let effective_scroll = scroll.min(max_scroll);

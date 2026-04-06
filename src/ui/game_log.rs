@@ -1,7 +1,7 @@
 //! Scrollable game log panel.
 
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+use ratatui::widgets::{Paragraph, Wrap};
 
 /// Get the display color for a game log message.
 pub fn message_color(msg: &str) -> Color {
@@ -22,9 +22,9 @@ pub fn message_color(msg: &str) -> Color {
     }
 }
 
-/// Render the game log as a scrollable panel.
-pub fn render_log(messages: &[String], scroll: u16, area: Rect, buf: &mut Buffer) {
-    let lines: Vec<Line> = messages
+/// Build game log lines (shared helper).
+fn build_log_lines(messages: &[String]) -> Vec<Line<'static>> {
+    messages
         .iter()
         .enumerate()
         .map(|(i, msg)| {
@@ -34,21 +34,18 @@ pub fn render_log(messages: &[String], scroll: u16, area: Rect, buf: &mut Buffer
             }
             Line::from(Span::styled(format!("{:>4}| {}", i + 1, msg), style))
         })
-        .collect();
+        .collect()
+}
 
-    // Calculate scroll: keep the view near the bottom.
-    let visible_height = area.height.saturating_sub(2) as usize;
+/// Render the game log without a border (for use inside a shared panel).
+pub fn render_log_inner(messages: &[String], scroll: u16, area: Rect, buf: &mut Buffer) {
+    let lines = build_log_lines(messages);
+    let visible_height = area.height as usize;
     let total_lines = lines.len();
     let max_scroll = total_lines.saturating_sub(visible_height) as u16;
     let effective_scroll = scroll.min(max_scroll);
 
-    let block = Block::default()
-        .title(format!(" Game Log ({}) ", total_lines))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
-
     let paragraph = Paragraph::new(lines)
-        .block(block)
         .wrap(Wrap { trim: false })
         .scroll((effective_scroll, 0));
 

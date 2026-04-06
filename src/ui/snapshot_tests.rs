@@ -169,12 +169,12 @@ fn snapshot_playing_board_cursor() {
     insta::assert_snapshot!("playing_board_cursor", buffer_to_string(&buf));
 }
 
-// ── Fullscreen chat panel ────────────────────────────────────────────
+// ── AI tab in right panel ────────────────────────────────────────────
 
 #[test]
-fn snapshot_playing_fullscreen_chat() {
+fn snapshot_playing_ai_tab() {
     let (mut ps, _rx) = make_test_playing_state(InputMode::Spectating);
-    ps.show_ai_panel = true;
+    ps.right_tab = RightPanelTab::Ai;
     ps.chat_messages = vec![
         chat_panel::ChatMessage {
             player: "Alice".into(),
@@ -191,7 +191,7 @@ fn snapshot_playing_fullscreen_chat() {
     ];
     let mut app = make_test_app(Screen::Playing(ps));
     let buf = render_app_to_buffer(&mut app, WIDTH, HEIGHT);
-    insta::assert_snapshot!("playing_fullscreen_chat", buffer_to_string(&buf));
+    insta::assert_snapshot!("playing_ai_tab", buffer_to_string(&buf));
 }
 
 // ── Llamafile setup screen ───────────────────────────────────────────
