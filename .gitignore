@@ -33,6 +33,7 @@ Thumbs.db
 *.dylib
 debug.log
 *.png
+!assets/social-preview.png
 
 # Website build artifacts
 website/node_modules/

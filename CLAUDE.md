@@ -13,7 +13,7 @@ cargo test test_name                     # Single test by name
 cargo run                                # Launch TUI (title screen -> menus -> game)
 ```
 
-The binary boots into a TUI (title screen -> main menu -> game setup). LLM mode requires provider API keys as env vars: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`.
+The binary boots into a TUI (title screen -> main menu -> game setup). AI players run locally via llamafile by default, no API keys needed. For cloud LLM providers, set env vars: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`.
 
 Debug logging writes to `~/.settl/debug.log`. Enabled automatically in debug builds, off in release. Override with env var:
 ```bash
@@ -30,10 +30,12 @@ Use `log::debug!()` / `log::info!()` etc. from any module.
 ### `game/` -- Core engine (stateless rules + stateful orchestrator)
 - **`board.rs`** -- Hex grid using axial coordinates `(q, r)`. Vertices and edges are expressed as `(HexCoord, Direction)` pairs. Only canonical edge directions (NE, E, SE) are stored; opposites resolve to the neighbor's canonical form.
 - **`state.rs`** -- `GameState` holds the full mutable game: board, per-player resources/cards (`PlayerState`), buildings, roads, robber position, dev card deck, longest road/largest army tracking. `GamePhase` enum drives the state machine (Setup -> Playing -> Discarding -> PlacingRobber -> Stealing -> GameOver).
-- **`rules.rs`** -- Pure validation functions. Given a `GameState`, returns legal moves. Enforces distance rule, connectivity, resource costs, dev card logic, longest road calculation. Largest file (~1760 lines).
+- **`rules.rs`** -- Pure validation functions. Given a `GameState`, returns legal moves. Enforces distance rule, connectivity, resource costs, dev card logic, longest road calculation. Largest file (~2400 lines).
+- **`actions.rs`** -- Action and dev card type definitions (`DevCard`, `PlayerAction`, etc.) used across the engine.
 - **`event.rs`** -- `GameEvent` enum for all discrete game actions; `format_event()` renders them as human-readable text for LLM context.
 - **`orchestrator.rs`** -- Drives the game loop. Calls `Player` trait methods at decision points, applies actions through the rules engine, tracks events for LLM context, sends UI updates via `mpsc` channel. Runs the setup snake-draft and main turn loop.
 - **`dice.rs`** -- Dice rolling and resource distribution per hex/number.
+- **`save.rs`** -- Auto-save and resume. Saves game state to `~/.settl/saves/autosave.json` after each turn; main menu shows "Continue" when a save exists.
 
 ### `player/` -- Player abstraction (async trait)
 - **`mod.rs`** -- `Player` trait with async methods: `choose_action`, `choose_settlement`, `choose_road`, `choose_resource`, `respond_to_trade`, etc. Each returns `(choice, reasoning_string)`.
@@ -43,7 +45,7 @@ Use `log::debug!()` / `log::info!()` etc. from any module.
 - **`human.rs`** -- `HumanPlayer` for raw stdin input (non-TUI).
 - **`tui_human.rs`** -- `TuiHumanPlayer` for TUI mode; communicates with the UI via channels to show a selection overlay.
 - **`prompt.rs`** -- Serializes board/state into text for LLM context.
-- **`personality.rs`** -- Loads TOML personality configs (aggression/cooperation scores, style text, catchphrases) and injects into system prompts. Built-in personalities: Default Strategist, Aggressive Trader, Grudge Holder, Cautious Builder, Chaos Agent. Custom ones go in `personalities/*.toml`.
+- **`personality.rs`** -- Loads TOML personality configs (aggression/cooperation scores, style text, catchphrases) and injects into system prompts. Built-in personalities: Balanced Strategist, The Merchant, The Grudge Holder, The Architect, The Wild Card. Custom ones go in `personalities/*.toml`.
 
 ### `trading/` -- Trade negotiation
 - **`negotiation.rs`** -- Multi-round trade protocol: propose -> respond (accept/reject/counter) -> execute.
@@ -53,12 +55,14 @@ Use `log::debug!()` / `log::info!()` etc. from any module.
 - Async game engine runs in a background tokio task; TUI runs on the main thread.
 - Communication via `mpsc::unbounded_channel` sending `StateUpdate` events.
 - `board_view.rs` renders the hex board, `chat_panel.rs` shows AI reasoning, `resource_bar.rs` shows player stats, `game_log.rs` is scrollable event history.
+- `layout.rs` handles responsive terminal layout and panel sizing.
+- `menu.rs` renders menu screens (title, game setup, etc.).
 
 ## Key Design Decisions
 
 - **Coordinate system**: Axial hex coordinates with vertex/edge pairs reduce duplication. Canonical edge storage means the same physical edge is never represented two ways.
 - **Tool-based LLM integration**: JSON schemas enforce structured responses rather than parsing free text. Every decision captures reasoning separately from the action.
-- **Game logic is UI-independent**: The engine runs headless; TUI is an optional observer via channel.
+- **Game logic is UI-independent**: The engine communicates with the TUI via channels, which also enables headless mode for scripting and testing.
 - **Personality = system prompt injection**: No hardcoded behavioral branches; personality is entirely expressed as LLM prompt text.
 
 ## Coding Style
@@ -84,6 +88,7 @@ The TUI has dedicated test infrastructure in `src/ui/` (`#[cfg(test)]` child mod
 - **`testing.rs`** -- Helpers: `render_to_buffer()` renders any `Screen` to a ratatui `TestBackend`, `buffer_to_string()` converts to plain text, `make_test_playing_state()` creates a `PlayingState` with real channels so `send_response()` works (returns the receiver for assertions).
 - **`input_tests.rs`** -- Tests for `handle_input()` across all screens and input modes. Verifies state transitions, keyboard shortcuts, and that the correct `HumanResponse` is sent on the channel.
 - **`snapshot_tests.rs`** -- Insta snapshot tests rendering each screen/mode to a 120x40 buffer. Catches visual regressions.
+- **`flow_tests.rs`** -- E2E flow tests exercising the full game loop: orchestrator spawning, channel communication between engine and TuiHumanPlayer, screen transitions, setup phase, turn cycles.
 
 Key patterns:
 - `handle_input()` and `draw_screen()` are already pure functions on `App` state -- no refactoring needed to test them.
@@ -91,8 +96,9 @@ Key patterns:
 - Snapshot workflow: `cargo test` fails on visual changes, `cargo insta review` shows diffs, accept/reject interactively.
 
 ```bash
-cargo test ui::input_tests              # Input handling tests (55 tests)
-cargo test ui::snapshot_tests           # Visual snapshot tests (15 tests)
+cargo test ui::input_tests              # Input handling tests (~96 tests)
+cargo test ui::snapshot_tests           # Visual snapshot tests (~18 tests)
+cargo test ui::flow_tests               # E2E flow tests (~5 tests)
 cargo insta review                      # Review snapshot diffs after UI changes
 ```
 
