@@ -391,15 +391,25 @@ fn new_game_model_toggle() {
 }
 
 #[test]
-fn new_game_enter_starts_game_from_any_focus() {
-    // Enter should trigger StartGame regardless of which row is focused.
+fn new_game_enter_starts_game_only_from_start_button() {
+    let mut app = new_game_app();
+    if let Screen::NewGame(ref mut state) = app.screen {
+        state.focus = NewGameFocus::StartButton;
+    }
+    let action = handle_input(&mut app, KeyCode::Enter);
+    assert!(matches!(action, Action::StartGame));
+}
+
+#[test]
+fn new_game_enter_cycles_value_on_settings() {
+    // Enter on non-StartButton rows should cycle the value, not start the game.
     for focus in &[
-        NewGameFocus::StartButton,
         NewGameFocus::PlayerCount,
         NewGameFocus::Player { row: 1 },
         NewGameFocus::FriendlyRobber,
         NewGameFocus::BoardLayout,
         NewGameFocus::AiModel,
+        NewGameFocus::ReasoningEffort,
     ] {
         let mut app = new_game_app();
         if let Screen::NewGame(ref mut state) = app.screen {
@@ -407,11 +417,66 @@ fn new_game_enter_starts_game_from_any_focus() {
         }
         let action = handle_input(&mut app, KeyCode::Enter);
         assert!(
-            matches!(action, Action::StartGame),
-            "Enter on {:?} should trigger StartGame",
+            matches!(action, Action::None),
+            "Enter on {:?} should cycle value, not start game",
             focus,
         );
     }
+}
+
+#[test]
+fn new_game_enter_toggles_friendly_robber() {
+    let mut app = new_game_app();
+    if let Screen::NewGame(ref mut state) = app.screen {
+        state.focus = NewGameFocus::FriendlyRobber;
+    }
+    let was_on = match &app.screen {
+        Screen::NewGame(s) => s.friendly_robber,
+        _ => panic!(),
+    };
+    handle_input(&mut app, KeyCode::Enter);
+    let is_on = match &app.screen {
+        Screen::NewGame(s) => s.friendly_robber,
+        _ => panic!(),
+    };
+    assert_ne!(was_on, is_on, "Enter should toggle friendly robber");
+}
+
+#[test]
+fn new_game_tab_cycles_value() {
+    let mut app = new_game_app();
+    if let Screen::NewGame(ref mut state) = app.screen {
+        state.focus = NewGameFocus::FriendlyRobber;
+    }
+    let action = handle_input(&mut app, KeyCode::Tab);
+    assert!(matches!(action, Action::None));
+    let is_on = match &app.screen {
+        Screen::NewGame(s) => s.friendly_robber,
+        _ => panic!(),
+    };
+    assert!(is_on, "Tab should toggle friendly robber on");
+}
+
+#[test]
+fn new_game_h_l_cycle_value() {
+    let mut app = new_game_app();
+    if let Screen::NewGame(ref mut state) = app.screen {
+        state.focus = NewGameFocus::FriendlyRobber;
+    }
+    // 'l' cycles forward (on).
+    handle_input(&mut app, KeyCode::Char('l'));
+    let on = match &app.screen {
+        Screen::NewGame(s) => s.friendly_robber,
+        _ => panic!(),
+    };
+    assert!(on, "'l' should toggle friendly robber on");
+    // 'h' cycles backward (off).
+    handle_input(&mut app, KeyCode::Char('h'));
+    let off = match &app.screen {
+        Screen::NewGame(s) => s.friendly_robber,
+        _ => panic!(),
+    };
+    assert!(!off, "'h' should toggle friendly robber off");
 }
 
 #[test]

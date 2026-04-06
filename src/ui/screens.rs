@@ -1081,18 +1081,23 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
     let area = f.area();
     f.render_widget(Clear, area);
 
+    // Content block height: title(1) + gap(1) + button(1) + gap(1) + PLAYERS(1) + gap(1)
+    // + count(1) + gap(1) + 4 player rows(4) + gap(1) + RULES(1) + gap(1)
+    // + 4 toggle rows(4) + gap(1) + hint(1) = 21 rows.
+    let content_height: u16 = 21;
     let content_width = 64u16.min(area.width.saturating_sub(4));
     let x_start = area.x + (area.width.saturating_sub(content_width)) / 2;
+    let top = area.y + (area.height.saturating_sub(content_height)) / 2;
 
     // Title.
-    let title_area = Rect::new(x_start, area.y + 1, content_width, 1);
+    let title_area = Rect::new(x_start, top, content_width, 1);
     let title = Paragraph::new("New Game")
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::Yellow).bold());
     f.render_widget(title, title_area);
 
-    // Start button (at top for quick launch).
-    let button_y = area.y + 3;
+    // Start button.
+    let button_y = top + 2;
     let button_focused = matches!(state.focus, NewGameFocus::StartButton);
     let button_style = if button_focused {
         Style::default().fg(Color::Black).bg(Color::Green).bold()
@@ -1142,9 +1147,6 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
     let first_row_y = count_y + 2;
     for (i, player) in state.players.iter().enumerate() {
         let row_y = first_row_y + i as u16;
-        if row_y >= area.y + area.height - 6 {
-            break;
-        }
         let row_area = Rect::new(x_start, row_y, content_width, 1);
 
         let is_human = player.kind == PlayerKind::Human;
@@ -1262,14 +1264,17 @@ pub fn draw_new_game(f: &mut Frame, state: &NewGameState) {
         re_focused,
     );
 
-    // Hint bar at bottom.
-    let hint_y = area.y + area.height - 1;
-    let hint_area = Rect::new(area.x, hint_y, area.width, 1);
-    let hint = Paragraph::new(
-        "\u{2191}\u{2193}: move  |  \u{2190}\u{2192}: change  |  Enter: start  |  Esc: back",
-    )
-    .alignment(Alignment::Center)
-    .style(Style::default().fg(Color::DarkGray));
+    // Hint bar right below the last rule row.
+    let hint_y = re_y + 2;
+    let hint_area = Rect::new(x_start, hint_y, content_width, 1);
+    let hint_text = if matches!(state.focus, NewGameFocus::StartButton) {
+        "j/k/\u{2191}\u{2193}: move  |  Enter: start game  |  Esc: back"
+    } else {
+        "j/k/\u{2191}\u{2193}: move  |  h/l/\u{2190}\u{2192}/Tab/Enter: change  |  Esc: back"
+    };
+    let hint = Paragraph::new(hint_text)
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::DarkGray));
     f.render_widget(hint, hint_area);
 
     // RAM warning popup overlay.

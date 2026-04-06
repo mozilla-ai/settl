@@ -3,6 +3,27 @@ source: src/ui/snapshot_tests.rs
 expression: buffer_to_string(&buf)
 ---
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                                                                                  New Game
 
                                                        [ Start Game ]
@@ -23,47 +44,4 @@ expression: buffer_to_string(&buf)
                                                           AI Model            Bonsai 1.7B (fast)
                                                           Reasoning Effort    low
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                                          ↑↓: move  |  ←→: change  |  Enter: start  |  Esc: back
+                                                             j/k/↑↓: move  |  Enter: start game  |  Esc: back

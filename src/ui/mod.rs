@@ -1035,15 +1035,22 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                     move_new_game_focus_down(state);
                     Action::None
                 }
-                KeyCode::Left => {
+                KeyCode::Left | KeyCode::Char('h') => {
                     cycle_new_game_value(state, false);
                     Action::None
                 }
-                KeyCode::Right => {
+                KeyCode::Right | KeyCode::Char('l') | KeyCode::Tab => {
                     cycle_new_game_value(state, true);
                     Action::None
                 }
-                KeyCode::Enter => Action::StartGame,
+                KeyCode::Enter => {
+                    if matches!(state.focus, NewGameFocus::StartButton) {
+                        Action::StartGame
+                    } else {
+                        cycle_new_game_value(state, true);
+                        Action::None
+                    }
+                }
                 _ => Action::None,
             }
         }
