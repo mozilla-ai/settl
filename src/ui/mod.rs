@@ -160,11 +160,8 @@ pub enum RightPanelTab {
 pub enum InputMode {
     /// No human prompt active; spectating AI play or idle.
     Spectating,
-    /// Choosing a game action from a horizontal bar.
-    ActionBar {
-        choices: Vec<PlayerChoice>,
-        selected: usize,
-    },
+    /// Choosing a game action via keyboard shortcuts.
+    ActionBar { choices: Vec<PlayerChoice> },
     /// Navigating legal positions on the board with arrow keys.
     BoardCursor {
         legal: CursorLegal,
@@ -298,10 +295,7 @@ impl PlayingState {
     /// Convert an incoming HumanPrompt into the appropriate InputMode.
     fn apply_prompt(&mut self, prompt: player::tui_human::HumanPrompt) {
         self.input_mode = match prompt.kind {
-            PromptKind::ChooseAction { choices } => InputMode::ActionBar {
-                choices,
-                selected: 0,
-            },
+            PromptKind::ChooseAction { choices } => InputMode::ActionBar { choices },
             PromptKind::PlaceSettlement { legal } => {
                 let positions = self.compute_cursor_positions(
                     &legal,
@@ -1141,20 +1135,8 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                     Action::None
                 }
 
-                InputMode::ActionBar { choices, selected } => {
+                InputMode::ActionBar { choices } => {
                     match key {
-                        KeyCode::Left | KeyCode::Up | KeyCode::Char('k') => {
-                            *selected = selected.saturating_sub(1);
-                        }
-                        KeyCode::Right | KeyCode::Down | KeyCode::Char('j') => {
-                            if *selected + 1 < choices.len() {
-                                *selected += 1;
-                            }
-                        }
-                        KeyCode::Enter => {
-                            let idx = *selected;
-                            ps.respond_index(idx);
-                        }
                         KeyCode::Char(ch) => {
                             if let Some(idx) =
                                 choices.iter().position(|c| c.shortcut_key() == Some(ch))

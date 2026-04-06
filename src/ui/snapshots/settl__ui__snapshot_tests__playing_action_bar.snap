@@ -62,8 +62,8 @@ expression: buffer_to_string(&buf)
 │                                                                                                                                  ││                                    │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘└────────────────────────────────────┘
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│▸ Build Settlement[s]  Build Road[r]  Buy Development Card[d]  Propose Trade[t]  Bank Trade[b]  End Turn[e]                                                             │
+│Build Settlement[s]  Build Road[r]  Buy Development Card[d]  Propose Trade[t]  Bank Trade[b]  End Turn[e]                                                               │
 │                                                                                                                                                                        │
-│ [Arrow/Enter] select  [s]ettlement  [r]oad  [c]ity  [d]ev card  [b]ank trade  [t]rade  [e]nd turn                                                                      │
+│ [s]ettlement  [r]oad  [c]ity  [d]ev card  [b]ank trade  [t]rade  [e]nd turn                                                                                            │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  YOUR TURN  | q:quit  ?:help  Tab:Game/AI  Space:pause

@@ -171,7 +171,6 @@ pub fn playing_spectating_app() -> App {
 pub fn playing_action_bar_app() -> App {
     let (ps, _rx) = make_test_playing_state(InputMode::ActionBar {
         choices: test_action_choices(),
-        selected: 0,
     });
     make_test_app(Screen::Playing(ps))
 }

@@ -445,54 +445,18 @@ fn new_game_ram_warning_esc_dismisses() {
 // ── ActionBar ────────────────────────────────────────────────────────
 
 #[test]
-fn action_bar_right_increments_selection() {
+fn action_bar_arrows_are_ignored() {
     let (ps, _rx) = make_test_playing_state(InputMode::ActionBar {
         choices: test_action_choices_minimal(),
-        selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
     handle_input(&mut app, KeyCode::Right);
-    if let Screen::Playing(ref ps) = app.screen {
-        if let InputMode::ActionBar { selected, .. } = &ps.input_mode {
-            assert_eq!(*selected, 1);
-        } else {
-            panic!("should still be in ActionBar mode");
-        }
-    }
-}
-
-#[test]
-fn action_bar_left_at_zero_stays() {
-    let (ps, _rx) = make_test_playing_state(InputMode::ActionBar {
-        choices: test_action_choices_minimal(),
-        selected: 0,
-    });
-    let mut app = make_test_app(Screen::Playing(ps));
-
     handle_input(&mut app, KeyCode::Left);
-    if let Screen::Playing(ref ps) = app.screen {
-        if let InputMode::ActionBar { selected, .. } = &ps.input_mode {
-            assert_eq!(*selected, 0);
-        }
-    }
-}
-
-#[test]
-fn action_bar_enter_sends_index_and_returns_to_spectating() {
-    let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
-        choices: test_action_choices_minimal(),
-        selected: 1,
-    });
-    let mut app = make_test_app(Screen::Playing(ps));
-
     handle_input(&mut app, KeyCode::Enter);
-
-    let resp = rx.try_recv().unwrap();
-    assert!(matches!(resp, HumanResponse::Index(1)));
-
+    // Should still be in ActionBar mode (nothing happened)
     if let Screen::Playing(ref ps) = app.screen {
-        assert!(matches!(ps.input_mode, InputMode::Spectating));
+        assert!(matches!(ps.input_mode, InputMode::ActionBar { .. }));
     }
 }
 
@@ -501,7 +465,6 @@ fn action_bar_shortcut_e_selects_end_turn() {
     // [Settlement=0, Road=1, EndTurn=2]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
         choices: test_action_choices_minimal(),
-        selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -519,7 +482,6 @@ fn action_bar_shortcut_s_selects_build_settlement() {
     // [Settlement=0, Road=1, EndTurn=2]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
         choices: test_action_choices_minimal(),
-        selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -534,7 +496,6 @@ fn action_bar_shortcut_r_selects_build_road() {
     // [Settlement=0, Road=1, EndTurn=2]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
         choices: test_action_choices_minimal(),
-        selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -549,7 +510,6 @@ fn action_bar_shortcut_t_selects_propose_trade() {
     // [Settlement=0, Road=1, DevCard=2, Trade=3, BankTrade=4, EndTurn=5]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
         choices: test_action_choices(),
-        selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -564,7 +524,6 @@ fn action_bar_shortcut_d_selects_buy_dev_card() {
     // [Settlement=0, Road=1, DevCard=2, Trade=3, BankTrade=4, EndTurn=5]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
         choices: test_action_choices(),
-        selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -579,7 +538,6 @@ fn action_bar_shortcut_b_selects_bank_trade() {
     // [Settlement=0, Road=1, DevCard=2, Trade=3, BankTrade=4, EndTurn=5]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
         choices: test_action_choices(),
-        selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -597,7 +555,6 @@ fn action_bar_esc_selects_end_turn() {
     // [Settlement=0, Road=1, EndTurn=2]
     let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
         choices: test_action_choices_minimal(),
-        selected: 0,
     });
     let mut app = make_test_app(Screen::Playing(ps));
 
@@ -617,10 +574,7 @@ fn action_bar_esc_selects_roll_dice() {
         crate::player::PlayerChoice::RollDice,
         crate::player::PlayerChoice::PlayKnight,
     ];
-    let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar {
-        choices,
-        selected: 1,
-    });
+    let (ps, mut rx) = make_test_playing_state(InputMode::ActionBar { choices });
     let mut app = make_test_app(Screen::Playing(ps));
 
     handle_input(&mut app, KeyCode::Esc);

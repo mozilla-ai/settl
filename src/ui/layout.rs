@@ -224,7 +224,7 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
             // this arm is unreachable but required for exhaustive matching.
         }
 
-        InputMode::ActionBar { choices, selected } => {
+        InputMode::ActionBar { choices } => {
             // Horizontal action menu with shortcuts.
             let mut spans: Vec<Span> = Vec::new();
             for (i, choice) in choices.iter().enumerate() {
@@ -232,14 +232,7 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
                     spans.push(Span::raw("  "));
                 }
                 let label = choice.label();
-                if i == *selected {
-                    spans.push(Span::styled(
-                        format!("\u{25b8} {}", label),
-                        Style::default().fg(Color::Black).bg(Color::Cyan).bold(),
-                    ));
-                } else {
-                    spans.push(Span::styled(label, Style::default().fg(Color::White)));
-                }
+                spans.push(Span::styled(label, Style::default().fg(Color::White)));
                 if let Some(key) = choice.shortcut_key() {
                     spans.push(Span::styled(
                         format!("[{}]", key),
@@ -249,7 +242,7 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
             }
             let line1 = Line::from(spans);
             let line2 = Line::from(Span::styled(
-                " [Arrow/Enter] select  [s]ettlement  [r]oad  [c]ity  [d]ev card  [b]ank trade  [t]rade  [e]nd turn",
+                " [s]ettlement  [r]oad  [c]ity  [d]ev card  [b]ank trade  [t]rade  [e]nd turn",
                 Style::default().fg(Color::DarkGray),
             ));
             let para = Paragraph::new(vec![line1, Line::from(""), line2]);
