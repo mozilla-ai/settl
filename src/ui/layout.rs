@@ -25,11 +25,11 @@ struct PlayingLayout {
 /// Compute the playing screen layout areas.
 ///
 /// ```text
-/// +------------------------------------------+--------------+
-/// |                                          | [Game] AI    |
-/// |           BOARD VIEW                     |  (sidebar)   |
-/// |           (hex grid)                     |              |
-/// +------------------------------------------+--------------+
+/// +--------------+------------------------------------------+
+/// | [Game] AI    |                                          |
+/// |  (sidebar)   |           BOARD VIEW                     |
+/// |              |           (hex grid)                     |
+/// +--------------+------------------------------------------+
 /// |  CONTEXT BAR (mode-dependent, hidden when Spectating)    |
 /// +----------------------------------------------------------+
 /// |  Status bar                                               |
@@ -52,12 +52,12 @@ fn compute_layout(size: Rect, input_mode: &InputMode) -> PlayingLayout {
 
     let top_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Fill(1), Constraint::Length(38)])
+        .constraints([Constraint::Length(38), Constraint::Fill(1)])
         .split(main_chunks[0]);
 
     PlayingLayout {
-        board: top_chunks[0],
-        right_panel: top_chunks[1],
+        board: top_chunks[1],
+        right_panel: top_chunks[0],
         context: main_chunks[1],
         status: main_chunks[2],
         full: size,
