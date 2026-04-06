@@ -109,11 +109,16 @@ impl GameOrchestrator {
     }
 
     /// Wrap an async player decision in a timeout. Returns the fallback on timeout.
+    /// Human players are never timed out -- they can take as long as they need.
     async fn with_timeout<T>(
         &self,
+        player_id: PlayerId,
         future: impl std::future::Future<Output = T>,
         fallback: T,
     ) -> T {
+        if self.players[player_id].is_human() {
+            return future.await;
+        }
         match tokio::time::timeout(PLAYER_DECISION_TIMEOUT, future).await {
             Ok(result) => result,
             Err(_) => fallback,
@@ -235,6 +240,7 @@ impl GameOrchestrator {
 
             let (v_idx, v_reasoning) = self
                 .with_timeout(
+                    player_id,
                     self.players[player_id].choose_settlement(
                         &self.state,
                         player_id,
@@ -261,6 +267,7 @@ impl GameOrchestrator {
 
             let (e_idx, e_reasoning) = self
                 .with_timeout(
+                    player_id,
                     self.players[player_id].choose_road(
                         &self.state,
                         player_id,
@@ -340,7 +347,11 @@ impl GameOrchestrator {
             context.push_str(&history);
         }
         let _ = self
-            .with_timeout(self.players[player_id].set_game_context(&context), ())
+            .with_timeout(
+                player_id,
+                self.players[player_id].set_game_context(&context),
+                (),
+            )
             .await;
 
         // Step 0: Pre-roll Knight opportunity.
@@ -400,6 +411,7 @@ impl GameOrchestrator {
 
             let (choice_idx, reasoning) = self
                 .with_timeout(
+                    player_id,
                     self.players[player_id].choose_action(&self.state, player_id, &choices),
                     (0, "timeout fallback".into()),
                 )
@@ -585,6 +597,7 @@ impl GameOrchestrator {
 
             let (cards, discard_reasoning) = self
                 .with_timeout(
+                    p,
                     self.players[p].choose_discard(&self.state, p, discard_count),
                     (Vec::new(), "timeout fallback".into()),
                 )
@@ -618,6 +631,7 @@ impl GameOrchestrator {
 
         let (h_idx, robber_reasoning) = self
             .with_timeout(
+                roller,
                 self.players[roller].choose_robber_hex(&self.state, roller, &legal_hexes),
                 (0, "timeout fallback".into()),
             )
@@ -634,6 +648,7 @@ impl GameOrchestrator {
             if !targets.is_empty() {
                 let (t_idx, steal_reasoning) = self
                     .with_timeout(
+                        roller,
                         self.players[roller].choose_steal_target(
                             &self.state,
                             roller,
@@ -726,6 +741,7 @@ impl GameOrchestrator {
         let choices = vec![PlayerChoice::RollDice, PlayerChoice::PlayKnight];
         let (choice_idx, reasoning) = self
             .with_timeout(
+                player_id,
                 self.players[player_id].choose_action(&self.state, player_id, &choices),
                 (0, "timeout fallback".into()),
             )
@@ -753,6 +769,7 @@ impl GameOrchestrator {
 
         let (h_idx, h_reasoning) = self
             .with_timeout(
+                player_id,
                 self.players[player_id].choose_robber_hex(&self.state, player_id, &legal_hexes),
                 (0, "timeout fallback".into()),
             )
@@ -766,6 +783,7 @@ impl GameOrchestrator {
         } else {
             let (t_idx, _) = self
                 .with_timeout(
+                    player_id,
                     self.players[player_id].choose_steal_target(
                         &self.state,
                         player_id,
@@ -794,6 +812,7 @@ impl GameOrchestrator {
     /// Handle playing Monopoly (choose resource, take all from other players).
     async fn handle_monopoly(&mut self, player_id: PlayerId) -> Result<(), OrchestratorError> {
         let (resource, reasoning) = self.with_timeout(
+            player_id,
             self.players[player_id].choose_resource(
                 &self.state,
                 player_id,
@@ -814,6 +833,7 @@ impl GameOrchestrator {
     ) -> Result<(), OrchestratorError> {
         let (r1, _) = self
             .with_timeout(
+                player_id,
                 self.players[player_id].choose_resource(
                     &self.state,
                     player_id,
@@ -824,6 +844,7 @@ impl GameOrchestrator {
             .await;
         let (r2, reasoning) = self
             .with_timeout(
+                player_id,
                 self.players[player_id].choose_resource(
                     &self.state,
                     player_id,
@@ -849,6 +870,7 @@ impl GameOrchestrator {
 
         let (e1_idx, _) = self
             .with_timeout(
+                player_id,
                 self.players[player_id].choose_road(
                     &self.state,
                     player_id,
@@ -875,6 +897,7 @@ impl GameOrchestrator {
         } else {
             let (e2_idx, _) = self
                 .with_timeout(
+                    player_id,
                     self.players[player_id].choose_road(
                         &self.state,
                         player_id,
@@ -903,6 +926,7 @@ impl GameOrchestrator {
         }
         let (idx, reasoning) = self
             .with_timeout(
+                player_id,
                 self.players[player_id].choose_road(
                     &self.state,
                     player_id,
@@ -927,6 +951,7 @@ impl GameOrchestrator {
         }
         let (idx, reasoning) = self
             .with_timeout(
+                player_id,
                 self.players[player_id].choose_settlement(
                     &self.state,
                     player_id,
@@ -949,6 +974,7 @@ impl GameOrchestrator {
         }
         let (idx, reasoning) = self
             .with_timeout(
+                player_id,
                 self.players[player_id].choose_settlement(
                     &self.state,
                     player_id,
@@ -978,6 +1004,7 @@ impl GameOrchestrator {
 
         let (idx, reasoning) = self
             .with_timeout(
+                player_id,
                 self.players[player_id].choose_action(&self.state, player_id, &bank_trades),
                 (0, "timeout fallback".into()),
             )
@@ -996,6 +1023,7 @@ impl GameOrchestrator {
         // Step 1: Get the trade offer from the proposing player.
         let offer_result = self
             .with_timeout(
+                player_id,
                 self.players[player_id].propose_trade(&self.state, player_id),
                 None,
             )
@@ -1066,6 +1094,7 @@ impl GameOrchestrator {
 
             let (response, resp_reasoning) = self
                 .with_timeout(
+                    other_id,
                     self.players[other_id].respond_to_trade(
                         &self.state,
                         other_id,
