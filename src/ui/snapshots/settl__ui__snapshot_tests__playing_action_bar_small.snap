@@ -2,30 +2,30 @@
 source: src/ui/snapshot_tests.rs
 expression: buffer_to_string(&buf)
 ---
-┌ Board ─────────────────────────────────┐┌────────────────────────────────────┐
-│                                        ││ Game   AI                          │
-│                                        ││▸Alice 0VP                          │
-│                                        ││  Wood:0 Brick:0 Sheep:0            │
-│                                *       ││  Wheat:0 Ore:0                     │
-│                                   3:1  ││                                    │
-│                             ╱     ╲    ││ Bob 0VP                            │
-│                           ╱         ╲  ││  Resources: 0                      │
-│                         ╱             ╲││                                    │
-│                        ╱      Ore      ││ Charlie 0VP                        │
-│                               10       ││  Resources: 0                      │
-│                        ╲               ││                                    │
-│                      *  ╲             ╱││ Diana 0VP                          │
-│                           ╲         ╱  ││  Resources: 0                      │
-│            2:Wood ╱     ╲   ╲     ╱   ╱││                                    │
-│                 ╱         ╲         ╱  ││Turn: 1                             │
-│            *  ╱             ╲     ╱    ││Phase: Setup                        │
-│              ╱     Wheat     ╲   ╱     ││Deck: 25 cards                      │
-│                     12                 ││                                    │
-│              ╲               ╱   ╲     ││────────────────────────────────────│
-│               ╲             ╱     ╲    ││Game started -- your turn will show │
-│                 ╲         ╱         ╲  ││a prompt                            │
-│         ╱     ╲   ╲     ╱   ╱     ╲   ╲││q:quit  ?:help  j/k:scroll          │
-└────────────────────────────────────────┘└────────────────────────────────────┘
+┌────────────────────────────────────┐┌ Board ─────────────────────────────────┐
+│ Game   AI                          ││                                        │
+│▸Alice 0VP                          ││                                        │
+│  Wood:0 Brick:0 Sheep:0            ││                                        │
+│  Wheat:0 Ore:0                     ││                                *       │
+│                                    ││                                   3:1  │
+│ Bob 0VP                            ││                             ╱     ╲    │
+│  Resources: 0                      ││                           ╱         ╲  │
+│                                    ││                         ╱             ╲│
+│ Charlie 0VP                        ││                        ╱      Ore      │
+│  Resources: 0                      ││                               10       │
+│                                    ││                        ╲               │
+│ Diana 0VP                          ││                      *  ╲             ╱│
+│  Resources: 0                      ││                           ╲         ╱  │
+│                                    ││            2:Wood ╱     ╲   ╲     ╱   ╱│
+│Turn: 1                             ││                 ╱         ╲         ╱  │
+│Phase: Setup                        ││            *  ╱             ╲     ╱    │
+│Deck: 25 cards                      ││              ╱     Wheat     ╲   ╱     │
+│                                    ││                     12                 │
+│────────────────────────────────────││              ╲               ╱   ╲     │
+│Game started -- your turn will show ││               ╲             ╱     ╲    │
+│a prompt                            ││                 ╲         ╱         ╲  │
+│q:quit  ?:help  j/k:scroll          ││         ╱     ╲   ╲     ╱   ╱     ╲   ╲│
+└────────────────────────────────────┘└────────────────────────────────────────┘
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │Build Settlement[s]  Build Road[r]  Buy Development Card[d]  Propose Trade[t] │
 │                                                                              │

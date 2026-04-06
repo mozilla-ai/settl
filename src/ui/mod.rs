@@ -146,9 +146,9 @@ pub enum TradeSide {
     Get,
 }
 
-/// Which tab is active in the right panel sidebar.
+/// Which tab is active in the sidebar.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum RightPanelTab {
+pub enum SidebarTab {
     /// Players + Game Log.
     Game,
     /// AI reasoning / thoughts.
@@ -204,8 +204,8 @@ pub struct PlayingState {
     pub game_over_winner: Option<(usize, String)>,
     pub log_scroll: u16,
     pub chat_scroll: u16,
-    /// Which tab is showing in the right sidebar (Game or AI).
-    pub right_tab: RightPanelTab,
+    /// Which tab is showing in the sidebar (Game or AI).
+    pub sidebar_tab: SidebarTab,
     /// Whether to show the help overlay (? toggle).
     pub show_help: bool,
     /// Whether to show the llamafile server log (L toggle).
@@ -249,7 +249,7 @@ impl PlayingState {
             game_over_winner: None,
             log_scroll: 0,
             chat_scroll: 0,
-            right_tab: RightPanelTab::Game,
+            sidebar_tab: SidebarTab::Game,
             show_help: false,
             show_llamafile_log: false,
             llamafile_log_scroll: 0,
@@ -881,7 +881,7 @@ fn handle_mouse_scroll(ps: &mut PlayingState, kind: MouseEventKind) {
             if ps.show_llamafile_log {
                 ps.llamafile_log_scroll =
                     ps.llamafile_log_scroll.saturating_sub(MOUSE_SCROLL_LINES);
-            } else if ps.right_tab == RightPanelTab::Ai {
+            } else if ps.sidebar_tab == SidebarTab::Ai {
                 ps.chat_scroll = ps.chat_scroll.saturating_sub(MOUSE_SCROLL_LINES);
             } else {
                 ps.log_scroll = ps.log_scroll.saturating_sub(MOUSE_SCROLL_LINES);
@@ -891,7 +891,7 @@ fn handle_mouse_scroll(ps: &mut PlayingState, kind: MouseEventKind) {
             if ps.show_llamafile_log {
                 ps.llamafile_log_scroll =
                     ps.llamafile_log_scroll.saturating_add(MOUSE_SCROLL_LINES);
-            } else if ps.right_tab == RightPanelTab::Ai {
+            } else if ps.sidebar_tab == SidebarTab::Ai {
                 ps.chat_scroll = ps.chat_scroll.saturating_add(MOUSE_SCROLL_LINES);
             } else {
                 ps.log_scroll = ps.log_scroll.saturating_add(MOUSE_SCROLL_LINES);
@@ -1096,12 +1096,12 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                         }
                     }
                 }
-                // Tab switches the right sidebar between Game and AI tabs,
+                // Tab switches the sidebar between Game and AI tabs,
                 // EXCEPT in TradeBuilder where Tab switches give/get sides.
                 KeyCode::Tab if !matches!(ps.input_mode, InputMode::TradeBuilder { .. }) => {
-                    ps.right_tab = match ps.right_tab {
-                        RightPanelTab::Game => RightPanelTab::Ai,
-                        RightPanelTab::Ai => RightPanelTab::Game,
+                    ps.sidebar_tab = match ps.sidebar_tab {
+                        SidebarTab::Game => SidebarTab::Ai,
+                        SidebarTab::Ai => SidebarTab::Game,
                     };
                     return Action::None;
                 }
@@ -1132,7 +1132,7 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                         KeyCode::Up | KeyCode::Char('k') => {
                             if ps.show_llamafile_log {
                                 ps.llamafile_log_scroll = ps.llamafile_log_scroll.saturating_sub(1);
-                            } else if ps.right_tab == RightPanelTab::Ai {
+                            } else if ps.sidebar_tab == SidebarTab::Ai {
                                 ps.chat_scroll = ps.chat_scroll.saturating_sub(1);
                             } else {
                                 ps.log_scroll = ps.log_scroll.saturating_sub(1);
@@ -1141,7 +1141,7 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                         KeyCode::Down | KeyCode::Char('j') => {
                             if ps.show_llamafile_log {
                                 ps.llamafile_log_scroll = ps.llamafile_log_scroll.saturating_add(1);
-                            } else if ps.right_tab == RightPanelTab::Ai {
+                            } else if ps.sidebar_tab == SidebarTab::Ai {
                                 ps.chat_scroll = ps.chat_scroll.saturating_add(1);
                             } else {
                                 ps.log_scroll = ps.log_scroll.saturating_add(1);

@@ -9,14 +9,14 @@ use super::board_view;
 use super::chat_panel;
 use super::game_log;
 use super::resource_bar;
-use super::{InputMode, PlayingState, RightPanelTab, TradeSide};
+use super::{InputMode, PlayingState, SidebarTab, TradeSide};
 
 // ── Shared layout ────────────────────────────────────────────────────
 
 /// Precomputed areas for the playing screen layout.
 struct PlayingLayout {
     board: Rect,
-    right_panel: Rect,
+    sidebar: Rect,
     context: Rect,
     status: Rect,
     full: Rect,
@@ -25,11 +25,11 @@ struct PlayingLayout {
 /// Compute the playing screen layout areas.
 ///
 /// ```text
-/// +------------------------------------------+--------------+
-/// |                                          | [Game] AI    |
-/// |           BOARD VIEW                     |  (sidebar)   |
-/// |           (hex grid)                     |              |
-/// +------------------------------------------+--------------+
+/// +--------------+------------------------------------------+
+/// | [Game] AI    |                                          |
+/// |  (sidebar)   |           BOARD VIEW                     |
+/// |              |           (hex grid)                     |
+/// +--------------+------------------------------------------+
 /// |  CONTEXT BAR (mode-dependent, hidden when Spectating)    |
 /// +----------------------------------------------------------+
 /// |  Status bar                                               |
@@ -44,7 +44,7 @@ fn compute_layout(size: Rect, input_mode: &InputMode) -> PlayingLayout {
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(15),                // Board + right panel
+            Constraint::Min(15),                // Board + sidebar
             Constraint::Length(context_height), // Context bar (0 when spectating)
             Constraint::Length(1),              // Status bar
         ])
@@ -52,21 +52,21 @@ fn compute_layout(size: Rect, input_mode: &InputMode) -> PlayingLayout {
 
     let top_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Fill(1), Constraint::Length(38)])
+        .constraints([Constraint::Length(38), Constraint::Fill(1)])
         .split(main_chunks[0]);
 
     PlayingLayout {
-        board: top_chunks[0],
-        right_panel: top_chunks[1],
+        board: top_chunks[1],
+        sidebar: top_chunks[0],
         context: main_chunks[1],
         status: main_chunks[2],
         full: size,
     }
 }
 
-/// Render the right panel, context bar, status bar, and help overlay.
+/// Render the sidebar, context bar, status bar, and help overlay.
 fn draw_panels(f: &mut Frame, ps: &PlayingState, layout: &PlayingLayout) {
-    draw_right_panel(f, ps, layout.right_panel);
+    draw_sidebar(f, ps, layout.sidebar);
 
     if layout.context.height > 0 {
         draw_context_bar(f, ps, layout.context);
@@ -78,8 +78,8 @@ fn draw_panels(f: &mut Frame, ps: &PlayingState, layout: &PlayingLayout) {
     }
 }
 
-/// Draw the right panel with tab bar and tab content.
-fn draw_right_panel(f: &mut Frame, ps: &PlayingState, area: Rect) {
+/// Draw the sidebar with tab bar and tab content.
+fn draw_sidebar(f: &mut Frame, ps: &PlayingState, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
@@ -96,11 +96,11 @@ fn draw_right_panel(f: &mut Frame, ps: &PlayingState, area: Rect) {
         .constraints([Constraint::Length(1), Constraint::Min(1)])
         .split(inner);
 
-    draw_tab_bar(f, ps.right_tab, chunks[0]);
+    draw_tab_bar(f, ps.sidebar_tab, chunks[0]);
 
-    match ps.right_tab {
-        RightPanelTab::Game => draw_game_tab(f, ps, chunks[1]),
-        RightPanelTab::Ai => {
+    match ps.sidebar_tab {
+        SidebarTab::Game => draw_game_tab(f, ps, chunks[1]),
+        SidebarTab::Ai => {
             chat_panel::render_chat_inner(
                 &ps.chat_messages,
                 ps.chat_scroll,
@@ -112,13 +112,13 @@ fn draw_right_panel(f: &mut Frame, ps: &PlayingState, area: Rect) {
 }
 
 /// Render the tab selector line: [Game] AI  or  Game [AI]
-fn draw_tab_bar(f: &mut Frame, active: RightPanelTab, area: Rect) {
-    let game_style = if active == RightPanelTab::Game {
+fn draw_tab_bar(f: &mut Frame, active: SidebarTab, area: Rect) {
+    let game_style = if active == SidebarTab::Game {
         Style::default().fg(Color::Black).bg(Color::Cyan).bold()
     } else {
         Style::default().fg(Color::DarkGray)
     };
-    let ai_style = if active == RightPanelTab::Ai {
+    let ai_style = if active == SidebarTab::Ai {
         Style::default().fg(Color::Black).bg(Color::Cyan).bold()
     } else {
         Style::default().fg(Color::DarkGray)

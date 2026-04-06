@@ -169,12 +169,12 @@ fn snapshot_playing_board_cursor() {
     insta::assert_snapshot!("playing_board_cursor", buffer_to_string(&buf));
 }
 
-// ── AI tab in right panel ────────────────────────────────────────────
+// ── AI tab in sidebar ────────────────────────────────────────────────
 
 #[test]
 fn snapshot_playing_ai_tab() {
     let (mut ps, _rx) = make_test_playing_state(InputMode::Spectating);
-    ps.right_tab = RightPanelTab::Ai;
+    ps.sidebar_tab = SidebarTab::Ai;
     ps.chat_messages = vec![
         chat_panel::ChatMessage {
             player: "Alice".into(),

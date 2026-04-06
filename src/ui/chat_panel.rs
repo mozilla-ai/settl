@@ -91,7 +91,7 @@ fn estimate_visual_lines(lines: &[Line], width: usize) -> usize {
     total
 }
 
-/// Render AI chat content without a border (for right-panel tab use).
+/// Render AI chat content without a border (for sidebar tab use).
 pub fn render_chat_inner(messages: &[ChatMessage], scroll: u16, area: Rect, buf: &mut Buffer) {
     let lines = build_chat_lines(messages);
     let inner_width = area.width.max(1) as usize;
