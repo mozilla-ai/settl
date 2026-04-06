@@ -1402,19 +1402,26 @@ pub fn draw_llamafile_setup(f: &mut Frame, state: &LlamafileSetupState) {
     f.render_widget(title, title_area);
 
     // Status text.
+    let model_name = state
+        .saved_config
+        .model_names
+        .get(state.saved_config.model_index)
+        .map(|s| s.as_str())
+        .unwrap_or("AI model");
     let status_text = match &state.status {
-        LlamafileStatus::Checking => "Checking for Bonsai-8B...".to_string(),
+        LlamafileStatus::Checking => format!("Checking for {}...", model_name),
         LlamafileStatus::Downloading { bytes, total } => {
             if *total > 0 {
                 let pct = (*bytes as f64 / *total as f64 * 100.0) as u16;
                 format!(
-                    "Downloading Bonsai-8B... {} / {} ({}%)",
+                    "Downloading {}... {} / {} ({}%)",
+                    model_name,
                     format_bytes(*bytes),
                     format_bytes(*total),
                     pct
                 )
             } else {
-                format!("Downloading Bonsai-8B... {}", format_bytes(*bytes))
+                format!("Downloading {}... {}", model_name, format_bytes(*bytes))
             }
         }
         LlamafileStatus::Preparing => "Making executable...".to_string(),
