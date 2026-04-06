@@ -656,3 +656,51 @@ async fn ai_reasoning_events_emitted() {
         }
     }
 }
+
+// ── Test: Resume Game Populates Game Log ────────────────────────────
+
+#[test]
+fn resume_game_populates_game_log_with_history() {
+    use crate::game::board::{HexCoord, VertexCoord, VertexDirection};
+    use crate::game::event::{format_event, GameEvent};
+
+    let player_names: Vec<String> = vec!["Alice".into(), "Bob".into(), "Charlie".into()];
+
+    let events = vec![
+        GameEvent::DiceRolled {
+            player: 0,
+            values: (3, 4),
+            total: 7,
+        },
+        GameEvent::RobberMoved {
+            player: 0,
+            to: HexCoord::new(1, 2),
+            stole_from: Some(1),
+        },
+        GameEvent::SettlementBuilt {
+            player: 1,
+            vertex: VertexCoord::new(HexCoord::new(0, 0), VertexDirection::North),
+            reasoning: "good spot".into(),
+        },
+    ];
+
+    // Format events the same way resume_game does.
+    let history_messages: Vec<String> = events
+        .iter()
+        .map(|e| format_event(e, &player_names))
+        .collect();
+
+    let (_ui_tx, ui_rx) = mpsc::unbounded_channel::<UiEvent>();
+    let mut ps = PlayingState::new(ui_rx, player_names, false);
+
+    // Pre-populate messages, matching the resume_game code path.
+    for msg in &history_messages {
+        ps.push_message(msg.clone());
+    }
+
+    // The initial 2 messages + 3 history messages should all be present.
+    assert_eq!(ps.messages.len(), 5);
+    assert!(ps.messages[2].contains("Alice rolled 7"));
+    assert!(ps.messages[3].contains("robber"));
+    assert!(ps.messages[4].contains("Bob built settlement"));
+}

@@ -1794,6 +1794,14 @@ fn resume_game(
     let player_names = save.player_names.clone();
     let save_configs = save.player_configs.clone();
     let model_name = save.model_name.clone();
+
+    // Format saved events for the game log before moving them to the orchestrator.
+    let history_messages: Vec<String> = save
+        .events
+        .iter()
+        .map(|e| crate::game::event::format_event(e, &player_names))
+        .collect();
+
     let events = save.events;
     let state = save.game_state;
 
@@ -1812,6 +1820,9 @@ fn resume_game(
     let human_player_index = save.player_configs.iter().position(|p| p.is_human);
 
     let mut ps = PlayingState::new(rx, player_names, has_human);
+    for msg in history_messages {
+        ps.push_message(msg);
+    }
     ps.llamafile_log = llamafile_log;
     ps.human_player_index = human_player_index;
     if let Some((_, prompt_rx, response_tx)) = human_channels {
