@@ -1791,6 +1791,95 @@ fn board_cursor_esc_does_not_send_response() {
     }
 }
 
+#[test]
+fn board_cursor_hjkl_reaches_hex_diagonal_neighbors() {
+    // Positions matching real hex grid spacing (HEX_COL_R=10, HEX_ROW=8).
+    // Center hex at (50, 25), with diagonal neighbors at dx=+/-10, dy=+/-8.
+    // Before the fix, Up/Down could never reach diagonal neighbors because
+    // the 90-degree cone check (dy.abs() >= dx.abs()) failed for 8 >= 10.
+    let positions = vec![
+        CursorTarget {
+            screen_col: 50,
+            screen_row: 25,
+        }, // 0: center
+        CursorTarget {
+            screen_col: 60,
+            screen_row: 17,
+        }, // 1: NE (dx=+10, dy=-8)
+        CursorTarget {
+            screen_col: 40,
+            screen_row: 17,
+        }, // 2: NW (dx=-10, dy=-8)
+        CursorTarget {
+            screen_col: 60,
+            screen_row: 33,
+        }, // 3: SE (dx=+10, dy=+8)
+        CursorTarget {
+            screen_col: 40,
+            screen_row: 33,
+        }, // 4: SW (dx=-10, dy=+8)
+        CursorTarget {
+            screen_col: 70,
+            screen_row: 25,
+        }, // 5: E  (dx=+20, dy=0)
+        CursorTarget {
+            screen_col: 30,
+            screen_row: 25,
+        }, // 6: W  (dx=-20, dy=0)
+    ];
+
+    // Start at center, press 'k' (up) -- should reach NE or NW, not stay stuck.
+    let (ps, _rx) = make_test_playing_state(InputMode::BoardCursor {
+        legal: CursorLegal::Settlements(Vec::new()),
+        positions: positions.clone(),
+        selected: 0,
+    });
+    let mut app = make_test_app(Screen::Playing(ps));
+    handle_input(&mut app, KeyCode::Char('k'));
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BoardCursor { selected, .. } = &ps.input_mode {
+            assert!(
+                *selected == 1 || *selected == 2,
+                "'k' from center should reach a northern diagonal neighbor, got index {selected}"
+            );
+        }
+    }
+
+    // Start at center, press 'j' (down) -- should reach SE or SW.
+    let (ps, _rx) = make_test_playing_state(InputMode::BoardCursor {
+        legal: CursorLegal::Settlements(Vec::new()),
+        positions: positions.clone(),
+        selected: 0,
+    });
+    let mut app = make_test_app(Screen::Playing(ps));
+    handle_input(&mut app, KeyCode::Char('j'));
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BoardCursor { selected, .. } = &ps.input_mode {
+            assert!(
+                *selected == 3 || *selected == 4,
+                "'j' from center should reach a southern diagonal neighbor, got index {selected}"
+            );
+        }
+    }
+
+    // Verify 'l' (right) still works -- should reach E neighbor.
+    let (ps, _rx) = make_test_playing_state(InputMode::BoardCursor {
+        legal: CursorLegal::Settlements(Vec::new()),
+        positions,
+        selected: 0,
+    });
+    let mut app = make_test_app(Screen::Playing(ps));
+    handle_input(&mut app, KeyCode::Char('l'));
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BoardCursor { selected, .. } = &ps.input_mode {
+            assert!(
+                *selected == 1 || *selected == 3 || *selected == 5,
+                "'l' from center should reach a right-side neighbor, got index {selected}"
+            );
+        }
+    }
+}
+
 // ── Personalities Screen ────────────────────────────────────────────
 
 #[test]

@@ -1550,12 +1550,17 @@ fn find_nearest_in_direction(
         let dx = pos.screen_col as i32 - cur_col;
         let dy = pos.screen_row as i32 - cur_row;
 
-        // Check if position is in the direction of the pressed key (90-degree cone).
+        // Scale by the opposite axis spacing so a 90-degree cone in normalized
+        // space correctly covers diagonal hex neighbors (screen cells are wider
+        // than tall: HEX_COL_R=10, HEX_ROW=8).
+        let scaled_dx = (dx.abs() as i64) * (board_view::HEX_ROW as i64);
+        let scaled_dy = (dy.abs() as i64) * (board_view::HEX_COL_R as i64);
+
         let in_direction = match key {
-            KeyCode::Up | KeyCode::Char('k') => dy < 0 && dy.abs() >= dx.abs(),
-            KeyCode::Down | KeyCode::Char('j') => dy > 0 && dy.abs() >= dx.abs(),
-            KeyCode::Left | KeyCode::Char('h') => dx < 0 && dx.abs() >= dy.abs(),
-            KeyCode::Right | KeyCode::Char('l') => dx > 0 && dx.abs() >= dy.abs(),
+            KeyCode::Up | KeyCode::Char('k') => dy < 0 && scaled_dy >= scaled_dx,
+            KeyCode::Down | KeyCode::Char('j') => dy > 0 && scaled_dy >= scaled_dx,
+            KeyCode::Left | KeyCode::Char('h') => dx < 0 && scaled_dx >= scaled_dy,
+            KeyCode::Right | KeyCode::Char('l') => dx > 0 && scaled_dx >= scaled_dy,
             _ => false,
         };
 
