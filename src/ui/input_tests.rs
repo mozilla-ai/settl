@@ -1459,6 +1459,75 @@ fn board_cursor_hjkl_navigates() {
 }
 
 #[test]
+fn board_cursor_hjkl_navigates_roads() {
+    use crate::game::board::{EdgeCoord, EdgeDirection, HexCoord};
+
+    let edges = vec![
+        EdgeCoord::new(HexCoord::new(0, 0), EdgeDirection::NorthEast),
+        EdgeCoord::new(HexCoord::new(0, 0), EdgeDirection::East),
+        EdgeCoord::new(HexCoord::new(0, 0), EdgeDirection::SouthEast),
+        EdgeCoord::new(HexCoord::new(1, 0), EdgeDirection::NorthEast),
+    ];
+    let positions = vec![
+        CursorTarget {
+            screen_col: 10,
+            screen_row: 5,
+        },
+        CursorTarget {
+            screen_col: 20,
+            screen_row: 5,
+        },
+        CursorTarget {
+            screen_col: 30,
+            screen_row: 5,
+        },
+        CursorTarget {
+            screen_col: 20,
+            screen_row: 10,
+        },
+    ];
+    let (ps, mut rx) = make_test_playing_state(InputMode::BoardCursor {
+        legal: CursorLegal::Roads(edges),
+        positions,
+        selected: 1,
+    });
+    let mut app = make_test_app(Screen::Playing(ps));
+
+    // 'l' should move right, not quick-select.
+    handle_input(&mut app, KeyCode::Char('l'));
+    assert!(rx.try_recv().is_err(), "'l' should navigate, not confirm");
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BoardCursor { selected, .. } = &ps.input_mode {
+            assert_eq!(*selected, 2, "'l' should move right for roads");
+        }
+    }
+
+    // 'h' back left.
+    handle_input(&mut app, KeyCode::Char('h'));
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BoardCursor { selected, .. } = &ps.input_mode {
+            assert_eq!(*selected, 1, "'h' should move left for roads");
+        }
+    }
+
+    // 'j' down.
+    handle_input(&mut app, KeyCode::Char('j'));
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BoardCursor { selected, .. } = &ps.input_mode {
+            assert_eq!(*selected, 3, "'j' should move down for roads");
+        }
+    }
+
+    // 'k' up.
+    handle_input(&mut app, KeyCode::Char('k'));
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BoardCursor { selected, .. } = &ps.input_mode {
+            assert_eq!(*selected, 1, "'k' should move up for roads");
+        }
+    }
+}
+
+#[test]
 fn board_cursor_enter_sends_selected_index() {
     let positions = vec![
         CursorTarget {
