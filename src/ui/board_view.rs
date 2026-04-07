@@ -17,9 +17,9 @@ use super::{CursorLegal, InputMode, PLAYER_COLORS};
 /// Horizontal distance between hex centers in the same row.
 const HEX_COL_Q: i16 = 20;
 /// Horizontal offset per r-row (half of HEX_COL_Q).
-const HEX_COL_R: i16 = 10;
+pub(crate) const HEX_COL_R: i16 = 10;
 /// Vertical distance between hex row centers.
-const HEX_ROW: i16 = 8;
+pub(crate) const HEX_ROW: i16 = 8;
 /// Vertical offset from center to North/South vertex.
 const VERT_OFF: i16 = 6;
 
