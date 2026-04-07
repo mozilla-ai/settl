@@ -507,7 +507,9 @@ impl GameOrchestrator {
                     }
                     log::info!("Turn {}: {} -> {}", turn_num, name, choice);
                     self.send_narration(self.narrate_choice(player_id, choice));
-                    self.send_ui(format!("{}: {}", name, choice), None);
+                    if !is_trade {
+                        self.send_ui(format!("{}: {}", name, choice), None);
+                    }
                     if let Some(winner) = rules::check_victory(&self.state) {
                         return Ok(Some(winner));
                     }
@@ -1154,6 +1156,10 @@ impl GameOrchestrator {
             }
 
             if !eligible.contains(&other_id) {
+                self.send_narration(format!(
+                    "{} can't trade (insufficient resources)",
+                    self.player_names[other_id]
+                ));
                 self.record_event(GameEvent::TradeRejected {
                     by: other_id,
                     reasoning: "Insufficient resources".into(),
@@ -1216,6 +1222,16 @@ impl GameOrchestrator {
         if let Some(acceptor) = accepted_by {
             match trading::negotiation::execute_in_state(&mut self.state, &offer, acceptor) {
                 Ok(()) => {
+                    self.send_ui(
+                        format!(
+                            "Trade: {} gave [{}] to {} for [{}]",
+                            self.player_names[player_id],
+                            offering,
+                            self.player_names[acceptor],
+                            requesting
+                        ),
+                        None,
+                    );
                     self.record_event(GameEvent::PlayerTradeExecuted {
                         proposer: player_id,
                         acceptor,
@@ -1228,6 +1244,13 @@ impl GameOrchestrator {
                 }
             }
         } else {
+            self.send_ui(
+                format!(
+                    "Trade failed: no one accepted [{}] for [{}]",
+                    offering, requesting
+                ),
+                None,
+            );
             self.send_narration("No player could fulfill the trade.".into());
         }
 
