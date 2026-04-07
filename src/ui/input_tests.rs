@@ -2,9 +2,10 @@
 
 use crossterm::event::{KeyCode, MouseEventKind};
 
-use crate::game::actions::TradeOffer;
+use crate::game::actions::{Action as GameAction, TradeOffer};
 use crate::game::board::Resource;
 use crate::player::tui_human::HumanResponse;
+use crate::player::PlayerChoice;
 
 use super::screens::*;
 use super::testing::*;
@@ -2110,4 +2111,168 @@ fn personalities_edit_catchphrases_add_and_done() {
     if let Screen::Personalities(ref state) = app.screen {
         assert!(matches!(state.focus, PersonalitiesFocus::List));
     }
+}
+
+// ── BankTradeBuilder ─────────────────────────────────────────────────
+
+fn test_bank_trade_choices() -> Vec<PlayerChoice> {
+    vec![
+        PlayerChoice::GameAction(GameAction::BankTrade {
+            give: Resource::Wood,
+            get: Resource::Brick,
+        }),
+        PlayerChoice::GameAction(GameAction::BankTrade {
+            give: Resource::Wood,
+            get: Resource::Sheep,
+        }),
+        PlayerChoice::GameAction(GameAction::BankTrade {
+            give: Resource::Wood,
+            get: Resource::Wheat,
+        }),
+        PlayerChoice::GameAction(GameAction::BankTrade {
+            give: Resource::Wood,
+            get: Resource::Ore,
+        }),
+    ]
+}
+
+fn bank_trade_builder_app() -> (
+    PlayingState,
+    tokio::sync::mpsc::UnboundedReceiver<HumanResponse>,
+) {
+    make_test_playing_state(InputMode::BankTradeBuilder {
+        step: BankTradeStep::PickGet,
+        get_resource: None,
+        rates: [4, 4, 4, 4, 4],
+        available: [5, 0, 3, 2, 0],
+        choices: test_bank_trade_choices(),
+        player_id: 0,
+    })
+}
+
+#[test]
+fn bank_trade_pick_get_advances_to_pick_give() {
+    let (ps, _rx) = bank_trade_builder_app();
+    let mut app = make_test_app(Screen::Playing(ps));
+
+    // Press 'b' for Brick (index 1) which is available as a GET resource.
+    handle_input(&mut app, KeyCode::Char('b'));
+
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BankTradeBuilder {
+            step, get_resource, ..
+        } = &ps.input_mode
+        {
+            assert_eq!(*step, BankTradeStep::PickGive);
+            assert_eq!(*get_resource, Some(1));
+        } else {
+            panic!("Expected BankTradeBuilder mode");
+        }
+    }
+}
+
+#[test]
+fn bank_trade_pick_get_ignores_unavailable_resource() {
+    let (ps, _rx) = bank_trade_builder_app();
+    let mut app = make_test_app(Screen::Playing(ps));
+
+    // Wood (index 0) is a GIVE resource, not a GET resource in our test choices.
+    handle_input(&mut app, KeyCode::Char('w'));
+
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BankTradeBuilder { step, .. } = &ps.input_mode {
+            assert_eq!(*step, BankTradeStep::PickGet, "Should remain on PickGet");
+        } else {
+            panic!("Expected BankTradeBuilder mode");
+        }
+    }
+}
+
+#[test]
+fn bank_trade_esc_from_pick_get_cancels() {
+    let (ps, mut rx) = bank_trade_builder_app();
+    let mut app = make_test_app(Screen::Playing(ps));
+
+    handle_input(&mut app, KeyCode::Esc);
+
+    let resp = rx.try_recv().unwrap();
+    assert!(
+        matches!(resp, HumanResponse::Index(idx) if idx == usize::MAX),
+        "Esc from PickGet should send cancel (usize::MAX)"
+    );
+}
+
+#[test]
+fn bank_trade_pick_give_sends_correct_index() {
+    let (mut ps, mut rx) = bank_trade_builder_app();
+    // Advance to PickGive with Brick (index 1) as GET.
+    ps.input_mode = InputMode::BankTradeBuilder {
+        step: BankTradeStep::PickGive,
+        get_resource: Some(1), // Brick
+        rates: [4, 4, 4, 4, 4],
+        available: [5, 0, 3, 2, 0],
+        choices: test_bank_trade_choices(),
+        player_id: 0,
+    };
+    let mut app = make_test_app(Screen::Playing(ps));
+
+    // Press 'w' for Wood -- BankTrade { give: Wood, get: Brick } is index 0.
+    handle_input(&mut app, KeyCode::Char('w'));
+
+    let resp = rx.try_recv().unwrap();
+    assert!(
+        matches!(resp, HumanResponse::Index(0)),
+        "Wood->Brick should be index 0"
+    );
+}
+
+#[test]
+fn bank_trade_esc_from_pick_give_goes_back() {
+    let (mut ps, _rx) = bank_trade_builder_app();
+    ps.input_mode = InputMode::BankTradeBuilder {
+        step: BankTradeStep::PickGive,
+        get_resource: Some(1),
+        rates: [4, 4, 4, 4, 4],
+        available: [5, 0, 3, 2, 0],
+        choices: test_bank_trade_choices(),
+        player_id: 0,
+    };
+    let mut app = make_test_app(Screen::Playing(ps));
+
+    handle_input(&mut app, KeyCode::Esc);
+
+    if let Screen::Playing(ref ps) = app.screen {
+        if let InputMode::BankTradeBuilder {
+            step, get_resource, ..
+        } = &ps.input_mode
+        {
+            assert_eq!(*step, BankTradeStep::PickGet);
+            assert_eq!(*get_resource, None);
+        } else {
+            panic!("Expected BankTradeBuilder mode");
+        }
+    }
+}
+
+#[test]
+fn bank_trade_pick_give_ignores_same_resource() {
+    let (mut ps, mut rx) = bank_trade_builder_app();
+    // GET is Brick (index 1). No BankTrade has give=Brick AND get=Brick.
+    ps.input_mode = InputMode::BankTradeBuilder {
+        step: BankTradeStep::PickGive,
+        get_resource: Some(1), // Brick
+        rates: [4, 4, 4, 4, 4],
+        available: [5, 0, 3, 2, 0],
+        choices: test_bank_trade_choices(),
+        player_id: 0,
+    };
+    let mut app = make_test_app(Screen::Playing(ps));
+
+    // Press 'b' (Brick) -- same as GET, no matching trade exists.
+    handle_input(&mut app, KeyCode::Char('b'));
+
+    assert!(
+        rx.try_recv().is_err(),
+        "Pressing same-as-GET resource should not send a response"
+    );
 }

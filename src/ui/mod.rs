@@ -146,6 +146,15 @@ pub enum TradeSide {
     Get,
 }
 
+/// Which step of the bank trade builder is active.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BankTradeStep {
+    /// Choose which resource to receive.
+    PickGet,
+    /// Choose which resource to spend (rates shown).
+    PickGive,
+}
+
 /// Which tab is active in the sidebar.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SidebarTab {
@@ -193,6 +202,15 @@ pub enum InputMode {
     },
     /// Accepting or rejecting a trade with y/n.
     TradeResponse { offer: TradeOffer },
+    /// Bank trade: two-step resource picker with exchange rates.
+    BankTradeBuilder {
+        step: BankTradeStep,
+        get_resource: Option<usize>,
+        rates: [u32; 5],
+        available: [u32; 5],
+        choices: Vec<PlayerChoice>,
+        player_id: usize,
+    },
 }
 
 /// State for the active game screen.
@@ -361,6 +379,18 @@ impl PlayingState {
                 validation_msg: None,
             },
             PromptKind::RespondToTrade { offer } => InputMode::TradeResponse { offer },
+            PromptKind::BankTrade {
+                rates,
+                available,
+                choices,
+            } => InputMode::BankTradeBuilder {
+                step: BankTradeStep::PickGet,
+                get_resource: None,
+                rates,
+                available,
+                choices,
+                player_id: prompt.player_id,
+            },
         };
     }
 
@@ -1499,6 +1529,62 @@ fn handle_input(app: &mut App, key: KeyCode) -> Action {
                             ps.input_mode = InputMode::Spectating;
                         }
                         _ => {}
+                    }
+                    Action::None
+                }
+
+                InputMode::BankTradeBuilder {
+                    step,
+                    get_resource,
+                    choices,
+                    ..
+                } => {
+                    let resources = Resource::all();
+                    // Collect response index to send after releasing the mutable borrow.
+                    let mut response_idx: Option<usize> = None;
+                    match step {
+                        BankTradeStep::PickGet => {
+                            if let Some(idx) = resource_key_index(key) {
+                                let target = resources[idx];
+                                let has_trade = choices.iter().any(|c| {
+                                    matches!(
+                                        c,
+                                        PlayerChoice::GameAction(
+                                            crate::game::actions::Action::BankTrade { get, .. }
+                                        ) if *get == target
+                                    )
+                                });
+                                if has_trade {
+                                    *get_resource = Some(idx);
+                                    *step = BankTradeStep::PickGive;
+                                }
+                            }
+                            if key == KeyCode::Esc {
+                                response_idx = Some(usize::MAX);
+                            }
+                        }
+                        BankTradeStep::PickGive => {
+                            if let Some(give_idx) = resource_key_index(key) {
+                                let give_res = resources[give_idx];
+                                let get_res = resources[get_resource.unwrap_or(0)];
+                                response_idx = choices.iter().position(|c| {
+                                    matches!(
+                                        c,
+                                        PlayerChoice::GameAction(
+                                            crate::game::actions::Action::BankTrade { give, get }
+                                        ) if *give == give_res && *get == get_res
+                                    )
+                                });
+                            }
+                            if key == KeyCode::Esc {
+                                *step = BankTradeStep::PickGet;
+                                *get_resource = None;
+                            }
+                        }
+                    }
+                    if let Some(idx) = response_idx {
+                        ps.send_response(HumanResponse::Index(idx));
+                        ps.input_mode = InputMode::Spectating;
                     }
                     Action::None
                 }

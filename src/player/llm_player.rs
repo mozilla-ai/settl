@@ -1003,27 +1003,53 @@ impl Player for LlmPlayer {
         );
         let tool = Self::trade_response_tool(self.force_tool_reasoning);
 
-        match self.call_with_retry(&user, tool).await {
+        let result = match self.call_with_retry(&user, tool).await {
             Ok((args, reasoning)) => {
-                let response = match args.get("response").and_then(|v| v.as_str()) {
-                    Some("accept") => TradeResponse::Accept,
-                    _ => TradeResponse::Reject {
+                let raw_response = args
+                    .get("response")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("<missing>");
+                let response = if raw_response.eq_ignore_ascii_case("accept") {
+                    TradeResponse::Accept
+                } else {
+                    TradeResponse::Reject {
                         reason: args
                             .get("reject_reason")
                             .and_then(|v| v.as_str())
                             .unwrap_or("No thanks")
                             .to_string(),
-                    },
+                    }
                 };
+                log::info!(
+                    "[{}] trade response: raw={:?} parsed={} from={} offer=[{}] for=[{}]",
+                    self.name,
+                    raw_response,
+                    if matches!(response, TradeResponse::Accept) {
+                        "ACCEPT"
+                    } else {
+                        "REJECT"
+                    },
+                    from_name,
+                    offering,
+                    requesting,
+                );
                 (response, reasoning)
             }
-            Err(_) => (
-                TradeResponse::Reject {
-                    reason: "Unable to process trade".into(),
-                },
-                "[AI was confused and declined]".into(),
-            ),
-        }
+            Err(e) => {
+                log::warn!(
+                    "[{}] trade response FAILED: {} -- defaulting to reject",
+                    self.name,
+                    e,
+                );
+                (
+                    TradeResponse::Reject {
+                        reason: "Unable to process trade".into(),
+                    },
+                    "[AI was confused and declined]".into(),
+                )
+            }
+        };
+        result
     }
 }
 
@@ -1329,6 +1355,23 @@ mod tests {
     fn trade_response_tool_schema_valid() {
         let tool = LlmPlayer::trade_response_tool(false);
         assert_eq!(tool.name, "respond_to_trade");
+    }
+
+    #[test]
+    fn trade_response_accept_is_case_insensitive() {
+        // Simulate the parsing logic from respond_to_trade.
+        for input in &["accept", "Accept", "ACCEPT", "aCcEpT"] {
+            let args = serde_json::json!({ "response": input });
+            let response = match args.get("response").and_then(|v| v.as_str()) {
+                Some(s) if s.eq_ignore_ascii_case("accept") => "accept",
+                _ => "reject",
+            };
+            assert_eq!(
+                response, "accept",
+                "Input {:?} should parse as accept",
+                input
+            );
+        }
     }
 
     #[test]

@@ -1087,8 +1087,11 @@ impl GameOrchestrator {
             )
             .await;
 
-        let choice = &bank_trades[idx.min(bank_trades.len() - 1)];
-        if let PlayerChoice::GameAction(action) = choice {
+        if idx >= bank_trades.len() {
+            return Ok(()); // cancelled
+        }
+        let choice = &bank_trades[idx];
+        if let PlayerChoice::GameAction(action @ Action::BankTrade { .. }) = choice {
             self.apply_and_log(action.clone(), player_id, &reasoning)
         } else {
             Ok(())

@@ -9,7 +9,7 @@ use super::board_view;
 use super::chat_panel;
 use super::game_log;
 use super::resource_bar;
-use super::{InputMode, PlayingState, SidebarTab, TradeSide};
+use super::{BankTradeStep, InputMode, PlayingState, SidebarTab, TradeSide};
 
 // ── Shared layout ────────────────────────────────────────────────────
 
@@ -397,6 +397,114 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
             f.render_widget(para, inner);
         }
 
+        InputMode::BankTradeBuilder {
+            step,
+            get_resource,
+            rates,
+            available,
+            choices,
+            ..
+        } => {
+            let resources = Resource::all();
+            let res_names = ["[w]ood", "[b]rick", "[s]heep", "[h]eat", "[o]re"];
+
+            match step {
+                BankTradeStep::PickGet => {
+                    let mut spans: Vec<Span> = Vec::new();
+                    for (i, name) in res_names.iter().enumerate() {
+                        if i > 0 {
+                            spans.push(Span::raw("  "));
+                        }
+                        let target = resources[i];
+                        let reachable = choices.iter().any(|c| {
+                            matches!(
+                                c,
+                                crate::player::PlayerChoice::GameAction(
+                                    crate::game::actions::Action::BankTrade { get, .. }
+                                ) if *get == target
+                            )
+                        });
+                        let style = if reachable {
+                            Style::default().fg(Color::White)
+                        } else {
+                            Style::default().fg(Color::DarkGray)
+                        };
+                        spans.push(Span::styled(*name, style));
+                    }
+                    let lines = vec![
+                        Line::from(Span::styled(
+                            " Bank Trade -- choose resource to receive:",
+                            Style::default().fg(Color::Yellow).bold(),
+                        )),
+                        Line::from(
+                            vec![Span::raw(" ")]
+                                .into_iter()
+                                .chain(spans)
+                                .collect::<Vec<_>>(),
+                        ),
+                        Line::from(Span::styled(
+                            " [Esc] cancel",
+                            Style::default().fg(Color::DarkGray),
+                        )),
+                    ];
+                    let para = Paragraph::new(lines);
+                    f.render_widget(para, inner);
+                }
+                BankTradeStep::PickGive => {
+                    let get_idx = get_resource.unwrap_or(0);
+                    let get_res = resources[get_idx];
+                    let mut spans: Vec<Span> = Vec::new();
+                    for (i, name) in res_names.iter().enumerate() {
+                        if i > 0 {
+                            spans.push(Span::raw("  "));
+                        }
+                        let give_res = resources[i];
+                        let has_trade = choices.iter().any(|c| {
+                            matches!(
+                                c,
+                                crate::player::PlayerChoice::GameAction(
+                                    crate::game::actions::Action::BankTrade { give, get }
+                                ) if *give == give_res && *get == get_res
+                            )
+                        });
+                        if has_trade {
+                            spans.push(Span::styled(
+                                format!("{}x{}", rates[i], name),
+                                Style::default().fg(Color::White),
+                            ));
+                        } else {
+                            spans.push(Span::styled(*name, Style::default().fg(Color::DarkGray)));
+                        }
+                    }
+                    let lines = vec![
+                        Line::from(Span::styled(
+                            format!(" Receive 1 {} -- choose resource to spend:", get_res),
+                            Style::default().fg(Color::Yellow).bold(),
+                        )),
+                        Line::from(
+                            vec![Span::raw(" ")]
+                                .into_iter()
+                                .chain(spans)
+                                .collect::<Vec<_>>(),
+                        ),
+                        Line::from(Span::styled(
+                            format!(
+                                " Have: W:{} B:{} S:{} H:{} O:{}   [Esc] back",
+                                available[0],
+                                available[1],
+                                available[2],
+                                available[3],
+                                available[4]
+                            ),
+                            Style::default().fg(Color::DarkGray),
+                        )),
+                    ];
+                    let para = Paragraph::new(lines);
+                    f.render_widget(para, inner);
+                }
+            }
+        }
+
         InputMode::TradeResponse { offer } => {
             let offering: String = offer
                 .offering
@@ -449,6 +557,7 @@ fn draw_status_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
         InputMode::ResourcePicker { .. } => " PICK RESOURCE ",
         InputMode::StealTarget { .. } => " STEAL ",
         InputMode::TradeResponse { .. } => " TRADE OFFER ",
+        InputMode::BankTradeBuilder { .. } => " BANK TRADE ",
     };
     let roll_span = if let Some((d1, d2, total)) = ps.last_roll {
         let is_seven = total == 7;

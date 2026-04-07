@@ -75,6 +75,7 @@ fn prompt_kind_name(kind: &PromptKind) -> &'static str {
         PromptKind::ChooseResource { .. } => "ChooseResource",
         PromptKind::ProposeTrade { .. } => "ProposeTrade",
         PromptKind::RespondToTrade { .. } => "RespondToTrade",
+        PromptKind::BankTrade { .. } => "BankTrade",
     }
 }
 
@@ -92,6 +93,7 @@ fn default_response(kind: &PromptKind) -> HumanResponse {
         }
         PromptKind::ProposeTrade { .. } => HumanResponse::Trade(None),
         PromptKind::RespondToTrade { .. } => HumanResponse::TradeAnswer(false),
+        PromptKind::BankTrade { .. } => HumanResponse::Index(0),
     }
 }
 

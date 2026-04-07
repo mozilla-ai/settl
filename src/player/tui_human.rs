@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
-use crate::game::actions::{PlayerId, TradeOffer, TradeResponse};
+use crate::game::actions::{Action, PlayerId, TradeOffer, TradeResponse};
 use crate::game::board::{EdgeCoord, HexCoord, Resource, VertexCoord};
 use crate::game::state::GameState;
 use crate::player::{Player, PlayerChoice};
@@ -36,6 +36,12 @@ pub enum PromptKind {
     ProposeTrade { available: [u32; 5] },
     /// Accept or reject an incoming trade offer.
     RespondToTrade { offer: TradeOffer },
+    /// Bank trade: two-step resource picker showing exchange rates.
+    BankTrade {
+        rates: [u32; 5],
+        available: [u32; 5],
+        choices: Vec<PlayerChoice>,
+    },
 }
 
 /// A prompt sent from the game engine to the TUI for human input.
@@ -135,10 +141,39 @@ impl Player for TuiHumanPlayer {
 
     async fn choose_action(
         &self,
-        _state: &GameState,
+        state: &GameState,
         player_id: PlayerId,
         choices: &[PlayerChoice],
     ) -> (usize, String) {
+        // Detect bank trade sub-menu and route to dedicated picker.
+        let all_bank = !choices.is_empty()
+            && choices
+                .iter()
+                .all(|c| matches!(c, PlayerChoice::GameAction(Action::BankTrade { .. })));
+
+        if all_bank {
+            let ps = &state.players[player_id];
+            let resources = Resource::all();
+            let rates: [u32; 5] = std::array::from_fn(|i| {
+                crate::game::rules::trade_rate(state, player_id, resources[i])
+            });
+            let available: [u32; 5] = std::array::from_fn(|i| ps.resource_count(resources[i]));
+            let response = self
+                .send_prompt(
+                    player_id,
+                    PromptKind::BankTrade {
+                        rates,
+                        available,
+                        choices: choices.to_vec(),
+                    },
+                )
+                .await;
+            return match response {
+                HumanResponse::Index(i) => (i, String::new()),
+                _ => (usize::MAX, String::new()),
+            };
+        }
+
         let max = choices.len().saturating_sub(1);
         let idx = self
             .pick_index(
