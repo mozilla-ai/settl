@@ -662,7 +662,7 @@ async fn ai_reasoning_events_emitted() {
 #[test]
 fn resume_game_populates_game_log_with_history() {
     use crate::game::board::{HexCoord, VertexCoord, VertexDirection};
-    use crate::game::event::{format_event, GameEvent};
+    use crate::game::event::{format_event_for_log, GameEvent};
 
     let player_names: Vec<String> = vec!["Alice".into(), "Bob".into(), "Charlie".into()];
 
@@ -687,7 +687,7 @@ fn resume_game_populates_game_log_with_history() {
     // Format events the same way resume_game does.
     let history_messages: Vec<String> = events
         .iter()
-        .map(|e| format_event(e, &player_names))
+        .map(|e| format_event_for_log(e, &player_names))
         .collect();
 
     let (_ui_tx, ui_rx) = mpsc::unbounded_channel::<UiEvent>();

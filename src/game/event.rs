@@ -124,9 +124,32 @@ pub enum GameEvent {
     },
 }
 
+/// Format a game event for the game log (strips AI reasoning to avoid leaking
+/// strategic information to the human player).
+pub fn format_event_for_log(event: &GameEvent, player_names: &[String]) -> String {
+    format_event_inner(event, player_names, false)
+}
+
 /// Format a game event for human-readable display (used for LLM context).
 pub fn format_event(event: &GameEvent, player_names: &[String]) -> String {
+    format_event_inner(event, player_names, true)
+}
+
+fn format_event_inner(
+    event: &GameEvent,
+    player_names: &[String],
+    include_reasoning: bool,
+) -> String {
     let name = |p: PlayerId| -> &str { player_names.get(p).map(|s| s.as_str()).unwrap_or("???") };
+
+    /// Append ` -- {reasoning}` only when reasoning should be shown.
+    fn maybe_reasoning(base: String, reasoning: &str, include: bool) -> String {
+        if include && !reasoning.is_empty() {
+            format!("{} -- {}", base, reasoning)
+        } else {
+            base
+        }
+    }
 
     match event {
         GameEvent::TurnStarted { player, is_human } => {
@@ -165,37 +188,41 @@ pub fn format_event(event: &GameEvent, player_names: &[String]) -> String {
             player,
             vertex,
             reasoning,
-        } => {
+        } => maybe_reasoning(
             format!(
-                "{} built settlement at ({},{},{:?}) -- {}",
+                "{} built settlement at ({},{},{:?})",
                 name(*player),
                 vertex.hex.q,
                 vertex.hex.r,
                 vertex.dir,
-                reasoning
-            )
-        }
+            ),
+            reasoning,
+            include_reasoning,
+        ),
         GameEvent::CityUpgraded {
             player,
             vertex,
             reasoning,
-        } => {
+        } => maybe_reasoning(
             format!(
-                "{} upgraded to city at ({},{},{:?}) -- {}",
+                "{} upgraded to city at ({},{},{:?})",
                 name(*player),
                 vertex.hex.q,
                 vertex.hex.r,
                 vertex.dir,
-                reasoning
-            )
-        }
+            ),
+            reasoning,
+            include_reasoning,
+        ),
         GameEvent::RoadBuilt {
             player,
             edge,
             reasoning,
-        } => {
-            format!("{} built road at {} -- {}", name(*player), edge, reasoning)
-        }
+        } => maybe_reasoning(
+            format!("{} built road at {}", name(*player), edge),
+            reasoning,
+            include_reasoning,
+        ),
         GameEvent::TradeProposed {
             from,
             offer,
@@ -213,20 +240,27 @@ pub fn format_event(event: &GameEvent, player_names: &[String]) -> String {
                 .map(|(r, n)| format!("{} {}", n, r))
                 .collect::<Vec<_>>()
                 .join(", ");
-            format!(
-                "{} proposed trade: [{}] for [{}] -- {}",
-                name(*from),
-                offering,
-                requesting,
-                reasoning
+            maybe_reasoning(
+                format!(
+                    "{} proposed trade: [{}] for [{}]",
+                    name(*from),
+                    offering,
+                    requesting,
+                ),
+                reasoning,
+                include_reasoning,
             )
         }
-        GameEvent::TradeAccepted { by, reasoning } => {
-            format!("{} accepted trade -- {}", name(*by), reasoning)
-        }
-        GameEvent::TradeRejected { by, reasoning } => {
-            format!("{} rejected trade -- {}", name(*by), reasoning)
-        }
+        GameEvent::TradeAccepted { by, reasoning } => maybe_reasoning(
+            format!("{} accepted trade", name(*by)),
+            reasoning,
+            include_reasoning,
+        ),
+        GameEvent::TradeRejected { by, reasoning } => maybe_reasoning(
+            format!("{} rejected trade", name(*by)),
+            reasoning,
+            include_reasoning,
+        ),
         GameEvent::TradeWithdrawn { by } => {
             format!("{} withdrew trade", name(*by))
         }
@@ -271,9 +305,11 @@ pub fn format_event(event: &GameEvent, player_names: &[String]) -> String {
             player,
             card,
             reasoning,
-        } => {
-            format!("{} played {} -- {}", name(*player), card, reasoning)
-        }
+        } => maybe_reasoning(
+            format!("{} played {}", name(*player), card),
+            reasoning,
+            include_reasoning,
+        ),
         GameEvent::RobberMoved {
             player,
             to,
@@ -297,5 +333,82 @@ pub fn format_event(event: &GameEvent, player_names: &[String]) -> String {
         GameEvent::GameWon { player, final_vp } => {
             format!("{} wins with {} VP!", name(*player), final_vp)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::game::board::{HexCoord, Resource, VertexCoord, VertexDirection};
+
+    fn names() -> Vec<String> {
+        vec!["Alice".into(), "Bob".into()]
+    }
+
+    #[test]
+    fn format_event_for_log_strips_trade_reasoning() {
+        let event = GameEvent::TradeProposed {
+            from: 0,
+            offer: TradeOffer {
+                from: 0,
+                offering: vec![(Resource::Wood, 1)],
+                requesting: vec![(Resource::Ore, 1)],
+                message: String::new(),
+            },
+            reasoning: "I need ore for a city and have spare wood".into(),
+        };
+        let log_text = format_event_for_log(&event, &names());
+        assert!(!log_text.contains("I need ore"));
+        assert!(!log_text.contains("--"));
+        assert!(log_text.contains("Alice proposed trade"));
+
+        let llm_text = format_event(&event, &names());
+        assert!(llm_text.contains("I need ore"));
+    }
+
+    #[test]
+    fn format_event_for_log_strips_accept_reject_reasoning() {
+        let accept = GameEvent::TradeAccepted {
+            by: 1,
+            reasoning: "This gives me what I need for a settlement".into(),
+        };
+        let reject = GameEvent::TradeRejected {
+            by: 1,
+            reasoning: "Bad deal, I'm saving ore".into(),
+        };
+
+        let accept_log = format_event_for_log(&accept, &names());
+        assert!(!accept_log.contains("settlement"));
+        assert!(accept_log.contains("Bob accepted trade"));
+
+        let reject_log = format_event_for_log(&reject, &names());
+        assert!(!reject_log.contains("saving ore"));
+        assert!(reject_log.contains("Bob rejected trade"));
+    }
+
+    #[test]
+    fn format_event_for_log_strips_build_reasoning() {
+        let event = GameEvent::SettlementBuilt {
+            player: 0,
+            vertex: VertexCoord::new(HexCoord::new(0, 0), VertexDirection::North),
+            reasoning: "Best spot for wheat access".into(),
+        };
+        let log_text = format_event_for_log(&event, &names());
+        assert!(!log_text.contains("wheat access"));
+        assert!(log_text.contains("Alice built settlement"));
+    }
+
+    #[test]
+    fn format_event_keeps_reasoning_for_llm() {
+        let event = GameEvent::RoadBuilt {
+            player: 0,
+            edge: crate::game::board::EdgeCoord::new(
+                HexCoord::new(0, 0),
+                crate::game::board::EdgeDirection::NorthEast,
+            ),
+            reasoning: "Extending toward the port".into(),
+        };
+        let llm_text = format_event(&event, &names());
+        assert!(llm_text.contains("Extending toward the port"));
     }
 }

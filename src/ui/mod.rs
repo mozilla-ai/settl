@@ -1920,7 +1920,7 @@ fn resume_game(
     let history_messages: Vec<String> = save
         .events
         .iter()
-        .map(|e| crate::game::event::format_event(e, &player_names))
+        .map(|e| crate::game::event::format_event_for_log(e, &player_names))
         .collect();
 
     let events = save.events;
