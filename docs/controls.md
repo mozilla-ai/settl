@@ -46,12 +46,11 @@ When placing settlements, roads, or the robber:
 | Key | Action |
 |-----|--------|
 | `Arrow keys` | Move to nearest legal position |
+| `h` / `j` / `k` / `l` | Vim-style directional movement |
 | `n` / `p` | Next / previous legal position |
-| `j` / `k` / `l` / `m` | Quick-select road by label (roads only) |
 | `Enter` | Confirm placement |
 
 Legal positions are highlighted in yellow. Your cursor position shows in reverse video.
-During road placement, positions are labeled `j`/`k`/`l`/`m` on the board for one-keystroke selection.
 
 ## Resource Keys
 
