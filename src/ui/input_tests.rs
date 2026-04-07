@@ -1468,6 +1468,25 @@ fn push_message_scrolls_to_bottom_when_auto_scroll_on() {
     assert_eq!(ps.log_scroll, u16::MAX, "auto-scroll should jump to bottom");
 }
 
+#[test]
+fn chat_auto_scroll_off_prevents_ai_event_scroll() {
+    let (mut ps, _rx) = make_test_playing_state(InputMode::Spectating);
+    ps.chat_scroll = 5;
+    ps.chat_auto_scroll = false;
+
+    // Simulate receiving an AI reasoning event.
+    ps.handle_game_event(UiEvent::AiReasoning {
+        player_id: 0,
+        player_name: "Alice".into(),
+        reasoning: "test reasoning".into(),
+    });
+
+    assert_eq!(
+        ps.chat_scroll, 5,
+        "chat scroll should not change when auto-scroll is off"
+    );
+}
+
 // ── PostGame ─────────────────────────────────────────────────────────
 
 #[test]

@@ -938,32 +938,8 @@ const MOUSE_SCROLL_LINES: u16 = 3;
 
 fn handle_mouse_scroll(ps: &mut PlayingState, kind: MouseEventKind) {
     match kind {
-        MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
-            let up = matches!(kind, MouseEventKind::ScrollUp);
-            if ps.show_llamafile_log {
-                if up {
-                    ps.llamafile_log_scroll =
-                        ps.llamafile_log_scroll.saturating_sub(MOUSE_SCROLL_LINES);
-                } else {
-                    ps.llamafile_log_scroll =
-                        ps.llamafile_log_scroll.saturating_add(MOUSE_SCROLL_LINES);
-                }
-            } else if ps.sidebar_tab == SidebarTab::Ai {
-                ps.chat_auto_scroll = false;
-                if up {
-                    ps.chat_scroll = ps.chat_scroll.saturating_sub(MOUSE_SCROLL_LINES);
-                } else {
-                    ps.chat_scroll = ps.chat_scroll.saturating_add(MOUSE_SCROLL_LINES);
-                }
-            } else {
-                ps.log_auto_scroll = false;
-                if up {
-                    ps.log_scroll = ps.log_scroll.saturating_sub(MOUSE_SCROLL_LINES);
-                } else {
-                    ps.log_scroll = ps.log_scroll.saturating_add(MOUSE_SCROLL_LINES);
-                }
-            }
-        }
+        MouseEventKind::ScrollUp => sidebar_scroll(ps, true, MOUSE_SCROLL_LINES),
+        MouseEventKind::ScrollDown => sidebar_scroll(ps, false, MOUSE_SCROLL_LINES),
         _ => {}
     }
 }
