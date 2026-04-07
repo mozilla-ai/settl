@@ -312,15 +312,13 @@ resources and actions in the same prompt.
 | Key | Action |
 |-----|--------|
 | `←` `→` `↑` `↓` | Move cursor between legal positions |
+| `h` / `j` / `k` / `l` | Vim-style directional movement (left/down/up/right) |
 | `Enter` | Confirm placement |
 | `n` / `p` | Next/previous legal position (cycles through list) |
-| `j` / `k` / `l` / `m` | Quick-select road position by label (roads only) |
 
-Arrow navigation uses nearest-neighbor in the pressed direction. `n`/`p` provide
-a linear cycle when arrow navigation is ambiguous on the hex grid.
-
-During road placement, legal positions are labeled `j`/`k`/`l`/`m` on the board.
-Pressing the label key selects and confirms that road in one keystroke.
+Arrow navigation uses nearest-neighbor in the pressed direction. `h`/`j`/`k`/`l` work
+identically as vim-style aliases. `n`/`p` provide a linear cycle when arrow navigation
+is ambiguous on the hex grid.
 
 #### Quick Trade (the key innovation)
 Trade is the most keyboard-intensive action in the game. The trade builder optimizes for
