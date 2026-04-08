@@ -41,6 +41,9 @@ impl std::fmt::Display for OrchestratorError {
 
 impl std::error::Error for OrchestratorError {}
 
+/// A (offering, requesting) resource pair identifying a trade offer for dedup.
+type TradeOfferKey = (Vec<(Resource, u32)>, Vec<(Resource, u32)>);
+
 /// Drives a complete game from setup through victory.
 pub struct GameOrchestrator {
     pub state: GameState,
@@ -59,6 +62,8 @@ pub struct GameOrchestrator {
     pub player_configs: Vec<crate::game::save::SavedPlayerConfig>,
     /// Name of the AI model in use (for auto-save, matches Config.models entry).
     pub model_name: String,
+    /// Trade offers rejected this turn, to prevent duplicate proposals.
+    turn_rejected_offers: Vec<TradeOfferKey>,
 }
 
 impl GameOrchestrator {
@@ -74,6 +79,7 @@ impl GameOrchestrator {
             ui_tx: None,
             player_configs: Vec::new(),
             model_name: String::new(),
+            turn_rejected_offers: Vec::new(),
         }
     }
 
@@ -354,6 +360,7 @@ impl GameOrchestrator {
 
     /// Run a single player's turn. Returns Some(winner) if the game ends.
     async fn run_turn(&mut self) -> Result<Option<PlayerId>, OrchestratorError> {
+        self.turn_rejected_offers.clear();
         let player_id = self.state.current_player();
         let is_human = self.players[player_id].is_human();
         let name = self.player_names[player_id].clone();
@@ -1140,6 +1147,18 @@ impl GameOrchestrator {
             )));
         }
 
+        // Skip duplicate trade offers that were already rejected this turn.
+        let offer_key = (offer.offering.clone(), offer.requesting.clone());
+        if self.turn_rejected_offers.contains(&offer_key) {
+            log::info!(
+                "{} re-proposed a trade that was already rejected this turn, skipping",
+                self.player_names[player_id]
+            );
+            return Err(OrchestratorError::RuleViolation(
+                "Duplicate trade already rejected this turn".into(),
+            ));
+        }
+
         let offering: String = offer
             .offering
             .iter()
@@ -1274,6 +1293,7 @@ impl GameOrchestrator {
                 None,
             );
             self.send_narration("No player could fulfill the trade.".into());
+            self.turn_rejected_offers.push(offer_key);
         }
 
         Ok(())
