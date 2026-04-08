@@ -188,10 +188,17 @@ impl GameOrchestrator {
         );
 
         // Send initial state so the TUI can render the board before any prompts arrive.
-        self.send_ui("Game starting...".into(), None);
+        // When resuming a saved game, skip the "Game starting" message since the
+        // game log already contains the full history from the save file.
+        let is_resume = !matches!(self.state.phase, GamePhase::Setup { .. });
+        if is_resume {
+            self.send_ui(String::new(), None);
+        } else {
+            self.send_ui("Game starting...".into(), None);
+        }
 
         // Skip setup if the game is already past the setup phase (e.g. resumed).
-        if matches!(self.state.phase, GamePhase::Setup { .. }) {
+        if !is_resume {
             self.run_setup().await?;
             log::info!("Setup phase complete");
 
@@ -1819,6 +1826,86 @@ mod tests {
         assert!(
             result.is_err(),
             "Trade offering resources the player doesn't have must fail validation"
+        );
+    }
+
+    #[tokio::test]
+    async fn resumed_game_skips_game_starting_message() {
+        let (tx, mut rx) = mpsc::unbounded_channel::<UiEvent>();
+        let mut orch = make_orchestrator(3);
+        orch.max_turns = 5;
+        orch.ui_tx = Some(tx);
+
+        // Simulate a resumed game: put the state into Playing phase as if
+        // setup already completed in a previous session.
+        orch.state.phase = GamePhase::Playing {
+            current_player: 0,
+            has_rolled: false,
+        };
+        // Place the minimum buildings so the game can proceed (setup normally
+        // places these, but we're resuming past setup).
+        use crate::game::board::{VertexCoord, VertexDirection};
+        use crate::game::state::Building;
+        for player_id in 0..3 {
+            let hex = orch.state.board.hexes[player_id * 2].coord;
+            let vtx = VertexCoord::new(hex, VertexDirection::North);
+            orch.state
+                .buildings
+                .insert(vtx, Building::Settlement(player_id));
+            orch.state.players[player_id].settlements_remaining -= 1;
+        }
+
+        let handle = tokio::spawn(async move { orch.run().await });
+
+        let mut messages: Vec<String> = Vec::new();
+        while let Some(event) = rx.recv().await {
+            if let UiEvent::StateUpdate { message, .. } = event {
+                messages.push(message);
+            }
+        }
+
+        let _ = handle.await;
+
+        // The first StateUpdate should have an empty message (no "Game starting...").
+        assert!(
+            !messages.is_empty(),
+            "Should receive at least one state update"
+        );
+        assert_eq!(
+            messages[0], "",
+            "Resumed games must not show 'Game starting...' in the game log"
+        );
+        // Verify "Game starting..." never appears anywhere.
+        assert!(
+            !messages.iter().any(|m| m.contains("Game starting")),
+            "Resumed game log must not contain 'Game starting'"
+        );
+    }
+
+    #[tokio::test]
+    async fn new_game_shows_game_starting_message() {
+        let (tx, mut rx) = mpsc::unbounded_channel::<UiEvent>();
+        let mut orch = make_orchestrator(3);
+        orch.max_turns = 5;
+        orch.ui_tx = Some(tx);
+
+        let handle = tokio::spawn(async move { orch.run().await });
+
+        let mut first_message = None;
+        while let Some(event) = rx.recv().await {
+            if let UiEvent::StateUpdate { message, .. } = event {
+                if first_message.is_none() {
+                    first_message = Some(message);
+                }
+            }
+        }
+
+        let _ = handle.await;
+
+        assert_eq!(
+            first_message.as_deref(),
+            Some("Game starting..."),
+            "Fresh games should show 'Game starting...' in the game log"
         );
     }
 }
