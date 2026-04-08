@@ -2179,7 +2179,7 @@ dependencies = [
 
 [[package]]
 name = "settl"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "async-trait",
  "cargo-husky",
