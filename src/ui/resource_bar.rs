@@ -8,7 +8,7 @@ use crate::game::board::Resource;
 use crate::game::state::GameState;
 
 /// Resource display colors.
-fn resource_color(r: Resource) -> Color {
+pub(crate) fn resource_color(r: Resource) -> Color {
     match r {
         Resource::Wood => Color::Green,
         Resource::Brick => Color::Red,

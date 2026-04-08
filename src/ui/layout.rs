@@ -506,18 +506,32 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
         }
 
         InputMode::TradeResponse { offer } => {
-            let offering: String = offer
-                .offering
-                .iter()
-                .map(|(r, n)| format!("{} {}", n, r))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let requesting: String = offer
-                .requesting
-                .iter()
-                .map(|(r, n)| format!("{} {}", n, r))
-                .collect::<Vec<_>>()
-                .join(", ");
+            let mut offer_spans: Vec<Span> = vec![Span::styled(
+                " Offering: ",
+                Style::default().fg(Color::White),
+            )];
+            for (i, (r, n)) in offer.offering.iter().enumerate() {
+                if i > 0 {
+                    offer_spans.push(Span::styled(", ", Style::default().fg(Color::White)));
+                }
+                offer_spans.push(Span::styled(
+                    format!("{} {}", n, r),
+                    Style::default().fg(resource_bar::resource_color(*r)),
+                ));
+            }
+            offer_spans.push(Span::styled(
+                "  Wanting: ",
+                Style::default().fg(Color::White),
+            ));
+            for (i, (r, n)) in offer.requesting.iter().enumerate() {
+                if i > 0 {
+                    offer_spans.push(Span::styled(", ", Style::default().fg(Color::White)));
+                }
+                offer_spans.push(Span::styled(
+                    format!("{} {}", n, r),
+                    Style::default().fg(resource_bar::resource_color(*r)),
+                ));
+            }
             let lines = vec![
                 Line::from(Span::styled(
                     format!(
@@ -529,12 +543,7 @@ fn draw_context_bar(f: &mut Frame, ps: &PlayingState, area: Rect) {
                     ),
                     Style::default().fg(Color::Yellow).bold(),
                 )),
-                Line::from(vec![
-                    Span::styled(" Offering: ", Style::default().fg(Color::White)),
-                    Span::styled(&offering, Style::default().fg(Color::Green)),
-                    Span::styled("  Wanting: ", Style::default().fg(Color::White)),
-                    Span::styled(&requesting, Style::default().fg(Color::Red)),
-                ]),
+                Line::from(offer_spans),
                 Line::from(Span::styled(
                     " [y]es accept  [n]o reject",
                     Style::default().fg(Color::White),
